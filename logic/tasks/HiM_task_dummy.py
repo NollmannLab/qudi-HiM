@@ -47,22 +47,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
         # for logging:
-        self.status_dict_path = '/home/barho/hi_m_log/current_status.yaml'
-        self.log_path = '/home/barho/hi_m_log/log_for_hi_m_dummy_task.csv'
-        self.default_info_path = '/home/barho/hi_m_log/default_info.yaml'
+        # self.status_dict_path = '/home/barho/hi_m_log/current_status.yaml'
+        # self.log_path = '/home/barho/hi_m_log/log_for_hi_m_dummy_task.csv'
+        # self.default_info_path = '/home/barho/hi_m_log/default_info.yaml'
         self.logging = True
 
     def startTask(self):
         """ """
         self.start = time.time()
-        if self.logging:
-            # initialize the status dict yaml file
-            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
-            write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            # initialize the log file
-            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
-            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-            df.to_csv(self.log_path, index=False, header=True)
 
         self.log.info('started Task')
         # stop all interfering modes on GUIs and disable GUI actions
@@ -94,11 +86,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
+        # log file paths -----------------------------------------------------------------------------------------------
+        self.log_folder = os.path.join(self.directory, 'hi_m_log')
+        os.makedirs(self.log_folder)  # recursive creation of all directories on the path
+        self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
+        self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
+        self.log_path = os.path.join(self.log_folder, 'log.csv')
+
+        if self.logging:
+            # initialize the status dict yaml file
+            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
+            write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            # initialize the log file
+            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
+            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+            df.to_csv(self.log_path, index=False, header=True)
+
         # update the default_info file that is necessary to run the bokeh app
         if self.logging:
             hybr_list = [item for item in self.hybridization_list if item['time'] is None]
             photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
-            update_default_info(self.default_info_path, self.directory, self.file_format, len(self.probe_list), len(self.roi_names), len(hybr_list), len(photobl_list))
+            last_roi_number = int(self.roi_names[-1].strip('ROI_'))
+            update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format, len(self.probe_list), last_roi_number, len(hybr_list), len(photobl_list))
 
         # prepare the camera
         self.num_frames = self.num_z_planes * self.num_laserlines
@@ -370,12 +379,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('cleanupTask called')
         if self.logging:
-            self.status_dict = {}
-            write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            try:
+                self.status_dict = {}
+                write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            except:  # in case cleanup task was called before self.status_dict_path is defined
+                pass
 
         if self.aborted:  # some extra actions to reset a proper state in case abort was called
             if self.logging:
-                add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
+                try:
+                    add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
+                except:
+                    pass
+
             # in real experiment: stop the pressure regulation  and set pressure to 0
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -429,11 +445,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
+                self.dapi_path = self.user_param_dict['dapi_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
         # establish further user parameters derived from the given ones
+
         # load rois from file and create a list ------------------------------------------------------------------------
         self.ref['roi'].load_roi_list(self.roi_list_path)
         self.roi_names = self.ref['roi'].roi_names
@@ -446,6 +464,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # injections ---------------------------------------------------------------------------------------------------
         self.load_injection_parameters()
+
+        self.log.info('user parameters loaded and processed')
 
     def load_injection_parameters(self):
         """ """
@@ -609,30 +629,28 @@ def add_log_entry(path, cycle, process, event, level='info'):
     with open(path, 'a') as file:
         df_line.to_csv(file, index=False, header=False)
 
-def update_default_info(path, image_path, fileformat, num_cycles, num_roi, num_inj_hybr, num_inj_photobl):
+def update_default_info(path, user_param_dict, image_path, fileformat, num_cycles, num_roi, num_inj_hybr, num_inj_photobl):
     """ Create a dictionary with relevant entries for the default info file and save it under the specified path.
 
     :param: str path: complete path to the default_info file
+    :param: dict: user_param_dict
     :param: str image_path: name of the path where the image data is saved
     :param: str fileformat: fileformat for the image data
     :param: int num_cycles: number of cycles in the Hi-M experiment
-    :param: int num_roi: number of ROIs defined in the list for the Hi-M experiment
+    :param: int last_num_roi: highest ROI number defined in the list for the Hi-M experiment
     :param: int num_inj_hybr: number of injection steps during the hybridization sequence (excluding incubation steps)
     :param: int num_inj_photobl: number of injection steps during the photobleaching sequence (excluding incubation)
 
     :return: None
     """
-    info_dict = {'image_path': image_path, 'fileformat': fileformat, 'num_cycles': num_cycles, 'num_roi': num_roi, 'num_injections_hybr': num_inj_hybr, 'num_injections_photobl': num_inj_photobl}
+    # if not os.path.exists(path):
+    #     os.makedirs(path)  # recursive creation of all directories on the path
+
+    info_dict = {'image_path': image_path, 'fileformat': fileformat, 'num_cycles': num_cycles, 'last_num_roi': num_roi, 'num_injections_hybr': num_inj_hybr, 'num_injections_photobl': num_inj_photobl}
+
+    upper_dict = {'user_parameters': user_param_dict, 'exp_tracker_app_dict': info_dict}
 
     with open(path, 'w') as outfile:
-        yaml.safe_dump(info_dict, outfile, default_flow_style=False)
+        yaml.safe_dump(upper_dict, outfile, default_flow_style=False)
 
 # use for integration with bokeh app
-
-
-
-
-
-
-
-
