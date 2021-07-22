@@ -152,6 +152,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['file_format'] = 'tiff'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
+        self.config_dict['dapi_path'] = None  # not necessary, it can be left empty and needs hence to be initialized as empty string
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
 
@@ -213,7 +214,7 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Hi-M RAMM':
                 if not filename:
                     filename = 'hi_m_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path']
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path', 'dapi_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
             elif experiment == 'Photobleaching RAMM':
                 if not filename:
@@ -285,7 +286,7 @@ class ExpConfigLogic(GenericLogic):
 
     @QtCore.Slot(int)
     def update_is_rna(self, state):
-        """ Updates the dictionary entry 'dapi' (needed for the roi multicolor scan task, if the generated filename
+        """ Updates the dictionary entry 'rna' (needed for the roi multicolor scan task, if the generated filename
         should contain the label RNA.
         :param: int state: Qt.CheckState of the rna checkbox
         :return: None
@@ -397,6 +398,15 @@ class ExpConfigLogic(GenericLogic):
         :param: str path: complete path to the injections list
         :return: None"""
         self.config_dict['injections_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_dapi_path(self, path):
+        """ Updates the dictionary entry 'dapi_path' (path to the folder containing the associated dapi data for a
+        Hi-M experiment).
+        :param: str path: complete path to the folder containing the dapi data
+        :return: None"""
+        self.config_dict['dapi_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(float)

@@ -129,6 +129,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.centered_focal_plane_CheckBox.stateChanged.connect(self._exp_logic.update_centered_focal_plane)
         self._mw.roi_list_path_LineEdit.textChanged.connect(self._exp_logic.update_roi_path)
         self._mw.injections_list_LineEdit.textChanged.connect(self._exp_logic.update_injections_path)
+        self._mw.dapi_data_LineEdit.textChanged.connect(self._exp_logic.update_dapi_path)
         self._mw.illumination_time_DSpinBox.valueChanged.connect(self._exp_logic.update_illumination_time)
 
         # pushbuttons
@@ -145,6 +146,7 @@ class ExpConfiguratorGUI(GUIBase):
         # load file pushbutton signals
         self._mw.load_roi_PushButton.clicked.connect(self.load_roi_list_clicked)
         self._mw.load_injections_PushButton.clicked.connect(self.load_injections_clicked)
+        self._mw.load_dapi_PushButton.clicked.connect(self.load_dapi_path_clicked)
 
         # signals to logic
         self.sigSaveConfig.connect(self._exp_logic.save_to_exp_config_file)
@@ -252,6 +254,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.injections_list_Label.setVisible(False)
             self._mw.injections_list_LineEdit.setVisible(False)
             self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
 
         elif experiment == 'ROI multicolor scan RAMM':
             self._mw.formWidget.setVisible(True)
@@ -273,6 +278,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.injections_list_Label.setVisible(False)
             self._mw.injections_list_LineEdit.setVisible(False)
             self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
 
@@ -291,6 +299,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.roi_list_path_Label.setVisible(False)
             self._mw.roi_list_path_LineEdit.setVisible(False)
             self._mw.load_roi_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
 
         elif experiment == 'Hi-M RAMM':
             self._mw.formWidget.setVisible(True)
@@ -325,6 +336,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.injections_list_Label.setVisible(False)
             self._mw.injections_list_LineEdit.setVisible(False)
             self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.laser_ComboBox.removeItem(0)  # do not allow the UV laser (405 nm typically)
 
         # add here additional experiment types
@@ -412,6 +426,9 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.injections_list_Label.setVisible(visible)
         self._mw.injections_list_LineEdit.setVisible(visible)
         self._mw.load_injections_PushButton.setVisible(visible)
+        self._mw.dapi_path_Label.setVisible(visible)
+        self._mw.dapi_data_LineEdit.setVisible(visible)
+        self._mw.load_dapi_PushButton.setVisible(visible)
 
     def set_visibility_prebleaching_settings(self, visible):
         """ Show or hide the block with the prebleaching settings widgets
@@ -507,6 +524,18 @@ class ExpConfiguratorGUI(GUIBase):
         if this_file:
             self._mw.injections_list_LineEdit.setText(this_file)
 
+    def load_dapi_path_clicked(self):
+        """ Callback of load dapi path pushbutton. Opens a dialog to select the complete path to the folder with
+        the associated dapi data, needed for data visualization and processing for experiment tracker app and / or
+        simultaneous data analysis during a Hi-M experiment.
+        """
+        # data_directory = os.path.join(self.default_location, 'qudi_injection_parameters')
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
+                                                          'Open DAPI directory',
+                                                          '/home')  # to be changed using a correct path stem
+        if this_dir:
+            self._mw.dapi_data_LineEdit.setText(this_dir)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of signals sent from the logic
 # ----------------------------------------------------------------------------------------------------------------------
@@ -527,6 +556,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.centered_focal_plane_CheckBox.setChecked(self._exp_logic.config_dict.get('centered_focal_plane', False))
         self._mw.roi_list_path_LineEdit.setText(self._exp_logic.config_dict.get('roi_list_path', ''))
         self._mw.injections_list_LineEdit.setText(self._exp_logic.config_dict.get('injections_path', ''))
+        self._mw.dapi_data_LineEdit.setText(self._exp_logic.config_dict.get('dapi_path', ''))
         self._mw.illumination_time_DSpinBox.setValue(self._exp_logic.config_dict.get('illumination_time', 0.0))
 
     def update_listview(self):
