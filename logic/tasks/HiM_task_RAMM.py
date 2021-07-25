@@ -619,7 +619,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             except Exception as e:
                 self.log.error('Error {0}'.format(e))
 
-        file_name = f'scan_{self.prefix}_{probe_number}_{roi_number}.{self.file_format}'
+        roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
+
+        file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}.{self.file_format}'
 
         complete_path = os.path.join(path, file_name)
         return complete_path
