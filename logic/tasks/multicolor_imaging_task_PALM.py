@@ -138,7 +138,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['camera']._add_fits_header(self.complete_path, metadata)
         else:  # save metadata in a txt file
             metadata = self.get_metadata()
-            file_path = self.complete_path.replace('tiff', 'txt', 1)
+            file_path = self.complete_path.replace('tif', 'txt', 1)
             self.save_metadata_file(metadata, file_path)
 
         return False
@@ -188,7 +188,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             gain: 0
             num_frames: 1  # number of frames per color
             save_path: 'E:\\'
-            file_format: 'tiff'
+            file_format: 'tif'
             imaging_sequence = [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
         """
         try:
@@ -244,7 +244,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def get_complete_path(self, path_stem):
         """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_MulticolorImaging_samplename/movie_001.tiff
+        such as path_stem/YYYY_MM_DD/001_MulticolorImaging_samplename/movie_001.tif
         or path_stem/YYYY_MM_DD/027_MulticolorImaging_samplename/movie_027.fits
 
         :param: str path_stem such as E:/

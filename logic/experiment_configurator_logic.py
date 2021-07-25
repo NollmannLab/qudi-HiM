@@ -74,7 +74,7 @@ class ExpConfigLogic(GenericLogic):
             - 'Multichannel scan PALM'
             - 'Dummy experiment'
         supported fileformats:
-            - 'tiff'
+            - 'tif'
             - 'fits'
         default path: '/home/barho'
         connect:
@@ -149,7 +149,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['filter_pos'] = 1
         self.img_sequence_model.items = []
         self.config_dict['save_path'] = self.default_path_images
-        self.config_dict['file_format'] = 'tiff'
+        self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
         self.config_dict['dapi_path'] = None  # not necessary, it can be left empty and needs hence to be initialized as empty string
@@ -346,7 +346,7 @@ class ExpConfigLogic(GenericLogic):
     @QtCore.Slot(str)
     def update_fileformat(self, entry):
         """ Updates the dictionary entry 'fileformat'.
-        :param: str entry: desired fileformat for image data, such as 'tiff' or 'fits'.
+        :param: str entry: desired fileformat for image data, such as 'tif' or 'fits'.
         :return: None
         """
         self.config_dict['file_format'] = entry
