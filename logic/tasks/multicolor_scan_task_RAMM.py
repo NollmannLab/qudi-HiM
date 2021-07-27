@@ -150,7 +150,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:   # use tiff as default format
                 self.ref['cam']._save_to_tiff(self.num_frames, self.complete_path, image_data)
                 metadata = self.get_metadata()
-                file_path = self.complete_path.replace('tiff', 'yaml', 1)
+                file_path = self.complete_path.replace('tif', 'yaml', 1)
                 self.save_metadata_file(metadata, file_path)
 
             # save file with z positions (same procedure for either file format)
@@ -240,7 +240,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def get_complete_path(self, path_stem):
         """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tiff
+        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
         or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
 
         :param: str path_stem such as E:/DATA

@@ -110,8 +110,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.z_step = 0.25  # in um
         self.centered_focal_plane = True
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
-        self.save_path = '/home/barho/teststack.tiff'  # to be defined how the default folder structure should be set up
-        self.file_format = 'tiff'
+        self.save_path = '/home/barho/teststack.tif'  # to be defined how the default folder structure should be set up
+        self.file_format = 'tif'
         self.waiting_time = 0.5
 
         lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}

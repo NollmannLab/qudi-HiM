@@ -223,7 +223,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['camera']._add_fits_header(cur_save_path, metadata)
         else:  # save metadata in a txt file
             metadata = self.get_metadata()
-            file_path = cur_save_path.replace('tiff', 'txt', 1)
+            file_path = cur_save_path.replace('tif', 'txt', 1)
             self.save_metadata_file(metadata, file_path)
 
         # go back to first ROI
@@ -299,7 +299,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             gain: 0
             centered_focal_plane: False
             save_path: 'E:\'
-            file_format: 'tiff'
+            file_format: 'tif'
             imaging_sequence = [('488 nm', 3, ), ('561 nm', 3), ('641 nm', 10)]
             roi_list_path:
         """

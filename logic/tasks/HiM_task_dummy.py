@@ -76,7 +76,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].disable_laser_actions()  # includes also disableing of brightfield on / off button
 
         self.ref['valves'].disable_valve_positioning()
-        self.ref['flow'].disable_pressure_setting()
+        self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
 
         # control if experiment can be started : origin defined in position logic ?
@@ -257,7 +257,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 else:  # use tiff as default format
                     self.ref['cam']._save_to_tiff(self.num_frames, cur_save_path, image_data)
                     metadata = self.get_metadata()
-                    file_path = cur_save_path.replace('tiff', 'yaml', 1)
+                    file_path = cur_save_path.replace('tif', 'yaml', 1)
                     self.save_metadata_file(metadata, file_path)
 
                 # save file with z positions (same procedure for either file format)
@@ -396,7 +396,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].enable_camera_actions()
         self.ref['laser'].enable_laser_actions()
         self.ref['valves'].enable_valve_positioning()
-        self.ref['flow'].enable_pressure_setting()
+        self.ref['flow'].enable_flowcontrol_actions()
         self.ref['pos'].enable_positioning_actions()
         total = time.time() - self.start
         print(f'total time with logging = {self.logging}: {total} s')
@@ -457,7 +457,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # invert the buffer dict to address the valve by the product name as key
             self.buffer_dict = dict([(value, key) for key, value in buffer_dict.items()])
             # create a list out of probe_dict and order by ascending position (for example: probes in pos 2, 5, 6, 9, 10 is ok but not 10, 2, 5, 6, 9)
-            self.probe_list = sorted(probe_dict.items())
+            self.probe_list = sorted(probe_dict.items())  # list of tuples, such as [(1, 'RT1'), (2, 'RT2')]
+            print(self.probe_list)
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')

@@ -79,7 +79,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if self.n_frames == 1:  # single image acquisition
             # take an image and save it -> it is needed to first call start_single_acquisition otherwise no data is available
             self.ref['camera'].start_single_acquistion()  # mind the typo !!
-            self.ref['camera'].save_last_image(self.save_path, 'tiff')
+            self.ref['camera'].save_last_image(self.save_path, 'tif')
             # create the path for metadata file
             complete_path = self.ref['camera']._create_generic_filename(self.save_path, '_Image', 'parameters', 'txt',
                                                                         addfile=True)
