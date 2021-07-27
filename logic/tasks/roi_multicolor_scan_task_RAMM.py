@@ -355,12 +355,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             except Exception as e:
                 self.log.error('Error {0}'.format(e))
 
+        roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
+
         if self.is_dapi:
-            file_name = f'scan_{self.prefix}_dapi_{roi_number}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_dapi_{roi_number_inv}.{self.file_format}'
         elif self.is_rna:
-            file_name = f'scan_{self.prefix}_rna_{roi_number}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_rna_{roi_number_inv}.{self.file_format}'
         else:
-            file_name = f'scan_{self.prefix}_{roi_number}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_{roi_number_inv}.{self.file_format}'
 
         complete_path = os.path.join(path, file_name)
         return complete_path
