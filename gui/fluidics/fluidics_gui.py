@@ -334,6 +334,7 @@ class FluidicsGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods belonging to the position1 settings window
 # ----------------------------------------------------------------------------------------------------------------------
+
     def init_position1_settings_ui(self):
         """ Definition, configuration and initialization of the settings dialog that allows to calibrate the position
         of the first probe (= position 1).
@@ -711,7 +712,7 @@ class FluidicsGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 
     def close_function(self):
-        """ This method is serves as a reimplementation of the close event. Continuous measurement modes are stopped
+        """ This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
         when the main window is closed. """
         if self._flow_logic.measuring_flowrate:
             self.sigStopFlowMeasure.emit()
