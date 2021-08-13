@@ -40,6 +40,7 @@ from qtpy import QtGui
 from qtpy import QtWidgets
 from qtpy import uic
 import pyqtgraph as pg
+from functools import partial
 
 from gui.guibase import GUIBase
 from core.connector import Connector
@@ -180,7 +181,6 @@ class BasicGUI(GUIBase):
     _mw = None
     region_selector_enabled = False
     imageitem = None
-    spinbox_list = None
 
     # flags that enable to reuse the save settings dialog for both save video and spooling
     _video = False
@@ -193,12 +193,13 @@ class BasicGUI(GUIBase):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.laser_Labels = []
+        self.laser_DSpinBoxes = []
         self.bf_Label = None
         self.bf_control_DSpinBox = None
         self.brightfield_on_Action = None
         self._cam_sd = None
         self._save_sd = None
-
 
     def on_activate(self):
         """ Initializes all needed UI files and establishes the connectors.
@@ -393,11 +394,19 @@ class BasicGUI(GUIBase):
     def init_laser_dockwidget(self):
         """ initializes the labels for the lasers given in config and connects signals for the laser control toolbar.
         """
-        # set the labels of the laser control spinboxes according to specified wavelengths from config
-        self._mw.laser1_Label.setText(self._laser_logic._laser_dict['laser1']['wavelength'])
-        self._mw.laser2_Label.setText(self._laser_logic._laser_dict['laser2']['wavelength'])
-        self._mw.laser3_Label.setText(self._laser_logic._laser_dict['laser3']['wavelength'])
-        self._mw.laser4_Label.setText(self._laser_logic._laser_dict['laser4']['wavelength'])
+        # create the laser labels and spinboxes according to number of elements given in config file
+        self.laser_Labels = []
+        self.laser_DSpinBoxes = []
+
+        for key in self._laser_logic._laser_dict.keys():
+            laser_label = QtWidgets.QLabel(self._laser_logic._laser_dict[key]['wavelength'])
+            self.laser_Labels.append(laser_label)
+
+            laser_spinbox = QtWidgets.QDoubleSpinBox()
+            laser_spinbox.setMaximum(100.00)
+            self.laser_DSpinBoxes.append(laser_spinbox)
+
+            self._mw.formLayout_3.addRow(laser_label, laser_spinbox)
 
         # add brightfield control widgets if applicable
         if self.brightfield_control:
@@ -431,25 +440,28 @@ class BasicGUI(GUIBase):
         self.sigLaserOn.connect(self._laser_logic.apply_voltage)
         self.sigLaserOff.connect(self._laser_logic.voltage_off)
 
-        # actions on changing laser spinbox values
-        self.spinbox_list = [self._mw.laser1_control_DSpinBox, self._mw.laser2_control_DSpinBox,
-                             self._mw.laser3_control_DSpinBox, self._mw.laser4_control_DSpinBox]
-        # actualize the laser intensity dictionary
-        self._mw.laser1_control_DSpinBox.valueChanged.connect(
-            lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser1']['label'],
-                                                             self._mw.laser1_control_DSpinBox.value()))
-        self._mw.laser2_control_DSpinBox.valueChanged.connect(
-            lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser2']['label'],
-                                                             self._mw.laser2_control_DSpinBox.value()))
-        self._mw.laser3_control_DSpinBox.valueChanged.connect(
-            lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser3']['label'],
-                                                             self._mw.laser3_control_DSpinBox.value()))
-        self._mw.laser4_control_DSpinBox.valueChanged.connect(
-            lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser4']['label'],
-                                                             self._mw.laser4_control_DSpinBox.value()))
+        # internal signals
+        # putting this in a loop did not work (only last element is then correctly connected) .. a less elegant alternative :
+        if len(self.laser_DSpinBoxes) > 0:
+            self.laser_DSpinBoxes[0].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser1']['label'], self.laser_DSpinBoxes[0].value()))
+        if len(self.laser_DSpinBoxes) > 1:
+            self.laser_DSpinBoxes[1].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser2']['label'], self.laser_DSpinBoxes[1].value()))
+        if len(self.laser_DSpinBoxes) > 2:
+            self.laser_DSpinBoxes[2].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser3']['label'], self.laser_DSpinBoxes[2].value()))
+        if len(self.laser_DSpinBoxes) > 3:
+            self.laser_DSpinBoxes[3].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser4']['label'], self.laser_DSpinBoxes[3].value()))
+        if len(self.laser_DSpinBoxes) > 4:
+            self.laser_DSpinBoxes[4].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser5']['label'], self.laser_DSpinBoxes[4].value()))
+        if len(self.laser_DSpinBoxes) > 5:
+            self.laser_DSpinBoxes[5].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser6']['label'], self.laser_DSpinBoxes[5].value()))
+        if len(self.laser_DSpinBoxes) > 6:
+            self.laser_DSpinBoxes[6].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser7']['label'], self.laser_DSpinBoxes[6].value()))
+        if len(self.laser_DSpinBoxes) > 7:
+            self.laser_DSpinBoxes[7].valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict['laser8']['label'], self.laser_DSpinBoxes[7].value()))
+
+        # for i, item in enumerate(self.laser_DSpinBoxes):
+        #     item.valueChanged.connect(lambda: self._laser_logic.update_intensity_dict(self._laser_logic._laser_dict[f'laser{i+1}']['label'], item.value()))
         # lambda function is used to pass in an additional argument.
-        # in case lambda does not work well on runtime, check functools.partial
-        # or signal mapper ? to explore ..
 
         # Signals from logic
         # update GUI when intensity is changed programatically
@@ -1039,7 +1051,7 @@ class BasicGUI(GUIBase):
     def laser_set_to_zero(self):
         """ Callback of laser_zero_Action.
         """
-        for item in self.spinbox_list: 
+        for item in self.laser_DSpinBoxes:
             item.setValue(0)
         # also set brightfield control to zero in case it is available
         if self.brightfield_control:
@@ -1063,7 +1075,7 @@ class BasicGUI(GUIBase):
 # callbacks of signals from logic --------------------------------------------------------------------------------------
     def update_laser_spinbox(self):
         """ Update values in laser spinboxes if the intensity dictionary in the logic module was changed """
-        for index, item in enumerate(self.spinbox_list):
+        for index, item in enumerate(self.laser_DSpinBoxes):
             label = 'laser'+str(index + 1)  # create the label to address the corresponding laser
             item.setValue(self._laser_logic._intensity_dict[label])
 
@@ -1145,14 +1157,12 @@ class BasicGUI(GUIBase):
     def _disable_laser_control(self, bool_list):        
         """ Disables the control spinboxes of the lasers which are not allowed for a given filter
         
-        :param: bool_list: list with entries corresponding to laser1 - laser4 [True False True False] -> Laser1 and laser3 allowed, laser2 and laser4 forbidden
+        :param: bool_list: list with entries corresponding to laser1 - laserN [True False True False ... True] -> Laser1, laser3 and laserN allowed, laser2 and laser4 forbidden
         
         :return: None
-        """                   
-        self._mw.laser1_control_DSpinBox.setEnabled(bool_list[0])
-        self._mw.laser2_control_DSpinBox.setEnabled(bool_list[1])
-        self._mw.laser3_control_DSpinBox.setEnabled(bool_list[2])
-        self._mw.laser4_control_DSpinBox.setEnabled(bool_list[3])
+        """
+        for i in range(len(self.laser_DSpinBoxes)):
+            self.laser_DSpinBoxes[i].setEnabled(bool_list[i])
 
 # disable/enable user interface actions --------------------------------------------------------------------------------
     @QtCore.Slot()

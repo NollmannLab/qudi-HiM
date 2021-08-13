@@ -200,7 +200,7 @@ class LaserControlLogic(GenericLogic):
         """
         self.enabled = False
         for key in self._laser_dict:
-            self._controller.apply_voltage(0, self._laser_dict[key]['channel'])
+            self._controller.apply_voltage(0.0, self._laser_dict[key]['channel'])
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods used in tasks for synchronization between lightsource and camera in external trigger mode
