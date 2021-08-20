@@ -1,23 +1,42 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov  9 06:22:29 2020
-
-@author: fbarho
+Qudi-CBS
 
 This module contains the ROI selection logic.
-It is in large parts taken and adapted from the qudi poimanager logic, in this version reduced to 
-the functionality that we need. 
-(+ for future use: the possibility to add a z position control, this is why spatial coordonnates are kept as 3 dimensional (xyz)
-as well as deactivated tools concerning the camera image overlay)
+
+It is in large parts inspired and adapted from the Qudi poimanager logic.
+(+in this version:
+deactivated tools concerning the camera image overlay but would be interesting to establish this in the future)
 
 ROIs are regrouped into an ROI list (instead of using the terminology of POI in ROI
-or, as in the current labview measurement software ROIs per embryo.) 
-The chosen nomenclature is more flexible than regrouping by embryo and can be extended to other 
-types of samples. Moreover, it is planned to add a serpentine scan over a sample area and 
-decide which ROI belongs to which object in the analysis step.
-"""
+or, as in the labview measurement software ROIs per embryo.)
+The chosen nomenclature is more flexible than regrouping by embryo and can be extended to other
+types of samples.
 
+An extension to Qudi.
+
+@author: F. Barho
+
+Created on Mon Nov 2020
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
+"""
 import os
 import numpy as np
 from time import sleep
@@ -33,9 +52,12 @@ from qtpy import QtCore
 from core.util.mutex import Mutex
 
 
+# ======================================================================================================================
+# Worker class for continuous stage position tracking mode
+# ======================================================================================================================
+
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread """
-
     sigFinished = QtCore.Signal()
 
 
@@ -45,23 +67,27 @@ class Worker(QtCore.QRunnable):
     The worker handles only the waiting time, and emits a signal that serves to trigger the update stage position """
 
     def __init__(self, *args, **kwargs):
-        super(Worker, self).__init__()
+        super(Worker, self).__init__(*args, **kwargs)
         self.signals = WorkerSignals()
 
     @QtCore.Slot()
     def run(self):
         """ """
-        sleep(1)  # 1 second as time constant but change it after tests
+        sleep(1)  # 1 second as time constant
         self.signals.sigFinished.emit()
+
+
+# ======================================================================================================================
+# Classes representing the ROIlist and the ROI
+# ======================================================================================================================
 
 
 class RegionOfInterestList:
     """  
     Class containing the general information about a specific list of regions of interest,
-    such as its name, the creation time, the rois as a subdictionary of ROI instances, 
+    such as its name, the creation time, the rois as a dictionary of ROI instances,
     (N.B. Each individual ROI will be represented as a RegionOfInterest instance (see below).), 
     the camera image which may be overlayed on the map of ROI markers.
-    The origin of a new ROI list will be defined as (0, 0, 0). ### or modify to use absolute stage position instead? for reloading several lists etc..
     
     example of a RegionOfInterestList instance in its dictionary representation
     {'name': 'roilist_20201113_1212_00_244657',
@@ -94,14 +120,22 @@ class RegionOfInterestList:
         if rois is not None:
             for roi in rois:
                 self.add_roi(roi)
-        return None
 
     @property
     def name(self):
+        """ Get the name of the roi list
+
+        :return: str name
+        """
         return str(self._name)
 
     @name.setter
     def name(self, new_name):
+        """ Set a new name for the roi list instance.
+
+        :param: str new_name
+        :return: None
+        """
         if isinstance(new_name, str) and new_name:
             self._name = str(new_name)
         elif new_name is None or new_name == '':
@@ -111,33 +145,52 @@ class RegionOfInterestList:
 
     @property
     def creation_time(self):
+        """ Get the creation time of the ROI list.
+        :return: datetime.datetime object creation time of the ROI list
+        """
         return self._creation_time
 
     @property
     def creation_time_as_str(self):
+        """ Get the creation time of the ROI list in str format.
+        :return str: creation time on the ROI list """
         return datetime.strftime(self._creation_time, '%Y-%m-%d %H:%M:%S.%f')
 
     @creation_time.setter
     def creation_time(self, new_time):
+        """ Set the creation time of the ROI list.
+        :param: str or datetime.datetime object new time
+        :return: None
+        """
         if not new_time:
             new_time = datetime.now()
         elif isinstance(new_time, str):
             new_time = datetime.strptime(new_time, '%Y-%m-%d %H:%M:%S.%f')
         if isinstance(new_time, datetime):
             self._creation_time = new_time
-        return
 
     @property
     def origin(self):
+        """ Get the origin of the ROI list. Not really useful here as we don't perform direct drift correction.
+        Defaults always to (0,0,0)
+        :return: np.ndarray[3] origin
+        """
         return np.zeros(3)  # no drift correction so origin is set to 0 and does not move over time
 
     @property
     def cam_image(self):
+        """ Get the camera image belonging to the ROI list.
+        Not really useful here. In a future version, camera images could be included.
+        But they should maybe be part of a RegionOfInterest object, not one image for RegionOfInterestList.
+        Or this image should be composed of all the individual ROI images. """
         return self._cam_image
 
     # can be simplified when origin is kept as (0, 0, 0)
     @property
     def cam_image_extent(self):
+        """ Get the camera image extent.
+        Not really useful in the current version. We probably won't need a calculated extent as there is no drift
+        correction. Maybe remove this class member. """
         if self._cam_image_extent is None:
             return None
         x, y, z = self.origin
@@ -147,14 +200,23 @@ class RegionOfInterestList:
 
     @property
     def roi_names(self):
+        """ Get a list with all the ROI names (keys to all the RegionOfInterest Objects).
+        :return: list of str: roi names """
         return list(self._rois)
 
     @property
     def roi_positions(self):
+        """ Get a dictionary with roi names as keys and their positions as np.ndarray[3] as values.
+        :return dict
+        """
         origin = self.origin
         return {name: roi.position + origin for name, roi in self._rois.items()}
 
     def get_roi_position(self, name):
+        """ Get the position of the ROI asked for by the function parameter name.
+        :param: str name: valid ROI name
+        :return: np.ndarray[3]: position of the ROI
+        """
         if not isinstance(name, str):
             raise TypeError('ROI name must be of type str.')
         if name not in self._rois:
@@ -162,13 +224,17 @@ class RegionOfInterestList:
         return self._rois[name].position + self.origin
 
     def set_roi_position(self, name, new_pos):
+        """ Set the position of the addressed ROI to a different position.
+        :param: str name: identifier of the addressed ROI
+        :param: iterable of length 3: new position of the ROI
+        :return: None
+        """
         if name not in self._rois:
             raise KeyError('ROI with name "{0}" not found in ROIlist "{1}".\n'
                            'Unable to change ROI position.'.format(name, self.name))
         self._rois[name].position = np.array(new_pos, dtype=float) - self.origin
-        return None
 
-    ##### this method is made unavailable because only the generic name ROI_000 etc is allowed.
+    # this method is made unavailable because only the generic name ROI_000 etc is allowed.
     #    def rename_roi(self, name, new_name=None):
     #        if new_name is not None and not isinstance(new_name, str):
     #            raise TypeError('ROI name to set must be of type str or None.')
@@ -183,16 +249,17 @@ class RegionOfInterestList:
     # to be modified: remove kwarg name in calls to this function -> better solution: leave it as it for compatibility and just make sure that a generic name always overwrites a name given by user
 
     def add_roi(self, position, name=None):
+        """ Add a new ROI to a list. A generic name is used (even when the name parameter is filled with a user defined
+        value. name parameter was kept for compatibility with previous program structure.
+
+        :param: iterable of length 3 position of the new ROi
+        :param: str name: defaults to the generic numbering ROI_num even when the user specifies a custom name
+        :return: None
+        """
         if isinstance(position, RegionOfInterest):
             roi_inst = position
         else:
             position = position - self.origin
-
-            # first version leading to an error when rois somewhere at the top or in the middle of the list are deleted
-            # # Create a generic name which cannot be accessed by the user
-            # index = len(self._rois) + 1
-            # str_index = str(index).zfill(3)  # zero padding
-            # name = 'ROI_' + str_index
 
             # Create a generic name which cannot be accessed by the user
             # using the increment of the last roi in the list (deleted roi names do not get 'refilled')
@@ -211,15 +278,18 @@ class RegionOfInterestList:
 
             roi_inst = RegionOfInterest(position=position, name=name)
         self._rois[roi_inst.name] = roi_inst
-        return None
 
     def delete_roi(self, name):
+        """ Deletes the ROI identified by name if it exists in the current list.
+
+        :param: str name: valid identifier of a ROI in the current list
+        :return: None
+        """
         if not isinstance(name, str):
             raise TypeError('ROI name to delete must be of type str.')
         if name not in self._rois:
             raise KeyError('Name "{0}" not found in ROI list.'.format(name))
         del self._rois[name]
-        return None
 
     # can be activated and modified if camera image is added
     #     def set_cam_image(self, image_arr=None, image_extent=None):
@@ -240,6 +310,9 @@ class RegionOfInterestList:
     #         return
 
     def to_dict(self):
+        """ Convert an instance of the ROI list object to a dictionary containing the relevant information.
+        :return: dict
+        """
         return {'name': self.name,
                 'creation_time': self.creation_time_as_str,
                 'cam_image': self.cam_image,
@@ -248,6 +321,10 @@ class RegionOfInterestList:
 
     @classmethod
     def from_dict(cls, dict_repr):
+        """ Creates a RegionOfInterestList object from its dictionary representation.
+        :param: dict
+        :return: roi_list object
+        """
         if not isinstance(dict_repr, dict):
             raise TypeError('Parameter to generate RegionOfInterestList instance from must be of type '
                             'dict.')
@@ -267,7 +344,7 @@ class RegionOfInterestList:
 
 class RegionOfInterest:
     """
-    The actual individual roi is saved in this generic object.
+    The actual individual ROI is saved in this generic object.
     A RegionOfInterest object corresponds to a dictionary of the following format {'name': roi_name, 'position': roi_position}
     for example {'name': ROI_OO1, 'position': (10, 10, 0)}
     """
@@ -283,12 +360,20 @@ class RegionOfInterest:
 
     @property
     def name(self):
+        """ Get the name of the ROI.
+        :return: str name
+        """
         return str(self._name)
 
     # redefined the name.setter so that it can be called from the RegionOfInterestList instance 
-    # it will always be called with a new_name corresponding to the generic format. the if not new_name part would produce the same name
+    # it will always be called with a new_name corresponding to the generic format. the 'if not new_name' part would produce the same name
     @name.setter
     def name(self, new_name):
+        """ Set the name for the ROI. Only default name can be set (this is handled in RegionOfInterestList class
+        or alternatively here if not new_name given.
+        :param: str new_name or None
+        :return: None
+        """
         if new_name is not None and not isinstance(new_name, str):
             raise TypeError('Name to set must be either None or of type str.')
         if not new_name:
@@ -310,42 +395,60 @@ class RegionOfInterest:
 
     @property
     def position(self):
+        """ Get the position of the ROI object.
+        :return: np.ndarray[3] """
         return self._position
 
     @position.setter
     def position(self, pos):
+        """ Set the position of the ROI object.
+        :param: iterable of length 3: new position"""
         if len(pos) != 3:
             raise ValueError('ROI position to set must be iterable of length 3 (X, Y, Z).')
         self._position = np.array(pos, dtype=float)
 
     def to_dict(self):
+        """ Convert an instance of the RegionOfInterest object to its dictionary representation.
+        :return: dict
+        """
         return {'name': self.name, 'position': tuple(self.position)}
 
     @classmethod
     def from_dict(cls, dict_repr):
+        """ Creates a RegionOfInterestList object from its dictionary representation.
+        :param: dict
+        :return: ROI object """
         return cls(**dict_repr)
 
+
+# ======================================================================================================================
+# Logic class
+# ======================================================================================================================
 
 class RoiLogic(GenericLogic):
     """
     This is the Logic class for selecting regions of interest.
-    """
 
+    Example config for copy-paste:
+
+    roi_logic:
+        module.Class: 'roi_logic.RoiLogic'
+        connect:
+            stage: 'motor_dummy_roi'
+    """
     # declare connectors
     stage = Connector(interface='MotorInterface')
     
     # status vars
     _roi_list = StatusVar(default=dict())  # Notice constructor and representer further below
     _active_roi = StatusVar(default=None)
-    _roi_width = StatusVar(
-        default=50)  # check if unit is correct when used with real translation stage. Value corresponds to FOV ??
+    _roi_width = StatusVar(default=50)
 
     # Signals
     sigRoiUpdated = QtCore.Signal(str, str, np.ndarray)  # old_name, new_name, current_position
     sigActiveRoiUpdated = QtCore.Signal(str)
     sigRoiListUpdated = QtCore.Signal(dict)  # Dict containing ROI parameters to update
     sigWidthUpdated = QtCore.Signal(float)
-
     sigStageMoved = QtCore.Signal(np.ndarray)  # current_position
     sigUpdateStagePosition = QtCore.Signal(tuple)
     sigTrackingModeStopped = QtCore.Signal()  # important to emit this when tracking mode is programmatically stopped to reestablish correct GUI state
@@ -361,23 +464,21 @@ class RoiLogic(GenericLogic):
     _mosaic_number_x = 0  # width
     _mosaic_number_y = 0  # height
 
+    # class attributes
     tracking = False
-
-    timer = None
-    tracking_interval = 1
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.threadpool = QtCore.QThreadPool()
+        self._stage = None
 
         # not needed in this version but remember to use it when starting to handle threads
-        # threading
         # self._threadlock = Mutex()
-
-        self.threadpool = QtCore.QThreadPool()
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
         """
+        self._stage = self.stage()
 
         # Initialise the ROI camera image (xy image) if not present
         # if self._roi_list.cam_image is None:
@@ -391,83 +492,175 @@ class RoiLogic(GenericLogic):
         self.sigActiveRoiUpdated.emit('' if self.active_roi is None else self.active_roi)
 
     def on_deactivate(self):
+        """ Perform required deactivation steps. """
         pass
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Getter and setter methods
+# ----------------------------------------------------------------------------------------------------------------------
 
     @property
     def active_roi(self):
+        """ Get the active ROI.
+        :return str identifier of active ROI
+        """
         return self._active_roi
 
     @active_roi.setter
     def active_roi(self, name):
+        """ Set the active ROI.
+        :param: str name: identifier of the ROI that shall be set as active one.
+        :return: None
+        """
         self.set_active_roi(name)
 
     @property
     def roi_names(self):
+        """ Get the ROI names.
+        :return: str list: list with identifiers of ROIs contained in the current ROI list.
+        """
         return self._roi_list.roi_names
 
     @property
     def roi_positions(self):
+        """ Get the ROI positions.
+        :return: dict: with ROI name as key and its position as value (nd.array of dim(3,)
+        """
         return self._roi_list.roi_positions
 
     @property
     def roi_list_name(self):
+        """ Get the name of the roi list.
+        :return: str: identifier of the current ROI list
+        """
         return self._roi_list.name
 
     @roi_list_name.setter
     def roi_list_name(self, name):
+        """ Set the name of the ROI list.
+        :param: str name: new name for the ROI list
+        :return: None
+        """
         self.rename_roi_list(new_name=name)
 
     @property
     def roi_list_origin(self):
+        """ Get the origin of the ROI list. (Not really needed, always defaults to (0,0,0)
+        :return: nd.array origin
+        """
         return self._roi_list.origin
 
     @property
     def roi_list_creation_time(self):
+        """ Get the creation time of the ROI list.
+        :return: datetime.datetime object: creation time
+        """
         return self._roi_list.creation_time
 
     @property
     def roi_list_creation_time_as_str(self):
+        """ Get the creation time of the ROI list in string format.
+        :return: str: creation time as string
+        """
         return self._roi_list.creation_time_as_str
 
     @property
     def roi_list_cam_image(self):
+        """ Get the camera image associated to the ROI list.
+        :return: (currently None) could be modified to return the camera image
+        """
         return self._roi_list.cam_image
 
     @property
     def roi_list_cam_image_extent(self):
+        """ Get the camera image extent associated to the ROI list.
+        :return: (currently None) could be modified to return the camera image extent
+        """
         return self._roi_list.cam_image_extent
 
     @property
     def roi_width(self):
+        """ Get the width of the ROI marker.
+        :return: float roi marker width (in um) """
         return float(self._roi_width)
 
     @roi_width.setter
     def roi_width(self, new_width):
+        """ Set the width of the ROI marker.
+        :param: float new_width
+        """
         self.set_roi_width(new_width)
 
-    # formerly returned as list instead of tuple. in case error appears .. it worked correctly with a list
     @property
     def stage_position(self):
-        pos = self.stage().get_pos()  # this returns a dictionary of the format {'x': pos_x, 'y': pos_y}
+        """ Get the current stage position.
+        :return tuple of floats: x y z coordinates of the stage (z is set to 0 in case of 2 axes stage)
+        """
+        pos = self._stage.get_pos()  # this returns a dictionary of the format {'x': pos_x, 'y': pos_y}
         if len(pos) == 2 and 'z' not in pos.keys():  # case for the 2 axes stage
             pos['z'] = 0  # add an artificial z component so that add_roi method can be called which expects a tuple (x, y, z)
         return tuple(pos.values())[:3]  # get only the dictionary values as a tuple.
         # [:3] as safety to get only the x y axis and (eventually empty) z value, in case more axis are configured (such as for the motor_dummy)
 
-    # even if called with a name not None, a generic name is set. The specified one is not taken into account. This is handled in the add_roi method of RegionOfInterestList class
+    def get_roi_position(self, name=None):
+        """
+        Returns the ROI position of the specified ROI or the active ROI if none is given.
+
+        :param str name: Name of the ROI to return the position for.
+                             If None (default) the active ROI position is returned.
+        :return float[3]: Coordinates of the desired ROI (x,y,z)
+        """
+        if name is None:
+            name = self.active_roi
+        return self._roi_list.get_roi_position(name)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for conversion between roi_lists and roi_dict
+# ----------------------------------------------------------------------------------------------------------------------
+
+    @_roi_list.constructor
+    def dict_to_roi(self, roi_dict):
+        """ This method creates a RegionOfInterestList instance, given a dictionary containing the necessary
+        information.
+
+        :param: dict roi_dict
+        :return: RegionOfInterestList object
+        """
+        return RegionOfInterestList.from_dict(roi_dict)
+
+    @_roi_list.representer
+    def roi_list_to_dict(self, roi_list):
+        """ This method converts a roi_list to a dictionary which is the form used for saving it to a file.
+
+        :param: RegionOfInterestList object roi_list
+        :return: dict: dictionary containing the information about the roi_list
+        """
+        return roi_list.to_dict()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Slots called from the GUI module for toolbar actions
+# ----------------------------------------------------------------------------------------------------------------------
+
+# ROI toolbar ----------------------------------------------------------------------------------------------------------
     @QtCore.Slot()
     @QtCore.Slot(np.ndarray)
     def add_roi(self, position=None, name=None, emit_change=True):
         """
         Creates a new ROI and adds it to the current ROI list.
-        ROI can be optionally initialized with position.
+        The ROI can be optionally initialized with position.
 
-        @param str name: Name for the ROI (must be unique within ROI list).
+        Even if called with a name not None, a generic name is set.
+        The specified one is not taken into account.
+        This is handled in the add_roi method of RegionOfInterestList class.
+
+        :param str name: Name for the ROI (must be unique within ROI list).
                          None (default) will create generic name.
-        @param scalar[3] position: Iterable of length 3 representing the (x, y, z) position with
+        :param scalar[3] position: Iterable of length 3 representing the (x, y, z) position with
                                    respect to the ROI list origin. None (default) causes the current
                                    stage position to be used.
-        @param bool emit_change: Flag indicating if the changed ROI set should be signaled.
+        :param bool emit_change: Flag indicating if the changed ROI set should be signaled.
+
+        :return: None
         """
         # Get current stage position from motor interface if no position is provided.
         if position is None:
@@ -487,15 +680,46 @@ class RoiLogic(GenericLogic):
 
         # Set newly created ROI as active roi
         self.set_active_roi(roi_name)
-        return None
 
-    # delete_roi can be called with a name present in the list (which will only be the generic names)
+    @QtCore.Slot()
+    def go_to_roi(self, name=None):
+        """
+        Move translation stage to the given roi.
+
+        :param str name: the name of the ROI, default is the active roi
+        :return: None
+        """
+        if name is None:
+            name = self.active_roi
+        if not isinstance(name, str):
+            self.log.error('ROI name to move to must be of type str.')
+            return None
+        self._move_stage(self.get_roi_position(name))
+
+    def go_to_roi_xy(self, name=None):
+        """
+        Move translation stage to the xy position of the given roi.
+
+        :param str name: the name of the ROI, default is the active roi
+        :return: None
+        """
+        if name is None:
+            name = self.active_roi
+        if not isinstance(name, str):
+            self.log.error('ROI name to move to must be of type str.')
+            return None
+        x_roi, y_roi, z_roi = self.get_roi_position(name)
+        x_stage, y_stage, z_stage = self.stage_position
+        target_pos = np.array((x_roi, y_roi, z_stage))  # conversion from tuple to np.ndarray for call of _move_stage
+        self._move_stage(target_pos)
+
     @QtCore.Slot()
     def delete_roi(self, name=None):
         """
         Deletes the given roi from the roi list.
+        This method can be called with a name present in the list (which will only be the generic names)
 
-        @param str name: Name of the roi to delete. If None (default) delete active roi.
+        :param str name: Name of the roi to delete. If None (default) delete active roi.
         """
         if len(self.roi_names) == 0:
             self.log.warning('Can not delete ROI. No ROI present in ROI list.')
@@ -517,272 +741,19 @@ class RoiLogic(GenericLogic):
 
         # Notify about a changed set of ROIs if necessary
         self.sigRoiUpdated.emit(name, '', np.zeros(3))
-        return None
 
-    @QtCore.Slot()
-    def delete_all_roi(self):
-        self.active_roi = None
-        for name in self.roi_names:
-            self._roi_list.delete_roi(name)
-            self.sigRoiUpdated.emit(name, '', np.zeros(3))
-        return None
-
-    @QtCore.Slot(str)
-    def set_active_roi(self, name=None):
-        """
-        Set the name of the currently active ROI
-        @param name:
-        """
-        if not isinstance(name, str) and name is not None:
-            self.log.error('ROI name must be of type str or None.')
-        elif name is None or name == '':
-            self._active_roi = None
-        elif name in self.roi_names:
-            self._active_roi = str(name)
-        else:
-            self.log.error('No ROI with name "{0}" found in ROI list.'.format(name))
-
-        self.sigActiveRoiUpdated.emit('' if self.active_roi is None else self.active_roi)
-        return None
-
-    def get_roi_position(self, name=None):
-        """
-        Returns the ROI position of the specified ROI or the active ROI if none is given.
-
-        @param str name: Name of the ROI to return the position for.
-                             If None (default) the active ROI position is returned.
-        @return float[3]: Coordinates of the desired ROI (x,y,z)
-        """
-        if name is None:
-            name = self.active_roi
-        return self._roi_list.get_roi_position(name)
-
-    @QtCore.Slot(str)
-    def rename_roi_list(self, new_name):
-        if not isinstance(new_name, str) or new_name == '':
-            self.log.error('ROI list name to set must be str of length > 0.')
-            return None
-        self._roi_list.name = new_name
-        self.sigRoiListUpdated.emit({'name': self.roi_list_name})
-        return None
-
-    @QtCore.Slot()
-    def go_to_roi(self, name=None):
-        """
-        Move translation stage to the given roi.
-
-        @param str name: the name of the ROI, default is the active roi
-        """
-        if name is None:
-            name = self.active_roi
-        if not isinstance(name, str):
-            self.log.error('ROI name to move to must be of type str.')
-            return None
-        self._move_stage(self.get_roi_position(name))
-        return None
-
-    def go_to_roi_xy(self, name=None):
-        """
-        Move translation stage to the xy position of the given roi.
-
-        @param str name: the name of the ROI, default is the active roi
-        """
-        if name is None:
-            name = self.active_roi
-        if not isinstance(name, str):
-            self.log.error('ROI name to move to must be of type str.')
-            return None
-        x_roi, y_roi, z_roi = self.get_roi_position(name)
-        x_stage, y_stage, z_stage = self.stage_position
-        target_pos = np.array((x_roi, y_roi, z_stage))  # conversion from tuple to np.ndarray for call of _move_stage
-        self._move_stage(target_pos)
-        return None
-
-    def _move_stage(self, position):
-        """ 
-        Move the translation stage to position.
-        
-        @param float position: np.ndarray[3]
-        """
-        # this functions accepts a tuple (x, y, z) as argument because it will be called with the roi position as argument. 
-        # Hence, the input argument has to be converted into a dictionary of format {'x': x, 'y': y} to be passed to the translation stage function.
-        if len(position) != 3:
-            self.log.error('Stage position to set must be iterable of length 3.')
-            return None
-        axis_label = ('x', 'y', 'z')
-        pos_dict = dict([*zip(axis_label, position)])
-        self.stage().move_abs(pos_dict)
-        self.sigStageMoved.emit(position)
-        return None
-
-    #    @QtCore.Slot()
-    #    def set_cam_image(self, emit_change=True):
-    #        """ Get the current xy scan data and set as scan_image of ROI. """
-    #        self._roi_list.set_scan_image() # add the camera logic as connector to get the image ?? or do not show image on ROI map ?
-    #
-    #        if emit_change:
-    #            self.sigRoiListUpdated.emit({'scan_image': self.roi_list_scan_image,
-    #                                     'scan_image_extent': self.roi_scan_image_extent})
-    #        return None
-
-    @QtCore.Slot()
-    def reset_roi_list(self):
-        self._roi_list = RegionOfInterestList()  # create an instance of the RegionOfInterestList class
-        # self.set_cam_image()
-        self.sigRoiListUpdated.emit({'name': self.roi_list_name,
-                                     'rois': self.roi_positions,
-                                     'cam_image': self.roi_list_cam_image,
-                                     'cam_image_extent': self.roi_list_cam_image_extent
-                                     })
-        self.set_active_roi(None)
-        return None
-
-    # @QtCore.Slot()
-    # def set_cam_image(self, emit_change=True):
-    #     """ test if this helps to solve the distance measuremetn problem when roi_image is not initialized
-    #     """
-    #     self._roi_list.set_cam_image()
-    #
-    #     if emit_change:
-    #         self.sigRoiListUpdated.emit({'scan_image': self.roi_list_cam_image,
-    #                                  'scan_image_extent': self.roi_cam_image_extent})
-    #     return None
-
-    @QtCore.Slot(float)
-    def set_roi_width(self, width):
-        self._roi_width = float(width)
-        self.sigWidthUpdated.emit(width)
-        return None
-
-    def save_roi_list(self, path, filename):
-        """
-        Save the current roi_list to a file. A dictionary format is used.
-        """
-        # convert the roi_list to a dictionary
-        roi_list_dict = self.roi_list_to_dict(self._roi_list)
-
-        if not os.path.exists(path):
-            try:
-                os.makedirs(path)  # recursive creation of all directories on the path
-            except Exception as e:
-                self.log.error('Error {0}'.format(e))
-
-        p = os.path.join(path, filename)
-
-        try:
-            with open(p + '.json', 'w') as file:
-                json.dump(roi_list_dict, file)
-            self.log.info('ROI list saved to file {}.json'.format(p))
-        except Exception as e:
-            self.log.warning('ROI list not saved: {}'.format(e))
-
-        return None
-
-    # to solve: problem with marker size when loading a new list
-    def load_roi_list(self, complete_path=None):
-        """ 
-        Load a selected roi_list from .json file. 
-        """
-        # if no path given do nothing
-        if complete_path is None:
-            self.log.warning('No path to ROI list given')
-            return None
-
-        try:
-            with open(complete_path, 'r') as file:
-                roi_list_dict = json.load(file)
-
-            self._roi_list = self.dict_to_roi(roi_list_dict)
-
-            self.sigRoiListUpdated.emit({'name': self.roi_list_name,
-                                     'rois': self.roi_positions,
-                                     'cam_image': self.roi_list_cam_image,
-                                     'cam_image_extent': self.roi_list_cam_image_extent
-                                     })
-            self.set_active_roi(None if len(self.roi_names) == 0 else self.roi_names[0])
-            self.log.info('Loaded ROI list from {}'.format(complete_path))
-        except Exception as e:
-            self.log.warning('ROI list not loaded: {}'.format(e))
-        return None
-
-    @_roi_list.constructor
-    def dict_to_roi(self, roi_dict):
-        return RegionOfInterestList.from_dict(roi_dict)
-
-    @_roi_list.representer
-    def roi_list_to_dict(self, roi_list):
-        return roi_list.to_dict()
-
-    ################### mosaic tools
-    def add_mosaic(self, roi_width, width, height, x_center_pos=0, y_center_pos=0, z_pos=0, add=False):
-        """
-        Defines a new list containing a serpentine scan. Parameters can be specified in the settings dialog on GUI option menu.
-
-        @param roi_width: (better distance)
-        @param width: number of tiles in x direction
-        @param height: number of tiles in y direction
-        @param x_center_pos:
-        @param y_center_pos:
-        @param z_pos: current z position of the stage if there is one; or 0 for two axes stage
-        @param bool add: add the mosaic to the present list (True) or start a new one (False)
-
-        @returns: None
-        """
-        try:
-            if not add:
-                self.reset_roi_list()  # create a new list
-
-            # create a grid of the central points
-            grid = self.make_serpentine_grid(width, height)
-            # type conversion from list to np array for making linear, elementwise operations
-            grid_array = np.array(grid)
-            # shift and stretch the grid to create the roi centers
-            # mind the 3rd dimension so that it can be passed to the add_roi method
-            # calculate start positions (lower left corner of the grid) given the central position
-            x_start_pos = x_center_pos - roi_width * (width - 1) / 2
-            y_start_pos = y_center_pos - roi_width * (height - 1) / 2
-            roi_centers = grid_array * roi_width + [x_start_pos, y_start_pos, z_pos]
-
-            for item in roi_centers:
-                self.add_roi(item)
-        except Exception:
-            self.log.error('Could not create mosaic')
-
-    def make_serpentine_grid(self, width, height):
-        """ creates the grid points for a serpentine scan, with ascending x values in even numbered rows and descending x values in odd values rows.
-        Each element is appended with z = 0.
-
-        @params: int width: number of columns (x direction)
-                 int height: number of rows (y direction)
-
-        returns: list gridpoints: list with points in serpentine scan order
-        """
-        list_even = [(x, y, 0) for y in range(height) for x in range(width) if y % 2 == 0]
-        list_odd = [(x, y, 0) for y in range(height) for x in reversed(range(width)) if y % 2 != 0]
-        list_all = list_even + list_odd
-        gridpoints = sorted(list_all, key=self.sort_second)
-        return gridpoints
-
-    def sort_second(self, val):
-        """ helper function for sorting a list of tuples by the second element of each tuple, used for setting up the serpentine grid
-
-        @returns: the second element of value (in the context here, value is a 3dim tuple (x, y, z))
-        """
-        return val[1]
-
-    # with this overloading it is possible to call it from gui without specifying a roi_distance . the default value is taken
-    # but maybe modify to send the selected value with it..
+    # with this overloading it is possible to call it from gui without specifying a roi_distance
     @QtCore.Slot()
     @QtCore.Slot(float)
     def add_interpolation(self, roi_distance=50):  # remember to correct the roi_distance parameter
-        """ Fills the space between the already defined rois (at least 2) with more rois using a center to center distance roi_distance.
-        The grid starts in the minimum x and y coordinates from the already defined rois and covers the maximum x and y coordinates
+        """ Fills the space between the already defined rois (at least 2) with more ROIs using a center to center
+        distance roi_distance. The grid starts in the minimum x and y coordinates from the already defined ROIs and
+        covers the maximum x and y coordinates
 
-        @params: roi_distance
+        :params: roi_distance
 
-        @:returns: None
+        ::return: None
         """
-
         if len(self.roi_positions) < 2:
             self.log.warning('Please specify at least 2 ROIs to perform an interpolation')
         else:
@@ -815,19 +786,219 @@ class RoiLogic(GenericLogic):
                 # print(roi_centers)
 
                 # list is not reset before adding new rois. we might end up having some overlapping exactly the initial ones.
-                # to discuss if the initial ones shall be kept
-                # or think of a method how to get rid of the twice defined positions
                 for item in roi_centers:
                     self.add_roi(item)
 
             except Exception:
                 self.log.error('Could not create interpolation')
 
-    # functions for the tracking mode of the stage position.
-    # using a timer as first approach (did not work because i put the timer into __init__ but it should have gone in on_activate
-    # alternatively, use worker thread as for temperature tracking in basic_gui
-    # worker thread version
+# ROI list toolbar -----------------------------------------------------------------------------------------------------
+    @QtCore.Slot()
+    def reset_roi_list(self):
+        """ Instantiate a new empty RegionOfInterestList.
+
+        :return: None
+        """
+        self._roi_list = RegionOfInterestList()  # create an instance of the RegionOfInterestList class
+        # self.set_cam_image()
+        self.sigRoiListUpdated.emit({'name': self.roi_list_name,
+                                     'rois': self.roi_positions,
+                                     'cam_image': self.roi_list_cam_image,
+                                     'cam_image_extent': self.roi_list_cam_image_extent
+                                     })
+        self.set_active_roi(None)
+
+    def save_roi_list(self, path, filename):
+        """
+        Save the current roi_list to a file. A dictionary format is used.
+
+        :param: str path: path to the folder where the ROI list will be saved
+        :param: str filename: name of the file containing the dictionary with the ROI list information.
+                                json format is used
+        :return: None
+        """
+        # convert the roi_list to a dictionary
+        roi_list_dict = self.roi_list_to_dict(self._roi_list)
+
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path)  # recursive creation of all directories on the path
+            except Exception as e:
+                self.log.error('Error {0}'.format(e))
+
+        p = os.path.join(path, filename)
+
+        try:
+            with open(p + '.json', 'w') as file:
+                json.dump(roi_list_dict, file)
+            self.log.info('ROI list saved to file {}.json'.format(p))
+        except Exception as e:
+            self.log.warning('ROI list not saved: {}'.format(e))
+
+    def load_roi_list(self, complete_path=None):
+        """
+        Load a selected roi_list from .json file.
+
+        :param: str complete_path: path to the file containing the complete folder hierarchy
+        :return: None
+        """
+        # if no path given do nothing
+        if complete_path is None:
+            self.log.warning('No path to ROI list given')
+            return None
+
+        try:
+            with open(complete_path, 'r') as file:
+                roi_list_dict = json.load(file)
+
+            self._roi_list = self.dict_to_roi(roi_list_dict)
+
+            self.sigRoiListUpdated.emit({'name': self.roi_list_name,
+                                     'rois': self.roi_positions,
+                                     'cam_image': self.roi_list_cam_image,
+                                     'cam_image_extent': self.roi_list_cam_image_extent
+                                     })
+            self.set_active_roi(None if len(self.roi_names) == 0 else self.roi_names[0])
+            self.log.info('Loaded ROI list from {}'.format(complete_path))
+        except Exception as e:
+            self.log.warning('ROI list not loaded: {}'.format(e))
+
+    @QtCore.Slot()
+    def delete_all_roi(self):
+        """ Keep the current ROI list but discard all ROI names in the list.
+
+        :return: None
+        """
+        self.active_roi = None
+        for name in self.roi_names:
+            self._roi_list.delete_roi(name)
+            self.sigRoiUpdated.emit(name, '', np.zeros(3))
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Slots for other actions (on GUI mainwindow elements for example)
+# ----------------------------------------------------------------------------------------------------------------------
+
+    @QtCore.Slot(str)
+    def set_active_roi(self, name=None):
+        """
+        Set the name of the currently active ROI.
+        :param: str name: should be present in current ROI list
+        :return: None
+        """
+        if not isinstance(name, str) and name is not None:
+            self.log.error('ROI name must be of type str or None.')
+        elif name is None or name == '':
+            self._active_roi = None
+        elif name in self.roi_names:
+            self._active_roi = str(name)
+        else:
+            self.log.error('No ROI with name "{0}" found in ROI list.'.format(name))
+        self.sigActiveRoiUpdated.emit('' if self.active_roi is None else self.active_roi)
+
+    @QtCore.Slot(str)
+    def rename_roi_list(self, new_name):
+        """
+        Set a new name for the current ROI list.
+        :param: str new name for the ROI list
+        :return: None
+        """
+        if not isinstance(new_name, str) or new_name == '':
+            self.log.error('ROI list name to set must be str of length > 0.')
+            return None
+        self._roi_list.name = new_name
+        self.sigRoiListUpdated.emit({'name': self.roi_list_name})
+
+    @QtCore.Slot(float)
+    def set_roi_width(self, width):
+        """
+        Set a new width for the ROI marker.
+        :param: float width: new width in um
+        :return: None
+        """
+        self._roi_width = float(width)
+        self.sigWidthUpdated.emit(width)
+
+    # @QtCore.Slot()
+    # def set_cam_image(self, emit_change=True):
+    #     """ Get the current xy scan data and set as scan_image of ROI. """
+    #     self._roi_list.set_cam_image()
+    #
+    #     if emit_change:
+    #         self.sigRoiListUpdated.emit({'cam_image': self.roi_list_cam_image,
+    #                                  'cam_image_extent': self.roi_cam_image_extent})
+    #     return None
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Functions for mosaic tool
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def add_mosaic(self, roi_width, width, height, x_center_pos=0, y_center_pos=0, z_pos=0, add=False):
+        """
+        Defines a new ROI list containing a serpentine scan.
+        Parameters can be specified in the settings dialog on GUI option menu.
+
+        :param float roi_width: (better distance between two ROI centers)
+        :param int width: number of tiles in x direction
+        :param int height: number of tiles in y direction
+        :param float x_center_pos: origin of the mosaic, first coordinate
+        :param float y_center_pos: origin of the mosaic, second coordinate
+        :param z_pos: current z position of the stage if there is one; or 0 for two axes stage
+        :param bool add: add the mosaic to the present list (True) or start a new one (False)
+
+        :return: None
+        """
+        try:
+            if not add:
+                self.reset_roi_list()  # create a new list
+
+            # create a grid of the central points
+            grid = self.make_serpentine_grid(width, height)
+            # type conversion from list to np array for making linear, elementwise operations
+            grid_array = np.array(grid)
+            # shift and stretch the grid to create the roi centers
+            # mind the 3rd dimension so that it can be passed to the add_roi method
+            # calculate start positions (lower left corner of the grid) given the central position
+            x_start_pos = x_center_pos - roi_width * (width - 1) / 2
+            y_start_pos = y_center_pos - roi_width * (height - 1) / 2
+            roi_centers = grid_array * roi_width + [x_start_pos, y_start_pos, z_pos]
+
+            for item in roi_centers:
+                self.add_roi(item)
+        except Exception:
+            self.log.error('Could not create mosaic')
+
+    def make_serpentine_grid(self, width, height):
+        """ Creates the grid points for a serpentine scan, with ascending x values in even numbered rows and
+        descending x values in odd values rows.
+        Each element is appended with z = 0.
+
+        :param: int width: number of columns (x direction)
+        :param: int height: number of rows (y direction)
+
+        :return: list gridpoints: list with points in serpentine scan order
+        """
+        list_even = [(x, y, 0) for y in range(height) for x in range(width) if y % 2 == 0]
+        list_odd = [(x, y, 0) for y in range(height) for x in reversed(range(width)) if y % 2 != 0]
+        list_all = list_even + list_odd
+        gridpoints = sorted(list_all, key=self.sort_second)
+        return gridpoints
+
+    @staticmethod
+    def sort_second(val):
+        """ Helper function for sorting a list of tuples by the second element of each tuple,
+        used for setting up the serpentine grid.
+
+        :param: tuple (numeric type) val
+        :return: the second element of value (in the context here, value is a 3dim tuple (x, y, z))
+        """
+        return val[1]
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for tracking mode of the stage position
+# ----------------------------------------------------------------------------------------------------------------------
+
     def start_tracking(self):
+        """ Start the tracking loop of the stage position. """
         self.tracking = True
         # monitor the current stage position, using a worker thread
         worker = Worker()
@@ -835,6 +1006,7 @@ class RoiLogic(GenericLogic):
         self.threadpool.start(worker)
 
     def stop_tracking(self):
+        """ Stop the tracking loop of the stage position. """
         self.tracking = False
         # get once again the latest position
         position = self.stage_position
@@ -842,6 +1014,7 @@ class RoiLogic(GenericLogic):
         self.sigTrackingModeStopped.emit()
 
     def tracking_loop(self):
+        """ Perform a step in the tracking loop and start a new one if tracking mode is still on. """
         position = self.stage_position
         self.sigUpdateStagePosition.emit(position)
         if self.tracking:
@@ -850,8 +1023,45 @@ class RoiLogic(GenericLogic):
             worker.signals.sigFinished.connect(self.tracking_loop)
             self.threadpool.start(worker)
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods interacting with hardware
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def _move_stage(self, position):
+        """
+        Move the translation stage to position.
+
+        :param: float tuple[3] position: target position for stage
+        :return: None
+        """
+        if len(position) != 3:
+            self.log.error('Stage position to set must be iterable of length 3.')
+            return None
+        axis_label = ('x', 'y', 'z')
+        pos_dict = dict([*zip(axis_label, position)])
+        self._stage.move_abs(pos_dict)
+        self.sigStageMoved.emit(position)
+
     def set_stage_velocity(self, param_dict):
-        self.stage().set_velocity(param_dict)
+        """ Set the stage velocity. This method is needed for tasks to make the method in the hardware module
+        accessible from logic layer.
+
+        :param: dict param_dict: dictionary containing axes labels as keys and target velocity as values.
+        :return: None
+        """
+        self._stage.set_velocity(param_dict)
+
+    def stage_wait_for_idle(self):  # needed in tasks
+        """ Wait until the stage status is idle. This method is needed for tasks to make the corresponding method
+        in the hardware module accessible from the logic layer.
+
+        :return: None
+        """
+        self._stage.wait_for_idle()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods to handle the user interface state
+# ----------------------------------------------------------------------------------------------------------------------
 
     def disable_tracking_mode(self):
         """ This method provides a security that tracking mode is not callable from GUI, for example during Tasks. """
@@ -864,15 +1074,9 @@ class RoiLogic(GenericLogic):
         self.sigEnableTracking.emit()
 
     def disable_roi_actions(self):
+        """ This method provides a security to avoid all stage related actions from GUI, for example during Tasks. """
         self.sigDisableRoiActions.emit()
 
     def enable_roi_actions(self):
+        """ This method resets all ROI / stage related actions from GUI to callable state, for example after Tasks. """
         self.sigEnableRoiActions.emit()
-
-    def stage_wait_for_idle(self):  # needed in tasks
-        self.stage().wait_for_idle()  # not (yet) on the motor interface
-
-
-
-
-

@@ -1,15 +1,37 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov  5 13:05:03 2020
-
-@author: fbarho
+Qudi-CBS
 
 This module contains the ROI selection user interface.
-It is in large parts inspired by the qudi poimanager gui, in this version reduced to 
-the functionality that we need. 
-"""
+It is inspired by the Qudi poimanager gui.
 
+It would be a nice idea to have camera images superposed with the ROI markers.
+In this version, everything camera image related has been commented out.
+
+An extension to Qudi.
+
+@author: F. Barho
+
+Created on Thu Nov 5 2020
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
+"""
 import numpy as np
 import os
 import pyqtgraph as pg
@@ -26,6 +48,10 @@ from qtwidgets.scan_plotwidget import ScanImageItem
 from core.configoption import ConfigOption
 from gui.validators import NameValidator
 
+
+# ======================================================================================================================
+# Classes for the ROI and stage markers
+# ======================================================================================================================
 
 # Class representing the marker.  # adapted from POI manager module of Qudi.
 class RoiMarker(pg.RectROI):
@@ -244,9 +270,12 @@ class StageMarker(pg.RectROI):
         return
 
 
-class MosaicSettingDialog(QtWidgets.QDialog):
-    """ Create the SettingsDialog window, based on the corresponding *.ui file."""
+# ======================================================================================================================
+# Classes for the dialog windows and main window
+# ======================================================================================================================
 
+class MosaicSettingDialog(QtWidgets.QDialog):
+    """ Create the MosaicSettingsDialog window, based on the corresponding *.ui file."""
     def __init__(self):
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
@@ -260,7 +289,6 @@ class MosaicSettingDialog(QtWidgets.QDialog):
 class RoiMainWindow(QtWidgets.QMainWindow):
     """ Create the Mainwindow from the ui.file
     """
-
     def __init__(self):
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
@@ -271,9 +299,9 @@ class RoiMainWindow(QtWidgets.QMainWindow):
         uic.loadUi(ui_file, self)
         self.show()
 
+
 class RoiMainWindowCE(RoiMainWindow):
     """ RoiMainWindow child class that allows to stop the tracking mode when window is closed. """
-
     def __init__(self, close_function):
         super().__init__()
         self.close_function = close_function
@@ -282,18 +310,32 @@ class RoiMainWindowCE(RoiMainWindow):
         self.close_function()
         event.accept()
 
+
+# ======================================================================================================================
+# GUI class
+# ======================================================================================================================
+
+
 class RoiGUI(GUIBase):
-    """ This is the GUI Class for Roi selection
+    """ This is the GUI Class for Roi selection.
+
+    Example config for copy-paste:
+
+    ROI Selector:
+        module.Class: 'ROI.roi_gui.RoiGUI'
+        default_path: '/home/barho/qudi_files/qudi_roi_lists'
+        stagemarker_width: 50  # in um
+        connect:
+            roi_logic: 'roi_logic'
     """
-    # declare connectors
+    # declare connector to logic module
     roi_logic = Connector(interface='RoiLogic')
     
-    # set the default save path for roi lists from config
+    # config options
     default_path = ConfigOption('default_path', missing='warn')
-    # set the size of the stage marker
-    stagemarker_width = ConfigOption('stagemarker_width', 50, missing='info')
+    stagemarker_width = ConfigOption('stagemarker_width', 50, missing='info')  # stagemarker width in um
 
-    # declare signals
+    # signals
     sigRoiWidthChanged = QtCore.Signal(float)
     sigRoiListNameChanged = QtCore.Signal(str)
     sigStartTracking = QtCore.Signal()
@@ -304,50 +346,51 @@ class RoiGUI(GUIBase):
         super().__init__(config=config, **kwargs)
 
         self._mw = None  # QMainWindow handle
+        self._roi_logic = None
         self.roi_image = None  # ScanPlotImage (custom child of pyqtgraph PlotImage) for ROI overview image
         self._markers = {}  # dict to hold handles for the ROI markers
         self._mouse_moved_proxy = None  # Signal proxy to limit mousMoved event rate
         self.stagemarker = None
+        self._mosaic_sd = None
 
     def on_activate(self):
         """
         Initializes the overall GUI, and establishes the connectors.
         """
-        self._markers = {}  # already initialized in init so maybe remove it here..
+        self._roi_logic = self.roi_logic()
 
         self._mw = RoiMainWindowCE(self.close_function)
+        self._markers = {}
 
-        
         # set the default save path before validator is applied: make sure that config is correct
         self._mw.save_path_LineEdit.setText(self.default_path)
+
         # Add validator to LineEdits
         self._mw.roi_list_name_LineEdit.setValidator(NameValidator())
-        # self._mw.save_path_LineEdit.setValidator(NameValidator(path=True))
-        # to reactivate later !!!!!!!
+        # self._mw.save_path_LineEdit.setValidator(NameValidator(path=True))  # to reactivate later !!!!!!!
 
         # Initialize plot
         self.__init_roi_map_image()
 
         # Initialize ROIs
-        self._update_rois(self.roi_logic().roi_positions)
+        self._update_rois(self._roi_logic.roi_positions)
         # Initialize ROI list name
-        self._update_roi_list_name(self.roi_logic().roi_list_name)
-
+        self._update_roi_list_name(self._roi_logic.roi_list_name)
         # Initialize ROI width
-        self._update_roi_width(self.roi_logic().roi_width)
+        self._update_roi_width(self._roi_logic.roi_width)
 
         # add the stage marker
-        stage_pos = self.roi_logic().stage_position[:2]
+        stage_pos = self._roi_logic.stage_position[:2]
         self._add_stage_marker(stage_pos)
 
-        # Distance Measurement: # to be added later
+        # Distance Measurement:
         # Introducing a SignalProxy will limit the rate of signals that get fired.
         self._mouse_moved_proxy = pg.SignalProxy(signal=self.roi_image.scene().sigMouseMoved,
                                                  rateLimit=30,
                                                  slot=self.mouse_moved_callback)
 
         # place this here so that the initialized values can be retrieved for the mosaic dialog
-        self.initMosaicSettingsUI()  # initialize the Mosaic settings window in the options menu
+        self.init_mosaic_settings_ui()  # initialize the Mosaic settings window in the options menu
         
         # Connect signals
         self.__connect_internal_signals()
@@ -365,97 +408,93 @@ class RoiGUI(GUIBase):
         self.__disconnect_internal_signals()
         self.close_function()
 
-    # is it needed to have the camera image superposed with the roi markers ? 
-    # in a first version: just keep the overview with the roi markers without camera image, comment everything camera image related..    
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper methods called during activation / deactivation
+# ----------------------------------------------------------------------------------------------------------------------
+
     def __init_roi_map_image(self):
-        """ Initialize the ROI map """
+        """ Initialize the ROI map. """
         self.roi_image = ScanImageItem(axisOrder='row-major')
         self._mw.roi_map_ViewWidget.addItem(self.roi_image)
         self._mw.roi_map_ViewWidget.setLabel('bottom', 'x position')  # units='um'  check units ..
         self._mw.roi_map_ViewWidget.setLabel('left', 'y position')  # , units='um
         self._mw.roi_map_ViewWidget.setAspectLocked(lock=True, ratio=1.0)
-        #        # Get camera image from logic and update initialize plot
-        # self._update_cam_image(self.roi_logic().roi_list_cam_image, self.roi_logic().roi_list_cam_image_extent)
+        # # Get camera image from logic and update initialize plot
+        # self._update_cam_image(self._roi_logic.roi_list_cam_image, self._roi_logic.roi_list_cam_image_extent)
 
     def __connect_update_signals_from_logic(self):
-        """ establish the connections of signals emitted in logic module """
-        self.roi_logic().sigRoiUpdated.connect(self.update_roi, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigActiveRoiUpdated.connect(self.update_active_roi, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigRoiListUpdated.connect(self.update_roi_list, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigWidthUpdated.connect(self._update_roi_width, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigStageMoved.connect(self.update_stage_position, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigUpdateStagePosition.connect(self.update_stage_position, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigTrackingModeStopped.connect(self.reset_tracking_mode_button, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigDisableTracking.connect(self.disable_tracking_action, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigEnableTracking.connect(self.enable_tracking_action, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigDisableRoiActions.connect(self.disable_roi_actions, QtCore.Qt.QueuedConnection)
-        self.roi_logic().sigEnableRoiActions.connect(self.enable_roi_actions, QtCore.Qt.QueuedConnection)
-
+        """ Establish the connections of signals emitted in logic module
+        """
+        self._roi_logic.sigRoiUpdated.connect(self.update_roi, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigActiveRoiUpdated.connect(self.update_active_roi, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigRoiListUpdated.connect(self.update_roi_list, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigWidthUpdated.connect(self._update_roi_width, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigStageMoved.connect(self.update_stage_position, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigUpdateStagePosition.connect(self.update_stage_position, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigTrackingModeStopped.connect(self.reset_tracking_mode_button, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigDisableTracking.connect(self.disable_tracking_action, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigEnableTracking.connect(self.enable_tracking_action, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigDisableRoiActions.connect(self.disable_roi_actions, QtCore.Qt.QueuedConnection)
+        self._roi_logic.sigEnableRoiActions.connect(self.enable_roi_actions, QtCore.Qt.QueuedConnection)
 
     def __disconnect_update_signals_from_logic(self):
-        """ disconnect signals emitted in logic module """
-        self.roi_logic().sigRoiUpdated.disconnect()
-        self.roi_logic().sigActiveRoiUpdated.disconnect()
-        self.roi_logic().sigRoiListUpdated.disconnect()
-        self.roi_logic().sigWidthUpdated.disconnect()
-        self.roi_logic().sigStageMoved.disconnect()
-        self.roi_logic().sigUpdateStagePosition.disconnect()
-        self.roi_logic().sigTrackingModeStopped.disconnect()
+        """ Disconnect signals emitted in logic module. """
+        self._roi_logic.sigRoiUpdated.disconnect()
+        self._roi_logic.sigActiveRoiUpdated.disconnect()
+        self._roi_logic.sigRoiListUpdated.disconnect()
+        self._roi_logic.sigWidthUpdated.disconnect()
+        self._roi_logic.sigStageMoved.disconnect()
+        self._roi_logic.sigUpdateStagePosition.disconnect()
+        self._roi_logic.sigTrackingModeStopped.disconnect()
+        self._roi_logic.sigDisableTracking.disconnect()
+        self._roi_logic.sigEnableTracking.disconnect()
+        self._roi_logic.sigDisableRoiActions.disconnect()
+        self._roi_logic.sigEnableRoiActions.disconnect()
 
     def __connect_control_signals_to_logic(self):
-        """ establish the connections of signals emitted with slots in logic module """
+        """ Establish the connections of signals emitted with slots in logic module. """
         # roi toolbar actions
-        self._mw.new_roi_Action.triggered.connect(self.roi_logic().add_roi, QtCore.Qt.QueuedConnection)
-        self._mw.go_to_roi_Action.triggered.connect(self.roi_logic().go_to_roi, QtCore.Qt.QueuedConnection)
-        self._mw.delete_roi_Action.triggered.connect(self.roi_logic().delete_roi, QtCore.Qt.QueuedConnection)
-        self._mw.add_interpolation_Action.triggered.connect(self.add_interpolation_clicked, QtCore.Qt.QueuedConnection) # this might go to connect internal signals
-       
-
-
+        self._mw.new_roi_Action.triggered.connect(self._roi_logic.add_roi, QtCore.Qt.QueuedConnection)
+        self._mw.go_to_roi_Action.triggered.connect(self._roi_logic.go_to_roi, QtCore.Qt.QueuedConnection)
+        self._mw.delete_roi_Action.triggered.connect(self._roi_logic.delete_roi, QtCore.Qt.QueuedConnection)
         # roi list toolbar actions
-        self._mw.new_list_Action.triggered.connect(self.roi_logic().reset_roi_list, QtCore.Qt.QueuedConnection)
-        self._mw.discard_all_roi_Action.triggered.connect(self.delete_all_roi_clicked,
-                                                          QtCore.Qt.QueuedConnection)  # this might go to __connect_internal_signals ..
+        self._mw.new_list_Action.triggered.connect(self._roi_logic.reset_roi_list, QtCore.Qt.QueuedConnection)
 
         # signals
-        self.sigRoiWidthChanged.connect(self.roi_logic().set_roi_width)
-        self.sigRoiListNameChanged.connect(self.roi_logic().rename_roi_list, QtCore.Qt.QueuedConnection)
-        self._mw.active_roi_ComboBox.activated[str].connect(self.roi_logic().set_active_roi, QtCore.Qt.QueuedConnection)
-        self.sigAddInterpolation.connect(self.roi_logic().add_interpolation, QtCore.Qt.QueuedConnection)
-        self.sigStartTracking.connect(self.roi_logic().start_tracking)
-        self.sigStopTracking.connect(self.roi_logic().stop_tracking)
-
-        # something similar will be needed : to add later !!!!
-        # self._mw.get_confocal_image_PushButton.clicked.connect(self.poimanagerlogic().set_scan_image, QtCore.Qt.QueuedConnection)
+        self.sigRoiWidthChanged.connect(self._roi_logic.set_roi_width)
+        self.sigRoiListNameChanged.connect(self._roi_logic.rename_roi_list, QtCore.Qt.QueuedConnection)
+        self._mw.active_roi_ComboBox.activated[str].connect(self._roi_logic.set_active_roi, QtCore.Qt.QueuedConnection)
+        self.sigAddInterpolation.connect(self._roi_logic.add_interpolation, QtCore.Qt.QueuedConnection)
+        self.sigStartTracking.connect(self._roi_logic.start_tracking)
+        self.sigStopTracking.connect(self._roi_logic.stop_tracking)
 
     def __disconnect_control_signals_to_logic(self):
-        """ disconnect signals from their slots in logic module """
+        """ Disconnect signals from their slots in logic module. """
         self._mw.new_roi_Action.triggered.disconnect()
         self._mw.go_to_roi_Action.triggered.disconnect()
         self._mw.delete_roi_Action.triggered.disconnect()
-        self._mw.add_interpolation_Action.triggered.disconnect()
-
         self._mw.new_list_Action.triggered.disconnect()
+        self.sigRoiWidthChanged.disconnect()
+        self.sigRoiListNameChanged.disconnect()
         self._mw.active_roi_ComboBox.activated[str].disconnect()
         self.sigAddInterpolation.disconnect()
         self.sigStartTracking.disconnect()
         self.sigStopTracking.disconnect()
 
-        # self._mw.get_confocal_image_PushButton.clicked.disconnect()
-
-        self.sigRoiWidthChanged.disconnect()
-        self.sigRoiListNameChanged.disconnect()
         for marker in self._markers.values():
             marker.sigRoiSelected.disconnect()
 
     def __connect_internal_signals(self):
-        """ connect signals with slots within this module """
+        """ Connect signals with slots within this module (internal signals). """
+        self._mw.add_interpolation_Action.triggered.connect(self.add_interpolation_clicked, QtCore.Qt.QueuedConnection)
+        self._mw.discard_all_roi_Action.triggered.connect(self.delete_all_roi_clicked, QtCore.Qt.QueuedConnection)
         self._mw.roi_width_doubleSpinBox.editingFinished.connect(self.roi_width_changed)  # just emit one signal when finished and not at each modification of the value (valueChanged)
         self._mw.save_list_Action.triggered.connect(self.save_roi_list)
         self._mw.load_list_Action.triggered.connect(self.load_roi_list)
+
         # tracking mode toolbutton
         self._mw.tracking_mode_Action.setEnabled(True)
-        self._mw.tracking_mode_Action.setChecked(self.roi_logic().tracking)
+        self._mw.tracking_mode_Action.setChecked(self._roi_logic.tracking)
         self._mw.tracking_mode_Action.triggered.connect(self.tracking_mode_clicked)
 
         # file menu
@@ -464,7 +503,9 @@ class RoiGUI(GUIBase):
         self._mw.mosaic_scan_MenuAction.triggered.connect(self.open_mosaic_settings)
 
     def __disconnect_internal_signals(self):
-        """ disconnect signals from slots within this module """
+        """ Disconnect signals from slots within this module (internal signal). """
+        self._mw.add_interpolation_Action.triggered.disconnect()
+        self._mw.discard_all_roi_Action.triggered.disconnect()
         self._mw.roi_width_doubleSpinBox.editingFinished.disconnect()
         self._mw.save_list_Action.triggered.disconnect()
         self._mw.load_list_Action.triggered.disconnect()
@@ -478,10 +519,12 @@ class RoiGUI(GUIBase):
         self._mw.activateWindow()
         self._mw.raise_()
 
-    # Initialisation of the mosaic settings windows in the options menu
-    def initMosaicSettingsUI(self):
-        """ Definition, configuration and initialisation of the mosaic settings GUI.
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods belonging to the mosaic settings window in the options menu
+# ----------------------------------------------------------------------------------------------------------------------
 
+    def init_mosaic_settings_ui(self):
+        """ Definition, configuration and initialisation of the mosaic settings GUI.
         """
         # Create the settings window
         self._mosaic_sd = MosaicSettingDialog()
@@ -494,39 +537,37 @@ class RoiGUI(GUIBase):
         # set the default values
         self.mosaic_default_settings()
 
-    # slots of the mosaic settings window
+# slots of the mosaic settings window ----------------------------------------------------------------------------------
     def mosaic_update_settings(self):
         """ Write new settings from the gui to the roi logic 
         """
-        self.roi_logic()._mosaic_x_start = self._mosaic_sd.x_pos_DSpinBox.value()
-        self.roi_logic()._mosaic_y_start = self._mosaic_sd.y_pos_DSpinBox.value()
-        self.roi_logic()._mosaic_roi_width = self._mosaic_sd.mosaic_roi_width_DSpinBox.value()
+        self._roi_logic._mosaic_x_start = self._mosaic_sd.x_pos_DSpinBox.value()
+        self._roi_logic._mosaic_y_start = self._mosaic_sd.y_pos_DSpinBox.value()
+        self._roi_logic._mosaic_roi_width = self._mosaic_sd.mosaic_roi_width_DSpinBox.value()
         self._mw.roi_width_doubleSpinBox.setValue(
             self._mosaic_sd.mosaic_roi_width_DSpinBox.value())  # synchronize the roi width spinboxes so that the marker is drawn correctly
         if self._mosaic_sd.mosaic_size1_RadioButton.isChecked():
-            self.roi_logic()._mosaic_number_x = 9
-            self.roi_logic()._mosaic_number_y = 9
+            self._roi_logic._mosaic_number_x = 9
+            self._roi_logic._mosaic_number_y = 9
         if self._mosaic_sd.mosaic_size2_RadioButton.isChecked():
-            self.roi_logic()._mosaic_number_x = 25
-            self.roi_logic()._mosaic_number_y = 25
+            self._roi_logic._mosaic_number_x = 25
+            self._roi_logic._mosaic_number_y = 25
         if self._mosaic_sd.mosaic_userdefined_RadioButton.isChecked():
-            self.roi_logic()._mosaic_number_x = self._mosaic_sd.mosaic_width_SpinBox.value()
-            self.roi_logic()._mosaic_number_y = self._mosaic_sd.mosaic_height_SpinBox.value()
+            self._roi_logic._mosaic_number_x = self._mosaic_sd.mosaic_width_SpinBox.value()
+            self._roi_logic._mosaic_number_y = self._mosaic_sd.mosaic_height_SpinBox.value()
         add_to_list = self._mosaic_sd.mosaic_add_to_list_CheckBox.isChecked()
 
-        self.roi_logic().add_mosaic(x_center_pos=self.roi_logic()._mosaic_x_start,
-                                    y_center_pos=self.roi_logic()._mosaic_y_start,
-                                    z_pos = self.roi_logic().stage_position[2],
-                                    roi_width=self.roi_logic()._mosaic_roi_width,
-                                    width=self.roi_logic()._mosaic_number_x,
-                                    height=self.roi_logic()._mosaic_number_y,
+        self._roi_logic.add_mosaic(x_center_pos=self._roi_logic._mosaic_x_start,
+                                    y_center_pos=self._roi_logic._mosaic_y_start,
+                                    z_pos=self._roi_logic.stage_position[2],
+                                    roi_width=self._roi_logic._mosaic_roi_width,
+                                    width=self._roi_logic._mosaic_number_x,
+                                    height=self._roi_logic._mosaic_number_y,
                                     add=add_to_list)
 
     def mosaic_default_settings(self):
         """ Restore default settings. 
         """
-        # reset to default values
-        # as an alternative, reset to the values that are still stored in logic attributes ? (= former settings?) to modify if .. 
         self._mosaic_sd.current_pos_CheckBox.setChecked(False)
         self._mosaic_sd.x_pos_DSpinBox.setValue(0)
         self._mosaic_sd.y_pos_DSpinBox.setValue(0)
@@ -544,19 +585,18 @@ class RoiGUI(GUIBase):
         self._mosaic_sd.mosaic_add_to_list_CheckBox.setChecked(False)
 
     def mosaic_position(self):
-        """ check state of the current position checkbox and handle position settings accordingly
+        """ Check state of the current position checkbox and handle position settings accordingly.
         """
         if self._mosaic_sd.current_pos_CheckBox.isChecked():
             # get current stage position from logic and fill this in, then disable spinboxes
-            self._mosaic_sd.x_pos_DSpinBox.setValue(self.roi_logic().stage_position[0])
-            self._mosaic_sd.y_pos_DSpinBox.setValue(self.roi_logic().stage_position[1])
+            self._mosaic_sd.x_pos_DSpinBox.setValue(self._roi_logic.stage_position[0])
+            self._mosaic_sd.y_pos_DSpinBox.setValue(self._roi_logic.stage_position[1])
             self._mosaic_sd.x_pos_DSpinBox.setEnabled(False)
             self._mosaic_sd.y_pos_DSpinBox.setEnabled(False)
         else:
             self._mosaic_sd.x_pos_DSpinBox.setEnabled(True)
             self._mosaic_sd.y_pos_DSpinBox.setEnabled(True)
 
-    # slot to open the mosaic settings window
     def open_mosaic_settings(self):
         """ Opens the settings menu. 
         """
@@ -564,50 +604,119 @@ class RoiGUI(GUIBase):
         self.mosaic_position()
         self._mosaic_sd.exec_()
 
-    # to fix: unit display + bug when initializing a new list
+# ----------------------------------------------------------------------------------------------------------------------
+# Slots for ROI GUI actions
+# ----------------------------------------------------------------------------------------------------------------------
+
+# mouse movement on ROI overview image
     @QtCore.Slot(object)
     def mouse_moved_callback(self, event):
-        """ Handles any mouse movements inside the image.
-        @param event:   Event that signals the new mouse movement.
+        """ Handles any mouse movements inside the ROI display image.
+        :param event:   Event that signals the new mouse movement.
                        This should be of type QPointF.
         Gets the mouse position, converts it to a position scaled to the image axis
-        and than calculates and updated the position to the current ROI.
+        and than calculates and updates the distance to the current ROI.
         """
-
         # converts the absolute mouse position to a position relative to the axis
         mouse_pos = self.roi_image.getViewBox().mapSceneToView(event[0])
-        # only calculate distance, if a ROI is selected
-        active_roi = self.roi_logic().active_roi
+        # only calculate distance if a ROI is selected
+        active_roi = self._roi_logic.active_roi
         if active_roi:
-            roi_pos = self.roi_logic().get_roi_position(active_roi)
+            roi_pos = self._roi_logic.get_roi_position(active_roi)
             dx = ScaledFloat(mouse_pos.x() - roi_pos[0])
             dy = ScaledFloat(mouse_pos.y() - roi_pos[1])
             d_total = ScaledFloat(
                 np.sqrt((mouse_pos.x() - roi_pos[0])**2 + (mouse_pos.y() - roi_pos[1])**2))
             self._mw.roi_distance_Label.setText(
-                '{0:.2r} (dx = {1:.2r}, dy = {2:.2r})'.format(d_total, dx, dy))
+                '{0:.2f} (dx = {1:.2f}, dy = {2:.2f})'.format(d_total, dx, dy))
         else:
             self._mw.roi_distance_Label.setText('? (?, ?)')
         pass
 
-    @QtCore.Slot(dict)
-    def update_roi_list(self, roi_dict):
-        if not isinstance(roi_dict, dict):
-            self.log.error('ROI parameters to update must be given in a single dictionary.')
-            return
+# toolbar actions ------------------------------------------------------------------------------------------------------
+    @QtCore.Slot()
+    def add_interpolation_clicked(self):
+        """ This method is called when the add interpolation toolbutton is clicked.
+        Retrieves the current roi width (better roi distance) and sends a signal to the logic module.
+        :return: None
+        """
+        roi_distance = self._mw.roi_width_doubleSpinBox.value()
+        self.sigAddInterpolation.emit(roi_distance)
 
-        if 'name' in roi_dict:
-            self._update_roi_list_name(name=roi_dict['name'])
-        # put this in comments because it will reset the image with a None type object and lead to an error in the distance measurement
-        # to be reactivated when the possibility of a camera image overlay is established
-        # if 'cam_image' in roi_dict and 'cam_image_extent' in roi_dict:
-        #     self._update_cam_image(cam_image=roi_dict['cam_image'], cam_image_extent=roi_dict['cam_image_extent'])
-        if 'rois' in roi_dict:
-            self._update_rois(roi_dict=roi_dict['rois'])
-        return
+    @QtCore.Slot()
+    def delete_all_roi_clicked(self):
+        """ This method is called when the discard all ROI toolbutton is clicked.
+        Opens a message box to confirm deletion, and informs the logic module if confirmed.
+        :return: None
+        """
+        result = QtWidgets.QMessageBox.question(self._mw, 'Qudi: Delete all ROIs?',
+                                                'Are you sure to delete all ROIs?',
+                                                QtWidgets.QMessageBox.Yes,
+                                                QtWidgets.QMessageBox.No)
+        if result == QtWidgets.QMessageBox.Yes:
+            self._roi_logic.delete_all_roi()
 
+    # To do: add a Validator on the save_path_LineEdit.
+    @QtCore.Slot()
+    def save_roi_list(self):
+        """ This method is called when the save roi list toolbutton is clicked.
+        Save ROI list to file, using filepath and filename given on the GUI.
+        """
+        roi_list_name = self._mw.roi_list_name_LineEdit.text()
+        path = self._mw.save_path_LineEdit.text()
+        self._roi_logic.rename_roi_list(roi_list_name)
+        self._roi_logic.save_roi_list(path, roi_list_name)
+
+    @QtCore.Slot()
+    def load_roi_list(self):
+        """ This method is called when the load roi list toolbutton is clicked.
+        Opens a dialog to select the file. If a file is selected, the logic handles the loading of the information
+        contained therein.
+        """
+        data_directory = self._mw.save_path_LineEdit.text()  # we will use this as default location to look for files
+        this_file = QtWidgets.QFileDialog.getOpenFileName(self._mw,
+                                                          'Open ROI list',
+                                                          data_directory,
+                                                          'json files (*.json)')[0]
+        if this_file:
+            self._roi_logic.load_roi_list(complete_path=this_file)
+
+    @QtCore.Slot()
+    def tracking_mode_clicked(self):
+        """ Handles the state of the tracking mode toolbutton and emits a signal """
+        if self._roi_logic.tracking:  # tracking mode already on
+            self._mw.tracking_mode_Action.setText('Tracking mode')
+            self._mw.tracking_mode_Action.setToolTip('Start tracking mode')
+            self.sigStopTracking.emit()
+        else:  # tracking mode off
+            self._mw.tracking_mode_Action.setText('Tracking mode off')
+            self._mw.tracking_mode_Action.setToolTip('Stop tracking mode')
+            self.sigStartTracking.emit()
+
+# actions on mainwindow widgets ----------------------------------------------------------------------------------------
+    @QtCore.Slot()
+    def roi_width_changed(self):
+        """ This method is called when the spinbox value is changed. Sends a signal to logic informing about
+        the new roi width (better: roi distance).
+        :return: None
+        """
+        self.sigRoiWidthChanged.emit(self._mw.roi_width_doubleSpinBox.value())
+
+    @QtCore.Slot()
+    def roi_list_name_changed(self):
+        """ Set the name of the current roi list."""
+        self.sigRoiListNameChanged.emit(self._mw.roi_list_name_LineEdit.text())
+
+# callbacks of signals sent from the logic------------------------------------------------------------------------------
     @QtCore.Slot(str, str, np.ndarray)
     def update_roi(self, old_name, new_name, position):
+        """ Callback of signal sigRoiUpdated sent from logic module.
+        Adds information about a new ROI to the active roi combobox.
+        :param: str old_name
+        :param: str new_name
+        :param: float tuple[3] position: position of the roi with new_name as name
+        :return: None
+        """
         # Handle changed names and deleted/added POIs
         if old_name != new_name:
             self._mw.active_roi_ComboBox.blockSignals(True)
@@ -615,7 +724,7 @@ class RoiGUI(GUIBase):
             text_active_roi = self._mw.active_roi_ComboBox.currentText()
             # sort ROI names and repopulate ComboBoxes
             self._mw.active_roi_ComboBox.clear()
-            roi_names = natural_sort(self.roi_logic().roi_names)
+            roi_names = natural_sort(self._roi_logic.roi_names)
             self._mw.active_roi_ComboBox.addItems(roi_names)
             if text_active_roi == old_name:
                 self._mw.active_roi_ComboBox.setCurrentText(new_name)
@@ -632,7 +741,7 @@ class RoiGUI(GUIBase):
             self._remove_roi_marker(name=old_name)
         else:
             # ROI has been renamed and/or changed position
-            size = self.roi_logic.roi_width  # check if width should be changed again
+            size = self._roi_logic.roi_width  # check if width should be changed again
             self._markers[old_name].set_name(new_name)
             self._markers[new_name] = self._markers.pop(old_name)
             self._markers[new_name].setSize((size, size))
@@ -644,7 +753,11 @@ class RoiGUI(GUIBase):
 
     @QtCore.Slot(str)
     def update_active_roi(self, name):
-
+        """ Callback of signal sigActiveRoiUpdated sent from logic module.
+        Updates the active ROI with different marker color and as displayed value in the combobox.
+        :param: str name: name of the ROI that is set as active one
+        :return: None
+        """
         # Deselect current marker
         for marker in self._markers.values():
             if marker.selected:
@@ -660,7 +773,7 @@ class RoiGUI(GUIBase):
         self._mw.active_roi_ComboBox.blockSignals(False)
 
         if name:
-            active_roi_pos = self.roi_logic().get_roi_position(name)
+            active_roi_pos = self._roi_logic.get_roi_position(name)
             self._mw.roi_coords_label.setText(
                 'x={0}, y={1}, z={2}'.format(active_roi_pos[0], active_roi_pos[1], active_roi_pos[2])
             )
@@ -669,58 +782,56 @@ class RoiGUI(GUIBase):
             self._mw.roi_coords_label.setText('')
 
         if name in self._markers:
-            self._markers[name].set_width(self.roi_logic().roi_width)
+            self._markers[name].set_width(self._roi_logic.roi_width)
             self._markers[name].select()
 
-    @QtCore.Slot()
-    def roi_width_changed(self):
-        self.sigRoiWidthChanged.emit(self._mw.roi_width_doubleSpinBox.value())
-        return
-
-    @QtCore.Slot()
-    def roi_list_name_changed(self):
-        """ Set the name of the current roi list."""
-        self.sigRoiListNameChanged.emit(self._mw.roi_list_name_LineEdit.text())
-
-    # To do: add a Validator on the save_path_LineEdit.
-    @QtCore.Slot()
-    def save_roi_list(self):
-        """ Save ROI list to file, using filepath and filename given on the GUI
+    @QtCore.Slot(dict)
+    def update_roi_list(self, roi_dict):
+        """ Callback of signal sigRoiListUpdated sent from logic.
+        :param: dict roi_dict
+        :return None
         """
-        roi_list_name = self._mw.roi_list_name_LineEdit.text()
-        path = self._mw.save_path_LineEdit.text()
-        self.roi_logic().rename_roi_list(roi_list_name)
-        self.roi_logic().save_roi_list(path, roi_list_name)
+        if not isinstance(roi_dict, dict):
+            self.log.error('ROI parameters to update must be given in a single dictionary.')
+            return
+
+        if 'name' in roi_dict:
+            self._update_roi_list_name(name=roi_dict['name'])
+        # put this in comments because it will reset the image with a None type object and lead to an error in the distance measurement
+        # to be reactivated when the possibility of a camera image overlay is established
+        # if 'cam_image' in roi_dict and 'cam_image_extent' in roi_dict:
+        #     self._update_cam_image(cam_image=roi_dict['cam_image'], cam_image_extent=roi_dict['cam_image_extent'])
+        if 'rois' in roi_dict:
+            self._update_rois(roi_dict=roi_dict['rois'])
+
+    @QtCore.Slot(np.ndarray)
+    def update_stage_position(self, position):
+        """ Callback of signals sigStageMoved and sigUpdateStagePosition sent from logic module.
+        Updates the textlabel with the current stage position and moves the stage marker.
+        :param: np.ndarray[3] position: new position
+        :return: None
+        """
+        self._mw.stage_position_Label.setText('x={0}, y={1}, z={2}'.format(position[0], position[1], position[2]))
+        self.stagemarker.set_position(position)
 
     @QtCore.Slot()
-    def load_roi_list(self):
-        data_directory = self._mw.save_path_LineEdit.text()  # we will use this as default location to look for files
-        this_file = QtWidgets.QFileDialog.getOpenFileName(self._mw,
-                                                          'Open ROI list',
-                                                          data_directory,
-                                                          'json files (*.json)')[0]
-        if this_file:
-            self.roi_logic().load_roi_list(complete_path=this_file)
+    def reset_tracking_mode_button(self):
+        """ Callback of sigTrackingModeStopped.
+        Resets tracking mode toolbutton state if tracking programmmatically stopped.
+        """
+        self._mw.tracking_mode_Action.setText('Tracking mode')
+        self._mw.tracking_mode_Action.setToolTip('Start tracking mode')
+        self._mw.tracking_mode_Action.setChecked(False)
 
-    @QtCore.Slot()
-    def delete_all_roi_clicked(self):
-        result = QtWidgets.QMessageBox.question(self._mw, 'Qudi: Delete all ROIs?',
-                                                'Are you sure to delete all ROIs?',
-                                                QtWidgets.QMessageBox.Yes,
-                                                QtWidgets.QMessageBox.No)
-        if result == QtWidgets.QMessageBox.Yes:
-            self.roi_logic().delete_all_roi()
-            
-    @QtCore.Slot()
-    def add_interpolation_clicked(self):
-        roi_distance = self._mw.roi_width_doubleSpinBox.value()
-        self.sigAddInterpolation.emit(roi_distance)
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def _update_cam_image(self, cam_image, cam_image_extent):
         """
-
-        @param cam_image:
-        @param cam_image_extent:
+        Currently not used
+        :param cam_image:
+        :param cam_image_extent:
         """
         if cam_image is None or cam_image_extent is None:
             self._mw.roi_map_ViewWidget.removeItem(self.roi_image)
@@ -733,19 +844,29 @@ class RoiGUI(GUIBase):
         self.roi_image.setRect(QtCore.QRectF(x_min, y_min, x_max - x_min, y_max - y_min))
 
     def _update_roi_list_name(self, name):
+        """ Update the text in the lineedit in the mainwindow with the current name of the ROI list.
+        :param: str name: new name that will be displayed in the lineedit
+        :return: None
+        """
         self._mw.roi_list_name_LineEdit.blockSignals(True)
         self._mw.roi_list_name_LineEdit.setText(name)
         self._mw.roi_list_name_LineEdit.blockSignals(False)
 
     def _update_roi_width(self, width):
+        """ Update the ROI width spinbox with the new value.
+        :param: float width: new width for the ROI marker
+        :return: None
+        """
         self._mw.roi_width_doubleSpinBox.setValue(width)
 
     def _update_rois(self, roi_dict):
-        """ Populate the dropdown box for selecting a roi. """
+        """ Populate the dropdown box for selecting a ROI.
+        :param: dict roi_dict: dictionary containing the necessary information of the new ROIs that will be displayed
+                                in the dropdown box.
+        :return: None
+        """
         self._mw.active_roi_ComboBox.blockSignals(True)
-
         self._mw.active_roi_ComboBox.clear()
-
         roi_names = natural_sort(roi_dict)
         self._mw.active_roi_ComboBox.addItems(roi_names)
 
@@ -759,7 +880,7 @@ class RoiGUI(GUIBase):
         for name in names_to_delete:
             self._remove_roi_marker(name)
         # Update positions of all remaining markers
-        size = self.roi_logic().roi_width  # self.roi_logic().optimise_xy_size * np.sqrt(2)
+        size = self._roi_logic.roi_width  # self._roi_logic.optimise_xy_size * np.sqrt(2)
         for name, marker in self._markers.items():
             marker.setSize((size, size))
             marker.set_position(roi_dict[name])
@@ -768,7 +889,7 @@ class RoiGUI(GUIBase):
             self._add_roi_marker(name=name, position=roi_dict[name])
 
         # If there is no active ROI, set the combobox to nothing (-1)
-        active_roi = self.roi_logic().active_roi
+        active_roi = self._roi_logic.active_roi
         if active_roi in roi_names:
             self._mw.active_roi_ComboBox.setCurrentText(active_roi)
             self._markers[active_roi].select()
@@ -784,7 +905,11 @@ class RoiGUI(GUIBase):
         self._mw.active_roi_ComboBox.blockSignals(False)
 
     def _add_roi_marker(self, name, position):
-        """ Add a square ROI marker to the roi overview image. """
+        """ Add a square ROI marker to the roi overview image.
+        :param: str name: name of the current ROI
+        :param: float tuple (3): position of the current ROI
+        :return: None
+        """
         if name:
             if name in self._markers:
                 self.log.error('Unable to add ROI marker to image. ROI marker already present.')
@@ -792,24 +917,30 @@ class RoiGUI(GUIBase):
             marker = RoiMarker(position=position[:2],
                                view_widget=self._mw.roi_map_ViewWidget,
                                roi_name=name,
-                               width=self.roi_logic()._roi_width,
+                               width=self._roi_logic._roi_width,
                                movable=False)
             # Add to the roi overview image widget
             marker.add_to_view_widget()
             # remove the handle that can be used to resize the roi as we do not want this functionality
             marker.removeHandle(marker.getHandles()[0])
-            marker.sigRoiSelected.connect(self.roi_logic().set_active_roi, QtCore.Qt.QueuedConnection)
+            marker.sigRoiSelected.connect(self._roi_logic.set_active_roi, QtCore.Qt.QueuedConnection)
             self._markers[name] = marker
 
     def _remove_roi_marker(self, name):
-        """ Remove the ROI marker for a ROI that was deleted. """
+        """ Remove the ROI marker for a ROI that was deleted.
+        :param: str name: name of the current ROI
+        :return: None
+        """
         if name in self._markers:
             self._markers[name].delete_from_view_widget()
             self._markers[name].sigRoiSelected.disconnect()
             del self._markers[name]
 
     def _add_stage_marker(self, position=(0, 0)):
-        """ Add a square marker for the current stage position to the roi overview image """
+        """ Add a square marker for the current stage position to the roi overview image.
+        :param: float tuple: position at which the marker center will be drawn
+        :return: None
+        """
         try:
             stagemarker = StageMarker(position=position,
                                       view_widget=self._mw.roi_map_ViewWidget,
@@ -823,32 +954,9 @@ class RoiGUI(GUIBase):
         except Exception:
             self.log.warn('Unable to add stage marker to image')
 
-    @QtCore.Slot(np.ndarray)
-    def update_stage_position(self, position):
-        """ updates the textlabel with the current stage position and moves the stage marker """
-        self._mw.stage_position_Label.setText('x={0}, y={1}, z={2}'.format(position[0], position[1], position[2]))
-        self.stagemarker.set_position(position)
-
-    @QtCore.Slot()
-    def tracking_mode_clicked(self):
-        """ handles the state of the tracking mode toolbutton and emits a signal """
-        if self.roi_logic().tracking:  # tracking mode already on
-            self._mw.tracking_mode_Action.setText('Tracking mode')
-            self._mw.tracking_mode_Action.setToolTip('Start tracking mode')
-            self.sigStopTracking.emit()
-        else:  # tracking mode off
-            self._mw.tracking_mode_Action.setText('Tracking mode off')
-            self._mw.tracking_mode_Action.setToolTip('Stop tracking mode')
-            self.sigStartTracking.emit()
-
-    @QtCore.Slot()
-    def reset_tracking_mode_button(self):
-        """ Callback of sigTrackingModeStopped.
-        Resets tracking mode toolbutton state if tracking programmmatically stopped.
-        """
-        self._mw.tracking_mode_Action.setText('Tracking mode')
-        self._mw.tracking_mode_Action.setToolTip('Start tracking mode')
-        self._mw.tracking_mode_Action.setChecked(False)
+# ----------------------------------------------------------------------------------------------------------------------
+# Functions to handle user interface state
+# ----------------------------------------------------------------------------------------------------------------------
 
     @QtCore.Slot()
     def disable_tracking_action(self):
@@ -891,9 +999,12 @@ class RoiGUI(GUIBase):
 
         self._mw.active_roi_ComboBox.setDisabled(False)
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Close function: Stop all continuous actions.
+# ----------------------------------------------------------------------------------------------------------------------
+
     def close_function(self):
-        if self.roi_logic().tracking:
+        """ This method serves as a reimplementation of the close event. Continuous mode (tracking mode of stage
+        position) is stopped when the main window is closed. """
+        if self._roi_logic.tracking:
             self.sigStopTracking.emit()
-
-
-
