@@ -1,25 +1,33 @@
 # -*- coding: utf-8 -*-
 """
+Qudi-CBS
+
+An extension to Qudi.
+
+This module contains a task to perform a multicolor scan on PALM setup, iterating over a list of ROIs.
+(Take at each defined ROI a sequence of images in a stack of planes with different laserlines or intensities.)
+
+@author: F. Barho
+
 Created on Wed Mai 12 2021
+-----------------------------------------------------------------------------------
 
-@author: fbarho
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This file is an extension to Qudi software
-obtained from <https://github.com/Ulm-IQO/qudi/>
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-Multicolor z-scan task for the PALM setup iterating over a list of ROIs
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
-Config example pour copy-paste:
-    ROIMulticolorScanTask:
-        module: 'roi_multicolor_scan_task_PALM'
-        needsmodules:
-            cam: 'camera_logic'
-            daq: 'lasercontrol_logic'
-            focus: 'focus_logic'
-            roi: 'roi_logic'
-        config:
-            path_to_user_config: 'C:/Users/sCMOS-1/qudi_data/qudi_task_config_files/ROI_multicolor_scan_task_PALM.yaml'
-
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 import numpy as np
 import yaml
@@ -28,12 +36,26 @@ import os
 from time import sleep
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
+from logic.task_helper_functions import get_entry_nested_dict, save_z_positions_to_file
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
     """ This task does an acquisition of a series of images from different channels or using different intensities
-    """
+    for each of the predefined ROIs.
 
+    Config example pour copy-paste:
+
+    ROIMulticolorScanTask:
+        module: 'roi_multicolor_scan_task_PALM'
+        needsmodules:
+            camera: 'camera_logic'
+            daq: 'lasercontrol_logic'
+            filter: 'filterwheel_logic'
+            focus: 'focus_logic'
+            roi: 'roi_logic'
+        config:
+            path_to_user_config: 'C:/Users/admin/qudi_files/qudi_task_config_files/ROI_multicolor_scan_task_PALM.yml'
+    """
     # ==================================================================================================================
     # Generic Task methods
     # ==================================================================================================================
@@ -46,6 +68,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.laser_allowed = False
         self.autofocus_ok = False
         self.user_param_dict = {}
+        self.directory = None
+        self.roi_counter = None
 
     def startTask(self):
         """ """
@@ -106,7 +130,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        @return bool: True if the task should continue running, False if it should finish.
+        :return bool: True if the task should continue running, False if it should finish.
         """
         if not self.laser_allowed:
             return False  # skip runTaskStep and directly go to cleanupTask
@@ -217,7 +241,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['camera'].abort_acquisition()  # after this, temperature can be retrieved for metadata
         if self.file_format == 'fits':
             metadata = self.get_fits_metadata()
-            self.ref['camera']._add_fits_header(cur_save_path, metadata)
+            self.ref['camera'].add_fits_header(cur_save_path, metadata)
         else:  # save metadata in a txt file
             metadata = self.get_metadata()
             file_path = cur_save_path.replace('tif', 'txt', 1)
@@ -225,7 +249,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # save file with z positions (same procedure for either file format)
         # file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yml')
-        # self.save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
+        # save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
         print(z_actual_positions)
         print(z_target_positions)
 
@@ -252,8 +276,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()
-        # self.ref['daq'].close_do_task()
-        # self.ref['daq'].close_ai_task()
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
@@ -281,9 +303,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
 
     def load_user_parameters(self):
-        """ this function is called from startTask() to load the parameters given in a specified format by the user
+        """ This function is called from startTask() to load the parameters given by the user in a specific format.
 
-        specify only the path to the user defined config in the (global) config of the experimental setup
+        Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
             sample_name: 'Mysample'
@@ -297,7 +319,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             save_path: 'E:\'
             file_format: 'tif'
             imaging_sequence = [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
-            roi_list_path:
+            roi_list_path: 'path/to/roi/list.json'
         """
         try:
             with open(self.user_config_path, 'r') as stream:
@@ -337,6 +359,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines = len(self.imaging_sequence)
 
     def control_user_parameters(self):
+        """ This method checks if the laser lines that will be used are compatible with the chosen filter.
+        :return bool: lasers_allowed
+        """
         # use the filter position to create the key # simpler than using get_entry_netsted_dict method
         key = 'filter{}'.format(self.filter_pos)
         bool_laserlist = self.ref['filter'].get_filter_dict()[key][
@@ -355,7 +380,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def calculate_start_position(self, centered_focal_plane):
         """
-        @param bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True) or if the focal plane is the bottommost plane in the scan (False)
+        This method calculates the piezo position at which the z stack will start. It can either start in the
+        current plane or calculate an offset so that the current plane will be centered inside the stack.
+
+        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
+                                            or if the focal plane is the bottommost plane in the scan (False)
+
+        :return: float piezo start position
         """
         current_pos = self.ref['focus'].get_position()
 
@@ -378,6 +409,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Create the directory (based on path_stem given as user parameter),
         in which the folders for the ROIs will be created
         Example: path_stem/YYYY_MM_DD/001_Scan_samplename (default)
+
+        :param: str path_stem: base name of the path that will be created
+
+        :return: str path (see example above)
         """
         cur_date = datetime.today().strftime('%Y_%m_%d')
 
@@ -412,7 +447,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return path
 
     def get_complete_path(self, directory, roi_number):
+        """ Create the complete path name to the image data file.
 
+        :param: str directory: directory where the data shall be saved
+        :param: str roi_number: string identifier of the current ROI for which a complete path shall be created
+
+        :return: str complete_path: such as directory/ROI_001/scan_001_004_ROI.tif (experiment nb. 001, ROI nb. 004)
+        """
         path = os.path.join(directory, roi_number)
 
         if not os.path.exists(path):
@@ -433,7 +474,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
 
     def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text compatible format. """
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['Time'] = datetime.now().strftime(
             '%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ??? # then add a variable to startTask
@@ -459,7 +503,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format. """
+        """ Get a dictionary containing the metadata in a fits header compatible format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['TIME'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
         metadata['SAMPLE'] = (self.sample_name, 'sample name')
@@ -483,7 +530,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def save_metadata_file(self, metadata, path):
-        """" Save a txt file containing the metadata dictionary
+        """ Save a txt file containing the metadata dictionary.
 
         :param dict metadata: dictionary containing the metadata
         :param str path: pathname
@@ -491,28 +538,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-    def save_z_positions_to_file(self, z_target_positions, z_actual_positions, path):
-        z_data_dict = {'z_target_positions': z_target_positions, 'z_positions': z_actual_positions}
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(z_data_dict, outfile, default_flow_style=False)
-
-
-def get_entry_nested_dict(nested_dict, val, entry):
-    """ helper function that searches for 'val' as value in a nested dictionary and returns the corresponding value in the category 'entry'
-    example: search in laser_dict (nested_dict) for the label (entry) corresponding to a given wavelength (val)
-    search in filter_dict (nested_dict) for the label (entry) corresponding to a given filter position (val)
-
-    @param: dict nested dict
-    @param: val: any data type, value that is searched for in the dictionary
-    @param: str entry: key in the inner dictionary whose value needs to be accessed
-
-    note that this function is not the typical way how dictionaries should be used. due to the unambiguity in the dictionaries used here,
-    it can however be useful to try to find a key given a value.
-    Hence, in practical cases, the return value 'list' will consist of a single element only. """
-    entrylist = []
-    for outer_key in nested_dict:
-        item = [nested_dict[outer_key][entry] for inner_key, value in nested_dict[outer_key].items() if val == value]
-        if item:
-            entrylist.append(*item)
-    return entrylist

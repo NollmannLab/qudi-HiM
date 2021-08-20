@@ -1,28 +1,32 @@
 # -*- coding: utf-8 -*-
 """
+Qudi-CBS
+
+An extension to Qudi.
+
+This module contains a task to simulate a Hi-M experiment.
+
+@author: F. Barho
+
 Created on Tue May 04 2021
+-----------------------------------------------------------------------------------
 
-@author: fbarho
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This file is an extension to Qudi software
-obtained from <https://github.com/Ulm-IQO/qudi/>
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-Hi-M dummy Experiment
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
-Config example pour copy-paste:
-    HiMTask:
-        module: 'HiM_task_dummy'
-        needsmodules:
-            laser: 'lasercontrol_logic'
-            bf: 'brightfield_logic'  # needs to be connected to switch brightfield off at task start if left on
-            cam: 'camera_logic'
-            focus: 'focus_logic'
-            roi: 'roi_logic'
-            valves: 'valve_logic'
-            pos: 'positioning_logic'
-            flow: 'flowcontrol_logic'
-        config:
-            path_to_user_config: 'home/barho/qudi_files/qudi_task_config_files/hi_m_task_RAMM.yml'
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 import yaml
 from datetime import datetime
@@ -32,11 +36,28 @@ import os
 import time
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
+from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task iterates over all roi given in a file and does an acquisition of a series of planes in z direction
-    using a sequence of lightsources for each plane, for each roi.
+    """ This task simulates a complete Hi-M experiment.
+
+    Config example pour copy-paste:
+
+    HiMTask:
+        module: 'HiM_task_dummy'
+        needsmodules:
+            laser: 'lasercontrol_logic'
+            bf: 'brightfield_logic'
+            cam: 'camera_logic'
+            focus: 'focus_logic'
+            roi: 'roi_logic'
+            valves: 'valve_logic'
+            pos: 'positioning_logic'
+            flow: 'flowcontrol_logic'
+        config:
+            path_to_user_config: '/home/barho/qudi_files/qudi_task_config_files/hi_m_task_RAMM.yml'
     """
     # ===============================================================================================================
     # Generic Task methods
@@ -46,10 +67,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
-        # for logging:
-        # self.status_dict_path = '/home/barho/hi_m_log/current_status.yaml'
-        # self.log_path = '/home/barho/hi_m_log/log_for_hi_m_dummy_task.csv'
-        # self.default_info_path = '/home/barho/hi_m_log/default_info.yaml'
+        self.probe_counter = None
+        self.user_param_dict = {}
         self.logging = True
 
     def startTask(self):
@@ -57,6 +76,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.start = time.time()
 
         self.log.info('started Task')
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
@@ -66,7 +86,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['laser'].stop_laser_output()
         self.ref['bf'].led_off()
-        self.ref['laser'].disable_laser_actions()  # includes also disableing of brightfield on / off button
+        self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
 
         self.ref['valves'].disable_valve_positioning()
         self.ref['flow'].disable_flowcontrol_actions()
@@ -89,8 +109,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # log file paths -----------------------------------------------------------------------------------------------
         self.log_folder = os.path.join(self.directory, 'hi_m_log')
         os.makedirs(self.log_folder)  # recursive creation of all directories on the path
+
+        # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
         self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
+        # the status dict 'current_status.yaml' contains basic information and updates regularly
         self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
+        # the log file contains more detailed information about individual steps and is a user readable format.
+        # It is also useful after the experiment has finished.
         self.log_path = os.path.join(self.log_folder, 'log.csv')
 
         if self.logging:
@@ -108,6 +133,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format, len(self.probe_list), last_roi_number, len(hybr_list), len(photobl_list))
+        # logging prepared ---------------------------------------------------------------------------------------------
 
         # prepare the camera
         self.num_frames = self.num_z_planes * self.num_laserlines
@@ -116,10 +142,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
 
-
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        @return bool: True if the task should continue running, False if it should finish.
+        :return: bool: True if the task should continue running, False if it should finish.
         """
         # go directly to cleanupTask if position 1 is not defined
         if not self.ref['pos'].origin:
@@ -130,6 +155,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # info message
             self.probe_counter += 1
             self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter-1][1]}')
+
             if self.logging:
                 self.status_dict['cycle_no'] = self.probe_counter
                 self.status_dict['cycle_start_time'] = now
@@ -140,9 +166,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # Hybridization
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
             if self.logging:
                 self.status_dict['process'] = 'Hybridization'
@@ -209,9 +235,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
         # Hybridization finished ---------------------------------------------------------------------------------------
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
             if self.logging:
                 self.status_dict['process'] = 'Imaging'
@@ -222,21 +248,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.aborted:
                     break
 
-                # create the save path for each roi ------------------------------------------------------------------------
+                # create the save path for each roi --------------------------------------------------------------------
                 cur_save_path = self.get_complete_path(self.directory, item, self.probe_list[self.probe_counter-1][1])
 
-                # move to roi ----------------------------------------------------------------------------------------------
+                # move to roi ------------------------------------------------------------------------------------------
                 self.ref['roi'].active_roi = None
                 self.ref['roi'].set_active_roi(name=item)
                 self.ref['roi'].go_to_roi()
                 self.log.info('Moved to {}'.format(item))
-                time.sleep(1)  # replace maybe by wait for idle
+                self.ref['roi'].stage_wait_for_idle()
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
                 # autofocus ------------------------------------------------------------------------------------------------
                 # self.ref['focus'].search_focus()
-                reference_position = self.ref['focus'].get_position() + np.random.normal() # save it to go back to this plane after imaging
+                reference_position = self.ref['focus'].get_position() + np.random.normal()  # save it to go back to this plane after imaging
                 # for simulatied task only
                 self.ref['focus'].go_to_position(reference_position)
                 start_position = self.calculate_start_position(self.centered_focal_plane)
@@ -250,7 +276,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # iterate over all planes in z
                 for plane in tqdm(range(self.num_z_planes)):
-                    # print(f'plane number {plane + 1}')
 
                     # position the piezo
                     position = start_position + plane * self.z_step
@@ -264,21 +289,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 self.ref['focus'].go_to_position(reference_position)
 
-                # data handling --------------------------------------------------------------------------------------------
+                # data handling ----------------------------------------------------------------------------------------
                 image_data = np.random.normal(size=(self.num_frames, 125, 125))  # self.ref['cam'].get_acquired_data()
 
                 if self.file_format == 'fits':
                     metadata = self.get_fits_metadata()
-                    self.ref['cam']._save_to_fits(cur_save_path, image_data, metadata)
+                    self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
                 else:  # use tiff as default format
-                    self.ref['cam']._save_to_tiff(self.num_frames, cur_save_path, image_data)
+                    self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
                     metadata = self.get_metadata()
                     file_path = cur_save_path.replace('tif', 'yaml', 1)
                     self.save_metadata_file(metadata, file_path)
 
                 # save file with z positions (same procedure for either file format)
                 file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
-                self.save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
+                save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
 
                 if self.logging:  # to modify: check if data saved correctly before writing this log entry
                     add_log_entry(self.log_path, self.probe_counter, 2, 'Image data saved', 'info')
@@ -291,9 +316,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
         # Imaging (for all ROIs) finished ------------------------------------------------------------------------------
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
             if self.logging:
                 self.status_dict['process'] = 'Photobleaching'
@@ -326,6 +351,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     self.log.info(f'Injection of {product} ... ')
                     time.sleep(1)
+
                     # add here simulated data for pressure value and total volume
 
                 else:  # an incubation step
@@ -382,14 +408,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             try:
                 self.status_dict = {}
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            except:  # in case cleanup task was called before self.status_dict_path is defined
+            except Exception:  # in case cleanup task was called before self.status_dict_path is defined
                 pass
 
         if self.aborted:  # some extra actions to reset a proper state in case abort was called
             if self.logging:
                 try:
                     add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
-                except:
+                except Exception:
                     pass
 
             # in real experiment: stop the pressure regulation  and set pressure to 0
@@ -422,15 +448,32 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.log.info('cleanupTask finished')
 
-    # ===============================================================================================================
+    # ==================================================================================================================
     # Helper functions
-    # ===============================================================================================================
+    # ==================================================================================================================
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # user parameters
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def load_user_parameters(self):
+        """ This function is called from startTask() to load the parameters given by the user in a specific format.
+
+        Specify the path to the user defined config for this task in the (global) config of the experimental setup.
+
+        user must specify the following dictionary (here with example entries):
+            sample_name: 'Mysample'
+            exposure: 0.05  # in s
+            num_z_planes: 50
+            z_step: 0.25  # in um
+            centered_focal_plane: False
+            imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
+            save_path: 'E:/'
+            file_format: 'tif'
+            roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
+            injections_path: 'pathstem/qudi_files/qudi_injection_parameters/injections_2021_01_01.yml'
+            dapi_path: 'E:/imagedata/2021_01_01/001_HiM_MySample_dapi'
+        """
         try:
             with open(self.user_config_path, 'r') as stream:
                 self.user_param_dict = yaml.safe_load(stream)
@@ -468,18 +511,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('user parameters loaded and processed')
 
     def load_injection_parameters(self):
-        """ """
+        """ Load relevant information from the document containing the injection parameters in a specific format.
+        This document is configured using the Qudi injections module to obtain the correct format.
+        It is a dictionary with keys 'buffer', 'probes', 'hybridization list' and 'photobleaching list'.
+        'buffer' and 'probes' contain themselves subdictionaries as value.
+        """
         try:
             with open(self.injections_path, 'r') as stream:
                 documents = yaml.safe_load(stream)  # yaml.full_load when yaml package updated
-                buffer_dict = documents['buffer']  #  example {3: 'Buffer3', 7: 'Probe', 8: 'Buffer8'}
+                buffer_dict = documents['buffer']  # example {3: 'Buffer3', 7: 'Probe', 8: 'Buffer8'}
                 probe_dict = documents['probes']
                 self.hybridization_list = documents['hybridization list']
                 self.photobleaching_list = documents['photobleaching list']
 
             # invert the buffer dict to address the valve by the product name as key
             self.buffer_dict = dict([(value, key) for key, value in buffer_dict.items()])
-            # create a list out of probe_dict and order by ascending position (for example: probes in pos 2, 5, 6, 9, 10 is ok but not 10, 2, 5, 6, 9)
+            # create a list out of probe_dict and order by ascending position
+            # (for example: probes in pos 2, 5, 6, 9, 10 is ok but not 10, 2, 5, 6, 9)
             self.probe_list = sorted(probe_dict.items())
 
         except Exception as e:
@@ -487,7 +535,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def calculate_start_position(self, centered_focal_plane):
         """
-        @param bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True) or if the focal plane is the bottommost plane in the scan (False)
+        This method calculates the piezo position at which the z stack will start. It can either start in the
+        current plane or calculate an offset so that the current plane will be centered inside the stack.
+
+        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
+                                            or if the focal plane is the bottommost plane in the scan (False)
+
+        :return: float piezo start position
         """
         current_pos = self.ref['focus'].get_position()
 
@@ -502,13 +556,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         else:
             return current_pos  # the scan starts at the current position and moves up
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # file path handling
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
+
     def create_directory(self, path_stem):
         """ Create the directory (based on path_stem given as user parameter),
         in which the folders for the ROI will be created
         Example: path_stem/YYYY_MM_DD/001_HiM_samplename
+
+        :param: str pathstem
+        :return: str path to directory
         """
         cur_date = datetime.today().strftime('%Y_%m_%d')
 
@@ -542,6 +600,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return path
 
     def get_complete_path(self, directory, roi_number, probe_number):
+        """ Create the complete path for a file containing image data,
+        based on the directory for the experiment that was already created,
+        the ROI number and the probe number,
+        such as directory/ROI_007/RT2/scan_num_RT2_007_ROI.tif
+
+        :param: str directory
+        :param: str roi_number: identifier of the current ROI
+        :param: str probe_number: identifier of the current RT
+
+        :return: str complete path (as in the example above)
+        """
         path = os.path.join(directory, roi_number, probe_number)
 
         if not os.path.exists(path):
@@ -557,11 +626,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         complete_path = os.path.join(path, file_name)
         return complete_path
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # metadata
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text compatible format. """
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['Sample name'] = self.sample_name
         metadata['Exposure time (s)'] = self.exposure
@@ -575,7 +647,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format. """
+        """ Get a dictionary containing the metadata in a fits header compatible format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['SAMPLE'] = (self.sample_name, 'sample name')
         metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
@@ -591,7 +666,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def save_metadata_file(self, metadata, path):
-        """" Save a txt file containing the metadata dictionary
+        """ Save a txt file containing the metadata dictionary.
 
         :param dict metadata: dictionary containing the metadata
         :param str path: pathname
@@ -599,60 +674,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-    def save_z_positions_to_file(self, z_target_positions, z_actual_positions, path):
-        z_data_dict = {'z_target_positions': z_target_positions, 'z_positions': z_actual_positions}
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(z_data_dict, outfile, default_flow_style=False)
-
-
-# ------------------------------------------------------------------------------------------
-# helper functions for bokeh app display  (put this in a separate file later and import)
-# ------------------------------------------------------------------------------------------
-
-def write_status_dict_to_file(path, status_dict):
-    """ Write the current status dictionary to a yaml file.
-    :param: dict status_dict: dictionary containing a summary describing the current state of the experiment.
-    """
-    with open(path, 'w') as outfile:
-        yaml.safe_dump(status_dict, outfile, default_flow_style=False)
-
-def add_log_entry(path, cycle, process, event, level='info'):
-    """ Append a log entry to the log.csv file.
-    :param: str path: complete path to the log file
-    :param: int cycle: number of the current cycle, or 0 if not in a cycle
-    :param int process: number of the process, encoded using Hybridization: 1, Imaging: 2, Photobleaching: 3
-    :param str event: message describing the logged event
-    :param: str level: 'info', 'warning', 'error'
-    """
-    timestamp = datetime.now()
-    entry = {'timestamp': [timestamp], 'cycle_no': [cycle], 'process': [process], 'event': [event], 'level': [level]}
-    df_line = pd.DataFrame(entry, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-    with open(path, 'a') as file:
-        df_line.to_csv(file, index=False, header=False)
-
-def update_default_info(path, user_param_dict, image_path, fileformat, num_cycles, num_roi, num_inj_hybr, num_inj_photobl):
-    """ Create a dictionary with relevant entries for the default info file and save it under the specified path.
-
-    :param: str path: complete path to the default_info file
-    :param: dict: user_param_dict
-    :param: str image_path: name of the path where the image data is saved
-    :param: str fileformat: fileformat for the image data
-    :param: int num_cycles: number of cycles in the Hi-M experiment
-    :param: int last_num_roi: highest ROI number defined in the list for the Hi-M experiment
-    :param: int num_inj_hybr: number of injection steps during the hybridization sequence (excluding incubation steps)
-    :param: int num_inj_photobl: number of injection steps during the photobleaching sequence (excluding incubation)
-
-    :return: None
-    """
-    # if not os.path.exists(path):
-    #     os.makedirs(path)  # recursive creation of all directories on the path
-
-    info_dict = {'image_path': image_path, 'fileformat': fileformat, 'num_cycles': num_cycles, 'last_num_roi': num_roi, 'num_injections_hybr': num_inj_hybr, 'num_injections_photobl': num_inj_photobl}
-
-    upper_dict = {'user_parameters': user_param_dict, 'exp_tracker_app_dict': info_dict}
-
-    with open(path, 'w') as outfile:
-        yaml.safe_dump(upper_dict, outfile, default_flow_style=False)
-
-# use for integration with bokeh app
