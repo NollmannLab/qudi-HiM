@@ -170,6 +170,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
+
             if self.logging:
                 self.status_dict['process'] = 'Hybridization'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -239,10 +240,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
+
             if self.logging:
                 self.status_dict['process'] = 'Imaging'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
+
             # iterate over all ROIs
             for item in self.roi_names:
                 if self.aborted:
@@ -261,7 +264,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
                 # autofocus ------------------------------------------------------------------------------------------------
-                # self.ref['focus'].search_focus()
+                # self.ref['focus'].start_search_focus()
                 reference_position = self.ref['focus'].get_position() + np.random.normal()  # save it to go back to this plane after imaging
                 # for simulatied task only
                 self.ref['focus'].go_to_position(reference_position)
@@ -271,6 +274,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # self.ref['cam'].stop_acquisition()   # for safety
                 # self.ref['cam'].start_acquisition()
 
+                # initialize arrays to save the target and current z positions
                 z_target_positions = []
                 z_actual_positions = []
 
@@ -320,6 +324,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
+
             if self.logging:
                 self.status_dict['process'] = 'Photobleaching'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -404,6 +409,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def cleanupTask(self):
         """ """
         self.log.info('cleanupTask called')
+
         if self.logging:
             try:
                 self.status_dict = {}
@@ -443,6 +449,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['valves'].enable_valve_positioning()
         self.ref['flow'].enable_flowcontrol_actions()
         self.ref['pos'].enable_positioning_actions()
+
         total = time.time() - self.start
         print(f'total time with logging = {self.logging}: {total} s')
 
@@ -583,7 +590,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         dir_list = [folder for folder in os.listdir(path_stem_with_date) if os.path.isdir(os.path.join(path_stem_with_date, folder))]
         number_dirs = len(dir_list)
 
-        prefix=str(number_dirs+1).zfill(3)
+        prefix = str(number_dirs+1).zfill(3)
         # make prefix accessible to include it in the filename generated in the method get_complete_path
         self.prefix = prefix
 
@@ -629,6 +636,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
     # ------------------------------------------------------------------------------------------------------------------
+
     def get_metadata(self):
         """ Get a dictionary containing the metadata in a plain text easy readable format.
 
@@ -643,6 +651,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
+        # to check where the problem comes from :
+        # metadata['x position'] = self.ref['roi'].stage_position[0]
+        # metadata['y position'] = self.ref['roi'].stage_position[1]
         # pixel size ???
         return metadata
 
