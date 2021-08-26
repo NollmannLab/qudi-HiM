@@ -36,7 +36,7 @@ import os
 import time
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
@@ -201,7 +201,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.log.info(f'Injection of {product} ... ')
                     time.sleep(1)
 
-                    # add here simulated data for pressure value and total volume
+                    # simulate pressure and volume data and save these data --------------------------------------------
+                    pressure = [0]
+                    volume = [0]
+
+                    for i in range(100):
+                        new_pressure = np.random.normal()
+                        pressure.append(new_pressure)
+                        new_volume = abs(np.random.normal()) + volume[i]
+                        volume.append(new_volume)
+
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
+                    save_injection_data_to_csv(pressure, volume, complete_path)
+                    # simulate pressure and volume data and save these data --------------------------------------------
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
@@ -358,6 +370,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     time.sleep(1)
 
                     # add here simulated data for pressure value and total volume
+                    pressure = [0]
+                    volume = [0]
+
+                    for i in range(100):
+                        new_pressure = np.random.normal()
+                        pressure.append(new_pressure)
+                        new_volume = abs(np.random.normal()) + volume[i]
+                        volume.append(new_volume)
+
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
+                    save_injection_data_to_csv(pressure, volume, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
