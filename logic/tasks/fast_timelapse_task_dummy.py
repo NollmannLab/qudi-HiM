@@ -4,11 +4,11 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains the fast timelapse experiment for the RAMM setup.
+This module contains a simulation of a fast timelapse experiment.
 
 @author: F. Barho
 
-Created on Thu June 17 2021
+Created on Fri Aug 20 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -45,16 +45,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     Config example pour copy-paste:
 
     FastTimelapseTask:
-        module: 'fast_timelapse_task_RAMM'
+        module: 'fast_timelapse_task_dummy'
         needsmodules:
             laser: 'lasercontrol_logic'
             bf: 'brightfield_logic'
             cam: 'camera_logic'
-            daq: 'nidaq_logic'
             focus: 'focus_logic'
             roi: 'roi_logic'
         config:
-            path_to_user_config: 'C:/Users/sCMOS-1/qudi_files/qudi_task_config_files/fast_timelapse_task_RAMM.yml'
+            path_to_user_config: '/home/barho/qudi_files/qudi_task_config_files/fast_timelapse_task_RAMM.yml'
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -93,14 +92,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
-
-        # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
-        self.ref['laser'].start_task_session(bitfile)
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
-
         # prepare the camera
         self.num_frames = len(self.roi_names) * self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
@@ -121,8 +112,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
-        self.ref['cam'].start_acquisition()
+        # self.ref['cam'].stop_acquisition()  # for safety
+        # self.ref['cam'].start_acquisition()
 
         # print(f'time after preparing camera: {time.time()-start_time}')
 
@@ -130,13 +121,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
         roi_start_times = []
+
         for item in self.roi_names:
             # measure the start time for the ROI
             roi_start_time = time.time()
             roi_start_times.append(roi_start_time)
 
             # autofocus
-            self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+            # self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
 
             # go to roi
             self.ref['roi'].set_active_roi(name=item)
@@ -144,14 +136,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['roi'].stage_wait_for_idle()
 
             # ensure that focus is stable here
-            busy = self.ref['focus'].autofocus_enabled  # autofocus_enabled is True when autofocus is started and once it is stable is set to false
-            counter = 0
-            while busy:
-                counter += 1
-                time.sleep(0.1)
-                busy = self.ref['focus'].autofocus_enabled
-                if counter > 50:  # maybe increase the counter ?
-                    break
+            # busy = self.ref['focus'].autofocus_enabled  # autofocus_enabled is True when autofocus is started and once it is stable is set to false
+            # counter = 0
+            # while busy:
+            #     counter += 1
+            #     time.sleep(0.1)
+            #     busy = self.ref['focus'].autofocus_enabled
+            #     if counter > 50:  # maybe increase the counter ?
+            #         break
+            print('Running autofocus...')
+            # time.sleep(0.1)  # maybe replace by a random time
 
             start_position = self.calculate_start_position(self.centered_focal_plane)
 
@@ -160,9 +154,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
             # ----------------------------------------------------------------------------------------------------------
-            # prepare the daq: set the digital output to 0 before starting the task
-            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
             for plane in range(self.num_z_planes):
 
                 # position the piezo
@@ -170,23 +161,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['focus'].go_to_position(position)
                 time.sleep(0.03)
 
-                # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([1], dtype=np.uint8))
-                time.sleep(0.005)
-                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
-                # wait for signal from FPGA to DAQ ('acquisition ready')
-                fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-                t0 = time.time()
-
-                while not fpga_ready:
-                    time.sleep(0.001)
-                    fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
-                    t1 = time.time() - t0
-                    if t1 > 1:  # for safety: timeout if no signal received within 1 s
-                        self.log.warning('Timeout occurred')
-                        break
+                # removed here the part concerned with handling synchronization daq fpga
 
             self.ref['focus'].go_to_position(start_position)
             # print(f'time after imaging {item}: {time.time() - start_time}')
@@ -198,7 +173,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # data saving
         # --------------------------------------------------------------------------------------------------------------
-        image_data = self.ref['cam'].get_acquired_data()
+        image_data = np.random.normal(size=(self.num_frames, 125, 125))  # self.ref['cam'].get_acquired_data()
+        # for more realistic tests, use size=(self.num_frames, 2048, 2048)
 
         # np.save(cur_save_path, image_data)
 
@@ -237,11 +213,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
 
-        # close the fpga session
-        self.ref['laser'].end_task_session()
-        self.ref['laser'].restart_default_session()
-        self.log.info('restarted default session')
-
         # enable gui actions
         # roi gui
         self.ref['roi'].enable_tracking_mode()
@@ -277,7 +248,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             file_format: 'tif'
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
-
         """
         try:
             with open(self.user_config_path, 'r') as stream:
@@ -292,7 +262,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.num_iterations = self.user_param_dict['num_iterations']
-                self.time_step = self.user_param_dict['time_step']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
 
         except Exception as e:  # add the type of exception
@@ -329,7 +298,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: float piezo start position
         """
-        current_pos = self.ref['focus'].get_position()  # for tests until we have the autofocus #self.ref['piezo'].get_position()  # lets assume that we are at focus (user has set focus or run autofocus)
+        current_pos = self.ref['focus'].get_position()
 
         if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
             # even number of planes:

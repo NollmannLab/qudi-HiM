@@ -29,3 +29,8 @@ def save_z_positions_to_file(z_target_positions, z_actual_positions, path):
     z_data_dict = {'z_target_positions': z_target_positions, 'z_positions': z_actual_positions}
     with open(path, 'w') as outfile:
         yaml.safe_dump(z_data_dict, outfile, default_flow_style=False)
+
+def save_roi_start_times_to_file(roi_start_times, path):
+    data_dict = {'roi_start_times': roi_start_times}
+    with open(path, 'w') as outfile:
+        yaml.safe_dump(data_dict, outfile, default_flow_style=False)
