@@ -4,12 +4,14 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains the Hi-M Experiment for the Airyscan experimental setup using epifluorescence configuration.
-(For confocal configuration, use confocal_HiM_task_Airyscan.)
+This module contains a mock Hi-M Experiment for the Airyscan setup, performing only the actions
+that are not handled by ZEN (displacement of the stage, fluidics).
+This task can be used to test the stability of fluidics sequences, and simplify testing by decoupling the part
+handled by the python software from ZEN.
+Image data acquisition is implemented as mock-up (random data).
 
 @author: F. Barho
 
-Created on Thu Aug 26 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -34,24 +36,23 @@ import numpy as np
 import pandas as pd
 import os
 import time
+from datetime import datetime
 from logic.generic_task import InterruptableTask
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task performs a Hi-M experiment on the Airyscan setup in epifluorescence configuration using the
-     lumencor celesta lightsource.
+    """ This task simulates the ROI displacement part and the fluidics part of a Hi-M experiment on the Airyscan setup.
 
     Config example pour copy-paste:
-    HiMTask:
-        module: 'HiM_task_Airyscan'
+    MockHiMTask:
+        module: 'mock_HiM_task_Airyscan'
         needsmodules:
+            cam: 'camera_logic'
             roi: 'roi_logic'
             valves: 'valve_logic'
             pos: 'positioning_logic'
             flow: 'flowcontrol_logic'
-            daq: 'daq_logic'
-            laser: 'lasercontrol_logic'
         config:
             path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml'
     """
@@ -65,12 +66,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_config_path = self.config['path_to_user_config']
         self.probe_counter = None
         self.user_param_dict = {}
-        self.lightsource_dict = {'405 nm': 'AO2', '477 nm': 'AO3', '546 nm': 'AO5', '640 nm': 'AO6', '750 nm': 'AO7'}
         self.logging = True
+        # # for logging:
+        # self.status_dict_path = 'Z:/DATA/hi_m_log_Airyscan/current_status.yaml'    # maybe read from config
+        # self.log_path = 'Z:/DATA/hi_m_log_Airyscan/log_hi_m.csv'   # maybe read from config
+        # self.default_info_path = 'Z:/DATA/hi_m_log_Airyscan/default_info.yaml'  # maybe read from config
+        # self.logging = True
 
     def startTask(self):
         """ """
         self.start = time.time()
+
+        self.log.info('started Task')
 
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
@@ -80,18 +87,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
 
-        self.zen_ready = self.wait_for_zen_ready()
-
-        if not self.zen_ready:
-            self.log.warning('ZEN start trigger not received. Experiment can not be started.')
-            return
-
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
             self.log.warning('No position 1 defined for injections. Experiment can not be started. Please define position 1!')
             return
-
-        self.log.info('started Task')
 
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
@@ -139,8 +138,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-        # go directly to cleanupTask if position 1 is not defined or ZEN ready trigger not received
-        if (not self.ref['pos'].origin) or (not self.zen_ready):
+        # go directly to cleanupTask if position 1 is not defined
+        if not self.ref['pos'].origin:
             return False
 
         if not self.aborted:
@@ -239,21 +238,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
-
             if self.logging:
                 self.status_dict['process'] = 'Imaging'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # prepare lightsource
-            self.ref['laser'].lumencor_wakeup()
-            # lumencor laser off  to add here
-            self.ref['laser'].lumencor_set_ttl(True)
-            # update intensity dictionary to add here
-
             for item in self.roi_names:
                 if self.aborted:
                     break
+
+                # create the save path for each roi --------------------------------------------------------------------
+                cur_save_path = self.get_complete_path(self.directory, item, self.probe_list[self.probe_counter - 1][1])
 
                 # move to roi ------------------------------------------------------------------------------------------
                 self.ref['roi'].active_roi = None
@@ -265,36 +260,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
-                time.sleep(5)  # waiting time to make sure ZEN is ready
-
                 # imaging sequence -------------------------------------------------------------------------------------
                 print(f'{item}: performing z stack..')
+                time.sleep(1)
+                # add here whatever is needed for imaging
+                image_data = np.random.normal(size=(10, 125, 125))
 
-                # start the acquisition of ZEN by sending a trigger to the triggerbox ----------------------------------
-                self.ref['daq'].write_to_do_channel('DO0', 1, [1])  # channel, num_samp, value
-                time.sleep(0.1)  # trigger lasts 100 ms
-                self.ref['daq'].write_to_do_channel('DO0', 1, [0])
-
-                # synchronization between hamamatsu cam and lightsource ------------------------------------------------
-                # iterate over the nb of planes x nb of laserlines
-                for i in range(self.num_z_planes):
-                    for j in range(self.num_laserlines):
-                        # wait until trigger sent by camera is detected on DI2
-                        ready = self.ref['daq'].read_di_channel('DI2', 1)  # return value = 1, can be used as bool
-                        # if noisy signal this condition is too instable.. to be modified during tests
-                        while not ready:
-                            time.sleep(0.001)  # read every ms
-                            ready = self.ref['daq'].read_di_channel('DI2', 1)
-                            # add a break condition ?
-
-                        # when trigger in has been detected, send trigger to the output which controls the laserline
-                        laserline = self.imaging_sequence[j][0]
-                        channel = self.lightsource_dict[laserline]
-
-                        self.ref['daq'].write_to_ao_channel(channel, 0)
-                        time.sleep(self.exposure)
-                        self.ref['daq'].write_to_ao_channel(channel, 5)
-                # end of imaging sequence ------------------------------------------------------------------------------
+                # data handling ----------------------------------------------------------------------------------------
+                if self.file_format == 'fits':
+                    metadata = {}
+                    self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
+                else:  # use tiff as default format
+                    self.ref['cam'].save_to_tiff(10, cur_save_path, image_data)
 
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -447,20 +424,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
-            exposure: 0.05  # in s
-            num_z_planes: 50
-            imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
+            sample_name: 'Mysample'
+            save_path: 'E:/'
+            file_format: 'tif'
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             injections_path: 'pathstem/qudi_files/qudi_injection_parameters/injections_2021_01_01.yml'
-            dapi_path: 'E:/imagedata/2021_01_01/001_HiM_MySample_dapi'
         """
         try:
             with open(self.user_config_path, 'r') as stream:
                 self.user_param_dict = yaml.safe_load(stream)
 
-                self.exposure = self.user_param_dict['exposure']
-                self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.imaging_sequence = self.user_param_dict['imaging_sequence']
+                self.sample_name = self.user_param_dict['sample_name']
+                self.save_path = self.user_param_dict['save_path']
+                self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
 
@@ -474,8 +450,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # injections ---------------------------------------------------------------------------------------------------
         self.load_injection_parameters()
-
-        self.num_laserlines = len(self.imaging_sequence)
 
     def load_injection_parameters(self):
         """ Load relevant information from the document containing the injection parameters in a specific format.
@@ -501,32 +475,70 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
 
     # ------------------------------------------------------------------------------------------------------------------
-    # communication with ZEN
+    # file path handling
     # ------------------------------------------------------------------------------------------------------------------
+    def create_directory(self, path_stem):
+        """ Create the directory (based on path_stem given as user parameter),
+        in which the folders for the ROI will be created
+        Example: path_stem/YYYY_MM_DD/001_HiM_samplename
 
-    def wait_for_zen_ready(self):
-        """ This method contains a loop to wait until ZEN sends the start trigger.
-
-        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        :param: str pathstem
+        :return: str path to directory
         """
-        ready = False
-        while not ready:
-            time.sleep(0.1)  # check every 100 ms   # how long is the trigger send by ZEN ?
-            di_value = self.ref['daq'].read_di_channel('DI2', 1)  # to be implemented in mccdaq
-            if di_value > 2.5:  # positive logic for this channel ?
-                ready = True
-            # add here a counter to break out of the loop and return false
-        return ready
+        cur_date = datetime.today().strftime('%Y_%m_%d')
 
-# to do:
-# lumencor celesta module needs to be adapted to fit the lasercontrol interface.
-# maybe it is not necessary to implement everything, but some functions should be made available from the lasercontrol logic
+        path_stem_with_date = os.path.join(path_stem, cur_date)
 
-# break conditions for while loops waiting for a trigger
+        # check if folder path_stem_with_date exists, if not: create it
+        if not os.path.exists(path_stem_with_date):
+            try:
+                os.makedirs(path_stem_with_date)  # recursive creation of all directories on the path
+            except Exception as e:
+                self.log.error('Error {0}'.format(e))
 
-# implement di do methods for mcc daq so that they can be called from the logic wherein they are planned
+        # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
+        dir_list = [folder for folder in os.listdir(path_stem_with_date) if os.path.isdir(os.path.join(path_stem_with_date, folder))]
+        number_dirs = len(dir_list)
 
-# when everything is tested: copy to a file confocal_HiM_task_Airyscan
-# only slight modifications are needed (no lumencor for example) but most of this code can be used as well
-# the experiment configurator should then be extended for the confocal_HiM_task_Airyscan (where less parameters are needed)
+        prefix = str(number_dirs+1).zfill(3)
+        # make prefix accessible to include it in the filename generated in the method get_complete_path
+        self.prefix = prefix
 
+        foldername = f'{prefix}_HiM_{self.sample_name}'
+
+        path = os.path.join(path_stem_with_date, foldername)
+
+        # create the path  # no need to check if it already exists due to incremental prefix
+        try:
+            os.makedirs(path)  # recursive creation of all directories on the path
+        except Exception as e:
+            self.log.error('Error {0}'.format(e))
+
+        return path
+
+    def get_complete_path(self, directory, roi_number, probe_number):
+        """ Create the complete path for a file containing image data,
+        based on the directory for the experiment that was already created,
+        the ROI number and the probe number,
+        such as directory/ROI_007/RT2/scan_num_RT2_007_ROI.tif
+
+        :param: str directory
+        :param: str roi_number: identifier of the current ROI
+        :param: str probe_number: identifier of the current RT
+
+        :return: str complete path (as in the example above)
+        """
+        path = os.path.join(directory, roi_number, probe_number)
+
+        if not os.path.exists(path):
+            try:
+                os.makedirs(path)  # recursive creation of all directories on the path
+            except Exception as e:
+                self.log.error('Error {0}'.format(e))
+
+        roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
+
+        file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}.{self.file_format}'
+
+        complete_path = os.path.join(path, file_name)
+        return complete_path
