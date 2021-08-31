@@ -31,7 +31,6 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 import urllib.request
 import numpy as np
 from core.module import Base
-# from interface.valvepositioner_interface import ValvePositionerInterface
 from core.configoption import ConfigOption
 
 
@@ -89,14 +88,14 @@ class LumencorCelesta(Base):
         self.zero_all()
         self.set_ttl(False)
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Getter and setter functions
-# ----------------------------------------------------------------------------------------------------------------------
-
     def wakeup(self):
         """ Wake up the celesta source when it is in standby mode
         """
         self.lumencor_httpcommand(self._ip, 'WAKEUP')
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Getter and setter functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def get_laserline_intensity(self):
         """ Return the intensity of all laser lines
@@ -144,7 +143,7 @@ class LumencorCelesta(Base):
         for n in range(len(wavelength)):
             channel_wavelength = wavelength[n]
             channel_intensity = intensity[n]
-            if self.laser_check[channel_wavelength] == True:
+            if self.laser_check[channel_wavelength]:
                 line = self.laser_lines[channel_wavelength]
                 laser_lines_intensity[line] = channel_intensity
 
@@ -162,7 +161,7 @@ class LumencorCelesta(Base):
         for n in range(len(wavelength)):
             channel_wavelength = wavelength[n]
             channel_state = state[n]
-            if self.laser_check[channel_wavelength] == True:
+            if self.laser_check[channel_wavelength]:
                 line = self.laser_lines[channel_wavelength]
                 laser_lines_state[line] = channel_state
 
