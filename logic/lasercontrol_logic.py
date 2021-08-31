@@ -2,7 +2,8 @@
 """
 Qudi-CBS
 
-A module to control the lasers via a DAQ (analog output and digital output line for triggering) or via an FPGA.
+A module to control the lasers via a DAQ (analog output and digital output line for triggering), via an FPGA
+or using the Lumencor celesta.
 
 The DAQ / FPGA is used to control the OTF to select the laser wavelength.
 
@@ -48,15 +49,15 @@ class LaserControlLogic(GenericLogic):
     Example config for copy-paste:
         lasercontrol_logic:
         module.Class: 'lasercontrol_logic.LaserControlLogic'
-        controllertype: 'daq'  # 'fpga'
+        controllertype: 'daq'  # 'fpga', 'lumencor'
         connect:
             controller: 'dummy_daq'
     """
     # declare connectors
-    controller = Connector(interface='LasercontrolInterface')  # can be a daq or an fpga
+    controller = Connector(interface='LasercontrolInterface')  # can be a daq or an fpga or lumencor celesta
 
     # config options
-    controllertype = ConfigOption('controllertype', missing='error')  # allows to select between DAQ or FPGA
+    controllertype = ConfigOption('controllertype', missing='error')  # allows to select between DAQ, FPGA or lumencor
 
     # signals
     sigIntensityChanged = QtCore.Signal()  # if intensity dict is changed programmatically, this updates the GUI
@@ -239,38 +240,6 @@ class LaserControlLogic(GenericLogic):
         else:
             pass
 
-# to be removed
-#     def set_up_do_channel(self):
-#         """ create a digital output channel
-#         """
-#         if self.controllertype == 'daq':
-#             self._controller.set_up_do_channel()
-#         else:
-#             pass
-#
-#     def close_do_task(self):
-#         """ close the digital output channel and task if there is one """
-#         if self.controllertype == 'daq':
-#             self._controller.close_do_task()
-#         else:
-#             pass
-#
-#     def set_up_ai_channel(self):
-#         """ create a task and its virtual channel for the analog input
-#         """
-#         if self.controllertype == 'daq':
-#             self._controller.set_up_ai_channel()
-#         else:
-#             pass
-#
-#     def close_ai_task(self):
-#         """ close the analog input task if there is one
-#         """
-#         if self.controllertype == 'daq':
-#             self._controller.close_ai_task()
-#         else:
-#             pass
-
 # FPGA specific methods ------------------------------------------------------------------------------------------------
         
     def close_default_session(self):
@@ -342,6 +311,31 @@ class LaserControlLogic(GenericLogic):
         """
         if self.controllertype == 'fpga':
             self._controller.run_multicolor_imaging_task_session(z_planes, wavelength, values, num_laserlines, exposure)
+        else:
+            pass
+
+# Lumencor celesta specific methods ------------------------------------------------------------------------------------
+
+    def lumencor_wakeup(self):
+        """ Wake up the lumencor celesta source when it is in standby mode. This is needed in tasks where long
+        pauses between imaging sequences might occur.
+
+        :return: None
+        """
+        if self.controllertype == 'lumencor':
+            self._controller.wakeup()
+        else:
+            pass
+
+    def lumencor_set_ttl(self, ttl_state):
+        """ Define whether the celesta source can be controlled through ttl control.
+
+        :param: bool ttl_state: True: source can be controlled by external trigger
+
+        :return: None
+        """
+        if self._controllertupe == 'lumencor:':
+            self._controller.set_ttl(ttl_state)
         else:
             pass
 
