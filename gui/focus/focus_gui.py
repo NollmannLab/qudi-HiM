@@ -100,10 +100,10 @@ class FocusGUI(GUIBase):
     connect:
         focus_logic: 'focus_logic'
     """
-    # Define connectors to logic module
+    # connector
     focus_logic = Connector(interface='FocusLogic')
 
-    # Signals
+    # signals
     sigUpdateStep = QtCore.Signal(float)
     sigMoveUp = QtCore.Signal(float)
     sigMoveDown = QtCore.Signal(float)
@@ -119,8 +119,15 @@ class FocusGUI(GUIBase):
     sigAutofocusStop = QtCore.Signal()
     sigSearchFocus = QtCore.Signal()
 
+    # attributes
     _mw = None
     _focus_logic = None
+    raw_imageitem = None
+    threshold_imageitem = None
+    _centroid = None
+    y_data = None
+    _w_pid = None
+    _timetrace = None
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -136,13 +143,11 @@ class FocusGUI(GUIBase):
         self.init_pid_settings_ui()
 
         # setup specific adjustments of the GUI
-        # DockWidget for the camera - for the RAMM setup, the camera is only used to check for the quality of the
-        # reflexion. By default the dock widget is hidden.
         if self._focus_logic._readout == 'qpd':
             self._mw.threshold_image_PlotWidget.hide()
             self._mw.threshold_label.hide()
             self._mw.threshold_SpinBox.hide()
-            self._mw.im_display_dockWidget.hide()
+            # self._mw.im_display_dockWidget.hide()
         if self._focus_logic._readout == 'camera':
             self._mw.find_offset_PushButton.hide()
             self._mw.offset_lineEdit.hide()
@@ -267,7 +272,7 @@ class FocusGUI(GUIBase):
         self.keep_pid_parameters()
 
     def open_pid_settings(self):
-        """ Opens the PID settings menu.
+        """ Open the PID settings menu.
         """
         self._w_pid.exec_()
 
@@ -282,7 +287,6 @@ class FocusGUI(GUIBase):
         self._w_pid.Pgain_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._P_gain)
         self._w_pid.Igain_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._I_gain)
 
-
 # ----------------------------------------------------------------------------------------------------------------------
 # Slots for manual piezo positioning
 # ----------------------------------------------------------------------------------------------------------------------
@@ -293,12 +297,18 @@ class FocusGUI(GUIBase):
         self.sigUpdateStep.emit(step)
 
     def update_step(self, step):
-        """ Callback of sigStepChanged sent from focus logic. """
+        """ Callback of sigStepChanged sent from focus logic.
+        :param: float step: new value as step for single piezo movement
+        :return: None
+        """
         self._mw.step_doubleSpinBox.setValue(step)
 
     def update_position(self, position):
         """ Callback of sigPositionChanged sent from focus logic. Update the label displaying the current piezo position
-        and the timetrace if running. """
+        and the timetrace if running.
+        :param: float position: current piezo position
+        :return: None
+        """
         # update the label
         self._mw.position_Label.setText('z position (um): {:.3f}'.format(position))
         # and the timetrace
@@ -343,7 +353,10 @@ class FocusGUI(GUIBase):
             self.sigTimetraceOn.emit()
 
     def update_timetrace(self, position):
-        """ Callback of sigUpdateTimetrace from focus_logic. Adds a new data point to the timetrace. """
+        """ Callback of sigUpdateTimetrace from focus_logic. Adds a new data point to the timetrace.
+        :param: float position: current position of the piezo
+        :return: None
+        """
         # t data not needed, only if it is wanted that the axis labels move also. then see variant 2 from pyqtgraph.examples scrolling plot
         # self.t_data[:-1] = self.t_data[1:] # shift data in the array one position to the left, keeping same array size
         # self.t_data[-1] += 1 # add the new last element
@@ -374,7 +387,13 @@ class FocusGUI(GUIBase):
 
     def plot_calibration(self, piezo_position, qpd_signal, fit, slope, precision):
         """ Callback of sigPlotCalibration from focus_logic. Once the calibration finished, reset the pushbutton state
-        and display the calibration results in the plotwidget and display also the calculated slope. """
+        and display the calibration results in the plotwidget and display also the calculated slope.
+        :param: float piezo_position
+        :param: float? qpd_signal
+        :param: ?? fit
+        :param: float slope: calculated slope of the fit
+        :param: float precision: calculated precisition of the fit (FWHM)
+        :return: None """
         # reset calibration_PushButton state
         self._mw.calibration_PushButton.setEnabled(True)
         self._mw.calibration_PushButton.setText('Launch calibration')
@@ -402,14 +421,20 @@ class FocusGUI(GUIBase):
 
     def display_offset(self, offset):
         """ Callback of sigOffsetCalibration from focus_logic. Once the offset is found, reset the pushbutton state
-        and display the offset value. """
+        and display the offset value.
+        :param: float offset
+        :return: None
+        """
         self._mw.find_offset_PushButton.setEnabled(True)
         self._mw.find_offset_PushButton.setText('Find offset')
         self._mw.find_offset_PushButton.setChecked(False)
         self._mw.offset_lineEdit.setText("{:.2f}".format(offset))
 
     def update_autofocus_setpoint(self, setpoint):
-        """ Callback of sigSetpointDefined from focus_logic. Display the current setpoint on the GUI. """
+        """ Callback of sigSetpointDefined from focus_logic. Display the current setpoint on the GUI.
+        :param: float setpoint
+        :return: None
+        """
         self._mw.setpoint_lineEdit.setText("{:.2f}".format(setpoint))
 
     def start_focus_stabilization_clicked(self):
@@ -428,6 +453,9 @@ class FocusGUI(GUIBase):
             self.sigAutofocusStart.emit()
 
     def search_focus_clicked(self):
+        """ Callback of search focus action. Starts the autofocus using a method that automatically stops
+        when focus is found (reflexion at lower interface, or autofocus with stop when stable parameter
+        depending on configuration). """
         self._mw.autofocus_Action.setDisabled(True)  # do not allow both actions at the same time
         self._mw.search_focus_Action.setText('Searching focus ...')
         self._mw.search_focus_Action.setDisabled(True)
@@ -474,6 +502,9 @@ class FocusGUI(GUIBase):
             - an optional input called threshold that is used only when the autofocus is working directly with the
             image. In that case, this input should contain a binary image (mask) as well as the X/Y positions of the
             detected IR reflection.
+        :param: np.ndarray im: image retrieved from the Thorlabs camera.
+        :param: ??? threshold:
+        :return: None
         """
         self.raw_imageitem.setImage(im)
         if threshold:
@@ -514,12 +545,15 @@ class FocusGUI(GUIBase):
 
     @QtCore.Slot()
     def disable_focus_toolbuttons(self):
+        """ Disables focus toolbuttons, to be used for example during tasks.
+        """
         self._mw.piezo_init_Action.setDisabled(True)
         self._mw.autofocus_Action.setDisabled(True)
         self._mw.search_focus_Action.setDisabled(True)
 
     @QtCore.Slot()
     def enable_focus_toolbuttons(self):
+        """ Enables focus toolbuttons, for example at the end of a task. """
         self._mw.piezo_init_Action.setDisabled(False)
         self._mw.autofocus_Action.setDisabled(False)
         self._mw.search_focus_Action.setDisabled(False)
@@ -529,6 +563,8 @@ class FocusGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 
     def close_function(self):
+        """ This method serves as a reimplementation of the close event. Continuous modes are stopped
+        when the main window is closed. """
         # stop timetrace when window is cloded
         if self._focus_logic.timetrace_enabled:
             self.start_tracking_clicked()
