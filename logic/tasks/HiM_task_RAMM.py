@@ -36,7 +36,7 @@ import time
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
@@ -216,6 +216,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
+                    # create lists containing pressure and volume data and initialize first value to 0
+                    pressure = [0]
+                    volume = [0]
+
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
@@ -225,13 +229,29 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     ready = self.ref['flow'].target_volume_reached
                     while not ready:
-                        time.sleep(2)
+                        time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
+                        # retrieve data for data saving at the end of interation
+                        new_total_volume = self.ref['flow'].total_volume
+                        new_pressure = self.ref['flow'].get_pressure()
+                        volume.append(new_total_volume)
+                        pressure.append(new_pressure)
+
                         if self.aborted:
                             ready = True
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    # get the last data points
+                    new_total_volume = self.ref['flow'].total_volume
+                    new_pressure = self.ref['flow'].get_pressure()
+                    volume.append(new_total_volume)
+                    pressure.append(new_pressure)
+                    time.sleep(1)
                     self.ref['flow'].set_pressure(0.0)
+
+                    # save pressure and volume data to file
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
+                    save_injection_data_to_csv(pressure, volume, complete_path)
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
@@ -424,6 +444,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
+                    # create lists containing pressure and volume data and initialize first value to 0
+                    pressure = [0]
+                    volume = [0]
+
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
@@ -432,14 +456,32 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                                               sampling_interval)
 
                     ready = self.ref['flow'].target_volume_reached
+
                     while not ready:
-                        time.sleep(2)
+                        time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
+                        # retrieve data for data saving at the end of interation
+                        new_total_volume = self.ref['flow'].total_volume
+                        new_pressure = self.ref['flow'].get_pressure()
+                        volume.append(new_total_volume)
+                        pressure.append(new_pressure)
+
                         if self.aborted:
                             ready = True
+
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    # get the last data points
+                    new_total_volume = self.ref['flow'].total_volume
+                    new_pressure = self.ref['flow'].get_pressure()
+                    volume.append(new_total_volume)
+                    pressure.append(new_pressure)
+                    time.sleep(1)
                     self.ref['flow'].set_pressure(0.0)
+
+                    # save pressure and volume data to file
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
+                    save_injection_data_to_csv(pressure, volume, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
