@@ -74,7 +74,7 @@ class ExpConfiguratorGUI(GUIBase):
     # Signals
     sigSaveConfig = QtCore.Signal(str, str, str)
     sigLoadConfig = QtCore.Signal(str)
-    sigAddEntry = QtCore.Signal(str, float)
+    sigAddEntry = QtCore.Signal(str, float, int, float, int)
     sigDeleteEntry = QtCore.Signal(QtCore.QModelIndex)
 
     def __init__(self, config, **kwargs):
@@ -113,7 +113,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.clear_all_Action.triggered.connect(self.clear_all_clicked)
 
         # widgets on the configuration form
-        self._mw.select_experiment_ComboBox.activated[str].connect(self.update_form)
+        # self._mw.select_experiment_ComboBox.activated[str].connect(self.update_form)
+        self._mw.select_experiment_ComboBox.activated[str].connect(self.start_new_experiment_config)
 
         self._mw.sample_name_LineEdit.textChanged.connect(self._exp_logic.update_sample_name)
         self._mw.dapi_CheckBox.stateChanged.connect(self._exp_logic.update_is_dapi)
@@ -131,6 +132,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.injections_list_LineEdit.textChanged.connect(self._exp_logic.update_injections_path)
         self._mw.dapi_data_LineEdit.textChanged.connect(self._exp_logic.update_dapi_path)
         self._mw.illumination_time_DSpinBox.valueChanged.connect(self._exp_logic.update_illumination_time)
+        self._mw.num_iterations_SpinBox.valueChanged.connect(self._exp_logic.update_num_iterations)
+        self._mw.time_step_SpinBox.valueChanged.connect(self._exp_logic.update_time_step)
 
         # pushbuttons
         # pushbuttons belonging to the listview
@@ -158,6 +161,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._exp_logic.sigConfigDictUpdated.connect(self.update_entries)
         self._exp_logic.sigImagingListChanged.connect(self.update_listview)
         self._exp_logic.sigConfigLoaded.connect(self.display_loaded_config)
+        self._exp_logic.sigUpdateListModel.connect(self.update_list_model)
 
         # update the entries on the form
         self._exp_logic.init_default_config_dict()
@@ -184,6 +188,12 @@ class ExpConfiguratorGUI(GUIBase):
 # Methods to adapt the configuration form depending on the current experiment
 # ----------------------------------------------------------------------------------------------------------------------
 
+    def start_new_experiment_config(self):
+        """
+        """
+        self._exp_logic.init_default_config_dict()
+        self.update_form()
+
     def update_form(self):
         """ Update the configuration form according to the selected experiment type.
         Sets the visibility of the GUI widgets depending on whether an information is required for the selected
@@ -202,6 +212,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_config_Action.setDisabled(True)
             self._mw.save_config_copy_Action.setDisabled(True)
         elif experiment == 'Multicolor imaging PALM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -211,7 +226,13 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(False)
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
         elif experiment == 'Multicolor scan PALM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -221,7 +242,13 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
         elif experiment == 'Multicolor scan RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -231,6 +258,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -240,6 +268,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_SpinBox.setVisible(False)
 
         elif experiment == 'ROI multicolor scan PALM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -249,6 +282,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility modifications
             self._mw.injections_list_Label.setVisible(False)
@@ -259,6 +293,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
 
         elif experiment == 'ROI multicolor scan RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -268,6 +307,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility modifications
             self._mw.dapi_CheckBox.setVisible(True)
@@ -285,6 +325,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_SpinBox.setVisible(False)
 
         elif experiment == 'Fluidics RAMM' or experiment == 'Fluidics Airyscan':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(False)
             self.set_visibility_camera_settings(False)
@@ -294,6 +339,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(False)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility modifications
             self._mw.roi_list_path_Label.setVisible(False)
@@ -304,6 +350,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
 
         elif experiment == 'Hi-M RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
@@ -313,6 +364,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -322,6 +374,11 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_SpinBox.setVisible(False)
 
         elif experiment == 'Photobleaching RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(False)
             self.set_visibility_camera_settings(False)
@@ -331,6 +388,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_scan_settings(False)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(True)
+            self.set_visibility_timelapse_settings(False)
 
             # additional visibility modifications
             self._mw.injections_list_Label.setVisible(False)
@@ -340,6 +398,95 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.laser_ComboBox.removeItem(0)  # do not allow the UV laser (405 nm typically)
+
+        elif experiment == 'Fast timelapse RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False  # only for 'usual' timelapse is this flag set to True
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(True)
+
+            # additional visibility modifications
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.injections_list_Label.setVisible(False)
+            self._mw.injections_list_LineEdit.setVisible(False)
+            self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.time_step_Label.setVisible(False)
+            self._mw.time_step_SpinBox.setVisible(False)
+
+        elif experiment == 'Timelapse RAMM':
+            # change the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_ramm)
+            self._exp_logic.is_timelapse_ramm = True
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(True)
+
+            # additional visibility modifications
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.injections_list_Label.setVisible(False)
+            self._mw.injections_list_LineEdit.setVisible(False)
+            self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
+
+        elif experiment == 'Timelapse PALM':
+            # change the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_palm)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = True
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(True)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(True)
+
+            # additional visibility modifications
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.injections_list_Label.setVisible(False)
+            self._mw.injections_list_LineEdit.setVisible(False)
+            self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
 
         # add here additional experiment types
 
@@ -438,6 +585,15 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.illumination_time_Label.setVisible(visible)
         self._mw.illumination_time_DSpinBox.setVisible(visible)
 
+    def set_visibility_timelapse_settings(self, visible):
+        """ Show or hide the block with the timelapse settings widgets.
+        :param bool visible: show widgets = True, hide widgets = False """
+        self._mw.timelapse_settings_Label.setVisible(visible)
+        self._mw.num_iterations_Label.setVisible(visible)
+        self._mw.num_iterations_SpinBox.setVisible(visible)
+        self._mw.time_step_Label.setVisible(visible)
+        self._mw.time_step_SpinBox.setVisible(visible)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of the toolbuttons
 # ----------------------------------------------------------------------------------------------------------------------
@@ -490,7 +646,24 @@ class ExpConfiguratorGUI(GUIBase):
         """ Callback of add entry pushbutton inserting an item into the imaging sequence list. """
         lightsource = self._mw.laser_ComboBox.currentText()  # or replace by current index
         intensity = self._mw.laser_intensity_DSpinBox.value()
-        self.sigAddEntry.emit(lightsource, intensity)
+
+        if self._exp_logic.is_timelapse_ramm:
+            num_z_planes = self._mw.num_z_planes_SpinBox.value()
+            z_step = self._mw.z_step_DSpinBox.value()
+            filter_pos = 0
+
+        elif self._exp_logic.is_timelapse_palm:
+            num_z_planes = self._mw.num_z_planes_SpinBox.value()
+            z_step = self._mw.z_step_DSpinBox.value()
+            filter_pos = self._mw.filterpos_ComboBox.currentIndex() + 1
+
+        else:
+            # dummy values
+            num_z_planes = 0
+            z_step = 0
+            filter_pos = 0
+
+        self.sigAddEntry.emit(lightsource, intensity, num_z_planes, z_step, filter_pos)
 
     def delete_entry_clicked(self):
         """ Callback of delete entry pushbutton. The selected item is deleted from the list model in the logic module.
@@ -549,6 +722,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.num_frames_SpinBox.setValue(self._exp_logic.config_dict.get('num_frames', 1))
         self._mw.filterpos_ComboBox.setCurrentIndex(self._exp_logic.config_dict.get('filter_pos', 1) - 1)  # zero indexing
         self._exp_logic.img_sequence_model.layoutChanged.emit()
+        self._exp_logic.img_sequence_model_timelapse_ramm.layoutChanged.emit()
+        self._exp_logic.img_sequence_model_timelapse_palm.layoutChanged.emit()
         self._mw.save_path_LineEdit.setText(self._exp_logic.config_dict.get('save_path', ''))
         self._mw.fileformat_ComboBox.setCurrentText(self._exp_logic.config_dict.get('file_format', ''))
         self._mw.num_z_planes_SpinBox.setValue(self._exp_logic.config_dict.get('num_z_planes', 1))
@@ -558,11 +733,15 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.injections_list_LineEdit.setText(self._exp_logic.config_dict.get('injections_path', ''))
         self._mw.dapi_data_LineEdit.setText(self._exp_logic.config_dict.get('dapi_path', ''))
         self._mw.illumination_time_DSpinBox.setValue(self._exp_logic.config_dict.get('illumination_time', 0.0))
+        self._mw.num_iterations_SpinBox.setValue(self._exp_logic.config_dict.get('num_iterations', 0))
+        self._mw.time_step_SpinBox.setValue(self._exp_logic.config_dict.get('time_step', 0))
 
     def update_listview(self):
         """ Callback of the signal sigImagingListChanged sent from the logic. Updates the items displayed in the
         imaging sequence listview. """
         self._exp_logic.img_sequence_model.layoutChanged.emit()
+        self._exp_logic.img_sequence_model_timelapse_ramm.layoutChanged.emit()
+        self._exp_logic.img_sequence_model_timelapse_palm.layoutChanged.emit()
         # for the delete entry case, if one row is selected then it will be deleted
         indexes = self._mw.imaging_sequence_ListView.selectedIndexes()
         if indexes:
@@ -575,4 +754,11 @@ class ExpConfiguratorGUI(GUIBase):
         self.update_form()
         self.update_entries()
 
-# clear all toolbutton: reset also selectors for imaging sequence to default values ? (first laser, 0)
+    def update_list_model(self, model):
+        """ """
+        if model == 1:  # timelapse ramm
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_ramm)
+        elif model == 2:  # timelapse palm
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_palm)
+        else:  # standard listview model (lightsource, intensity)
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
