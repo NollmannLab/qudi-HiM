@@ -129,7 +129,7 @@ class DAQLogic(GenericLogic):
         """ Read a value from a digital input virtual channel.
 
         :param: DAQmx.Taskhandle object taskhandle: pointer to the virtual channel
-        :param: int num_samp: number of values to write
+        :param: int num_samp: number of values to read
 
         :return: float data: values read from the digital input channel
         """
