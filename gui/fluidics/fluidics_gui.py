@@ -242,9 +242,9 @@ class FluidicsGUI(GUIBase):
         self._pressure_timetrace = self._mw.flowrate_PlotWidget.plot(self.t_data, self.pressure_data, pen=(0, 0, 255), name='pressure')
 
         # set text to unit labels
-        self._mw.pressure_unit_Label.setText(self._flow_logic.get_pressure_unit())
-        self._mw.pressure_unit_Label2.setText(self._flow_logic.get_pressure_unit())
-        self._mw.flowrate_unit_Label.setText(self._flow_logic.get_flowrate_unit())
+        self._mw.pressure_unit_Label.setText(self._flow_logic.get_pressure_unit()[0])  # first element of the returned list. For multiplexing case, more widgets would be created and another list element affected.
+        self._mw.pressure_unit_Label2.setText(self._flow_logic.get_pressure_unit()[0])
+        self._mw.flowrate_unit_Label.setText(self._flow_logic.get_flowrate_unit()[0])
 
         # toolbar actions: internal signals
         self._mw.set_pressure_Action.triggered.connect(self.set_pressure_clicked)
@@ -549,16 +549,16 @@ class FluidicsGUI(GUIBase):
             self.pressure_data = []
             self.sigStartFlowMeasure.emit()
 
-    @QtCore.Slot(float, float)
+    @QtCore.Slot(list, list)
     def update_flowrate_and_pressure(self, pressure, flowrate):
         """ Callback of a signal emitted from logic informing the GUI about the new pressure and flowrate values.
 
         :param float pressure: current pressure value retrieved from hardware
         :param float flowrate: current flowrate retrieved from hardware
         """
-        self._mw.pressure_LineEdit.setText('{:.2f}'.format(pressure))
-        self._mw.flowrate_LineEdit.setText('{:.2f}'.format(flowrate))
-        self.update_pressure_and_flowrate_timetrace(pressure, flowrate)
+        self._mw.pressure_LineEdit.setText('{:.2f}'.format(pressure[0]))
+        self._mw.flowrate_LineEdit.setText('{:.2f}'.format(flowrate[0]))
+        self.update_pressure_and_flowrate_timetrace(pressure[0], flowrate[0])
 
     def update_pressure_and_flowrate_timetrace(self, pressure, flowrate):
         """ Add a new data point to the pressure and flowrate timetraces.
