@@ -26,6 +26,7 @@ import time
 from core.module import Base
 from interface.motor_interface import MotorInterface
 
+
 class MotorAxisDummy:
     """ Generic dummy motor representing one axis. """
     def __init__(self, label):
@@ -49,7 +50,7 @@ class MotorDummy(Base, MotorInterface):
 
         # checking for the right configuration
         for key in config.keys():
-            self.log.info('{0}: {1}'.format(key,config[key]))
+            self.log.info('{0}: {1}'.format(key, config[key]))
 
         # these label should be actually set by the config.
         self._x_axis = MotorAxisDummy('x')
@@ -60,9 +61,9 @@ class MotorDummy(Base, MotorInterface):
         # this is added so that focus logic works with motor dummy connected .. # to improve ??
         self._axis_label = self._z_axis.label
 
-        self._wait_after_movement = 0.5 #in seconds
+        self._wait_after_movement = 0.5  # in seconds
 
-    #TODO: Checks if configuration is set and is reasonable
+    # TODO: Checks if configuration is set and is reasonable
 
     def on_activate(self):
 
@@ -87,7 +88,6 @@ class MotorDummy(Base, MotorInterface):
 
     def on_deactivate(self):
         pass
-
 
     def get_constraints(self):
         """ Retrieve the hardware constrains from the motor device.
@@ -202,7 +202,7 @@ class MotorDummy(Base, MotorInterface):
             move_x = param_dict[self._x_axis.label]
             curr_pos_x = curr_pos_dict[self._x_axis.label]
 
-            if  (curr_pos_x + move_x > constraints[self._x_axis.label]['pos_max'] ) or\
+            if (curr_pos_x + move_x > constraints[self._x_axis.label]['pos_max']) or\
                 (curr_pos_x + move_x < constraints[self._x_axis.label]['pos_min']):
 
                 self.log.warning('Cannot make further movement of the axis '
@@ -219,7 +219,7 @@ class MotorDummy(Base, MotorInterface):
             move_y = param_dict[self._y_axis.label]
             curr_pos_y = curr_pos_dict[self._y_axis.label]
 
-            if  (curr_pos_y + move_y > constraints[self._y_axis.label]['pos_max'] ) or\
+            if (curr_pos_y + move_y > constraints[self._y_axis.label]['pos_max']) or\
                 (curr_pos_y + move_y < constraints[self._y_axis.label]['pos_min']):
 
                 self.log.warning('Cannot make further movement of the axis '
@@ -236,7 +236,7 @@ class MotorDummy(Base, MotorInterface):
             move_z = param_dict[self._z_axis.label]
             curr_pos_z = curr_pos_dict[self._z_axis.label]
 
-            if  (curr_pos_z + move_z > constraints[self._z_axis.label]['pos_max'] ) or\
+            if (curr_pos_z + move_z > constraints[self._z_axis.label]['pos_max']) or\
                 (curr_pos_z + move_z < constraints[self._z_axis.label]['pos_min']):
 
                 self.log.warning('Cannot make further movement of the axis '
@@ -249,12 +249,11 @@ class MotorDummy(Base, MotorInterface):
                 self._make_wait_after_movement()
                 self._z_axis.pos = self._z_axis.pos + move_z
 
-
         if param_dict.get(self._phi_axis.label) is not None:
             move_phi = param_dict[self._phi_axis.label]
             curr_pos_phi = curr_pos_dict[self._phi_axis.label]
 
-            if  (curr_pos_phi + move_phi > constraints[self._phi_axis.label]['pos_max'] ) or\
+            if (curr_pos_phi + move_phi > constraints[self._phi_axis.label]['pos_max']) or\
                 (curr_pos_phi + move_phi < constraints[self._phi_axis.label]['pos_min']):
 
                 self.log.warning('Cannot make further movement of the axis '
@@ -266,7 +265,6 @@ class MotorDummy(Base, MotorInterface):
             else:
                 self._make_wait_after_movement()
                 self._phi_axis.pos = self._phi_axis.pos + move_phi
-
 
     def move_abs(self, param_dict):
         """ Moves stage to absolute position (absolute movement)
@@ -295,7 +293,6 @@ class MotorDummy(Base, MotorInterface):
                 self._make_wait_after_movement()
                 self._x_axis.pos = desired_pos
 
-
         if param_dict.get(self._y_axis.label) is not None:
             desired_pos = param_dict[self._y_axis.label]
             constr = constraints[self._y_axis.label]
@@ -310,7 +307,6 @@ class MotorDummy(Base, MotorInterface):
             else:
                 self._make_wait_after_movement()
                 self._y_axis.pos = desired_pos
-
 
         if param_dict.get(self._z_axis.label) is not None:
             desired_pos = param_dict[self._z_axis.label]
@@ -327,7 +323,6 @@ class MotorDummy(Base, MotorInterface):
                 self._make_wait_after_movement()
                 self._z_axis.pos = desired_pos
 
-
         if param_dict.get(self._phi_axis.label) is not None:
             desired_pos = param_dict[self._phi_axis.label]
             constr = constraints[self._phi_axis.label]
@@ -342,8 +337,6 @@ class MotorDummy(Base, MotorInterface):
             else:
                 self._make_wait_after_movement()
                 self._phi_axis.pos = desired_pos
-
-
 
     def abort(self):
         """Stops movement of the stage
@@ -420,7 +413,6 @@ class MotorDummy(Base, MotorInterface):
             status[self._phi_axis.label] = self._phi_axis.status
 
         return status
-
 
     def calibrate(self, param_list=None):
         """ Calibrates the stage.
@@ -561,4 +553,3 @@ class MotorDummy(Base, MotorInterface):
     def _make_wait_after_movement(self):
         """ Define a time which the dummy should wait after each movement. """
         time.sleep(self._wait_after_movement)
-
