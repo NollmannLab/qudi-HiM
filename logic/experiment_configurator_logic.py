@@ -57,6 +57,42 @@ class ImagingSequenceModel(QtCore.QAbstractListModel):
         return len(self.items)
 
 
+class ImagingSequenceModelTimelapseRAMM(QtCore.QAbstractListModel):
+    """ This class contains the model class for the listview with the imaging sequence
+    consisting of entries of the form ({'laserline': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes,
+    'z_step': z_step)
+    """
+    def __init__(self, *args, items=None, **kwargs):
+        super(ImagingSequenceModelTimelapseRAMM, self).__init__(*args, **kwargs)
+        self.items = items or []
+
+    def data(self, index, role):
+        if role == QtCore.Qt.DisplayRole:
+            source, intens, num_z_planes, z_step = self.items[index.row()].values()
+            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}"
+
+    def rowCount(self, index):
+        return len(self.items)
+
+
+class ImagingSequenceModelTimelapsePALM(QtCore.QAbstractListModel):
+    """ This class contains the model class for the listview with the imaging sequence
+    consisting of entries of the form ({'laserline': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes,
+    'z_step': z_step, 'filter': filterpos)
+    """
+    def __init__(self, *args, items=None, **kwargs):
+        super(ImagingSequenceModelTimelapsePALM, self).__init__(*args, **kwargs)
+        self.items = items or []
+
+    def data(self, index, role):
+        if role == QtCore.Qt.DisplayRole:
+            source, intens, num_z_planes, z_step, filter_pos = self.items[index.row()].values()
+            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}, filter_pos: {filter_pos}"
+
+    def rowCount(self, index):
+        return len(self.items)
+
+
 # ======================================================================================================================
 # Logic class
 # ======================================================================================================================
@@ -82,7 +118,6 @@ class ExpConfigLogic(GenericLogic):
             laser_logic: 'lasercontrol_logic'
             filterwheel_logic: 'filterwheel_logic'
     """
-
     # define connectors to logic modules
     camera_logic = Connector(interface='CameraLogic')
     laser_logic = Connector(interface='LaserControlLogic')
@@ -92,6 +127,7 @@ class ExpConfigLogic(GenericLogic):
     sigConfigDictUpdated = QtCore.Signal()
     sigImagingListChanged = QtCore.Signal()
     sigConfigLoaded = QtCore.Signal()
+    sigUpdateListModel = QtCore.Signal(int)
 
     # config options
     experiments = ConfigOption('experiments')
@@ -108,6 +144,8 @@ class ExpConfigLogic(GenericLogic):
         self.filters = None
         self.lasers = None
         self.img_sequence_model = None
+        self.is_timelapse_ramm = False
+        self.is_timelapse_palm = False
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -123,6 +161,9 @@ class ExpConfigLogic(GenericLogic):
         self.lasers = [laser_dict[key]['wavelength'] for key in laser_dict]
 
         self.img_sequence_model = ImagingSequenceModel()
+        self.img_sequence_model_timelapse_ramm = ImagingSequenceModelTimelapseRAMM()
+        self.img_sequence_model_timelapse_palm = ImagingSequenceModelTimelapsePALM()
+
         # add an additional entry to the experiment selector combobox with placeholder text
         self.experiments.insert(0, 'Select your experiment..')
 
@@ -148,11 +189,15 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['num_frames'] = 1
         self.config_dict['filter_pos'] = 1
         self.img_sequence_model.items = []
+        self.img_sequence_model_timelapse_ramm.items = []
+        self.img_sequence_model_timelapse_palm.items = []
         self.config_dict['save_path'] = self.default_path_images
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
         self.config_dict['dapi_path'] = None  # not necessary, it can be left empty and needs hence to be initialized as empty string
+        self.config_dict['num_iterations'] = 0
+        self.config_dict['time_step'] = 0
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
 
@@ -221,9 +266,29 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'photobleaching_task_RAMM.yml'
                 keys_to_extract = ['imaging_sequence', 'roi_list_path', 'illumination_time']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+            elif experiment == 'Fast timelapse RAMM':
+                if not filename:
+                    filename = 'fast_timelapse_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations']
+
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Timelapse RAMM':
+                if not filename:
+                    filename = 'timelapse_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Timelapse PALM':
+                if not filename:
+                    filename = 'timelapse_task_PALM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'gain', 'save_path', 'file_format', 'imaging_sequence', 'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             # add here all additional experiments and select the relevant keys
             else:
                 pass
+
         except KeyError as e:
             self.log.warning(f'Experiment configuration not saved. Missing information {e}.')
             return
@@ -253,8 +318,36 @@ class ExpConfigLogic(GenericLogic):
             self.log.info(f'Configuration loaded from {path}')
 
         if 'imaging_sequence' in self.config_dict.keys():
-            # synchronize the listviewmodel with the config_dict['imaging_sequence'] entry
-            self.img_sequence_model.items = self.config_dict['imaging_sequence']
+
+            if self.config_dict['experiment'] == 'Timelapse RAMM':
+                self.sigUpdateListModel.emit(1)
+                self.is_timelapse_ramm = True
+                self.is_timelapse_palm = False
+                for item in self.config_dict['imaging_sequence']:
+                    lightsource = item['lightsource']
+                    intensity = item['intensity']
+                    num_z_planes = item['num_z_planes']
+                    z_step = item['z_step']
+                    self.img_sequence_model_timelapse_ramm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step})
+
+            elif self.config_dict['experiment'] == 'Timelapse PALM':
+                self.sigUpdateListModel.emit(2)
+                self.is_timelapse_palm = True
+                self.is_timelapse_ramm = False
+                for item in self.config_dict['imaging_sequence']:
+                    lightsource = item['lightsource']
+                    intensity = item['intensity']
+                    num_z_planes = item['num_z_planes']
+                    z_step = item['z_step']
+                    filter_pos = item['filter_pos']
+                    self.img_sequence_model_timelapse_palm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step, 'filter_pos': filter_pos})
+
+            else:
+                self.sigUpdateListModel.emit(0)
+                self.is_timelapse_ramm = False
+                self.is_timelapse_palm = False
+                # synchronize the listviewmodel with the config_dict['imaging_sequence'] entry
+                self.img_sequence_model.items = self.config_dict['imaging_sequence']
 
         self.sigConfigLoaded.emit()
 
@@ -418,18 +511,46 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['illumination_time'] = value
         self.sigConfigDictUpdated.emit()
 
-    @QtCore.Slot(str, float)
-    def add_entry_to_imaging_list(self, lightsource, intensity):
+    @QtCore.Slot(int)
+    def update_num_iterations(self, value):
+        """ Updates the dictionary entry 'num_iterations' (repetitions during a timelapse).
+        :param: int value: number of iterations for a timelapse experiment
+        :return: None
+        """
+        self.config_dict['num_iterations'] = value
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(int)
+    def update_time_step(self, value):
+        """ Updates the dictionary entry 'time_step' (delay before entering into the next iteration in a (slow) timelapse).
+        :param: int value: time in seconds since start before entering into the next timelapse iteration
+        :return: None
+        """
+        self.config_dict['time_step'] = value
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str, float, int, float, int)
+    def add_entry_to_imaging_list(self, lightsource, intensity, num_z_planes=None, z_step=None, filter_pos=None):
         """ Adds an entry to the imaging sequence.
         :param: str lightsource: name of the lightsource as displayed in the combobox on the GUI.
                     (May need conversion inside the experiment module to address the right lightsource)
         :param: float intensity: intensity in percent of max. intensity
         :return: None
         """
-        # Access the list via the model.
-        self.img_sequence_model.items.append((lightsource, intensity))
-        # update the dictionary entry with the current content of the model
-        self.config_dict['imaging_sequence'] = self.img_sequence_model.items
+        if self.is_timelapse_ramm:
+            self.img_sequence_model_timelapse_ramm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step})
+            self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_ramm.items
+
+        elif self.is_timelapse_palm:
+            self.img_sequence_model_timelapse_palm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step, 'filter_pos': filter_pos})
+            self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_palm.items
+
+        else:
+            # Access the list via the model.
+            self.img_sequence_model.items.append((lightsource, intensity))
+            # update the dictionary entry with the current content of the model
+            self.config_dict['imaging_sequence'] = self.img_sequence_model.items
+
         # Trigger refresh of the listview on the GUI:
         # signal layoutChanged cannot be queued over different threads. use custom signal
         self.sigImagingListChanged.emit()
@@ -440,10 +561,20 @@ class ExpConfigLogic(GenericLogic):
         :param: QtCore.QModelIndex index: selected element in the imaging seqeunce model
         :return: None
         """
-        # Remove the item and refresh.
-        del self.img_sequence_model.items[index.row()]
-        # update the dictionary entry with the current content of the model
-        self.config_dict['imaging_sequence'] = self.img_sequence_model.items
+        if self.is_timelapse_ramm:
+            del self.img_sequence_model_timelapse_ramm.items[index.row()]
+            self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_ramm.items
+
+        elif self.is_timelapse_palm:
+            del self.img_sequence_model_timelapse_palm.items[index.row()]
+            self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_palm.items
+
+        else:
+            # Remove the item and refresh.
+            del self.img_sequence_model.items[index.row()]
+            # update the dictionary entry with the current content of the model
+            self.config_dict['imaging_sequence'] = self.img_sequence_model.items
+
         # Trigger refresh of the livtview on the GUI
         self.sigImagingListChanged.emit()
 
@@ -453,6 +584,8 @@ class ExpConfigLogic(GenericLogic):
         :return: None
         """
         self.img_sequence_model.items = []
+        self.img_sequence_model_timelapse_ramm.items = []
+        self.img_sequence_model_timelapse_palm.items = []
         self.sigImagingListChanged.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
