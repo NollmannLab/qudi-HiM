@@ -538,6 +538,8 @@ class FocusLogic(GenericLogic):
 
             dz = np.absolute(self.get_position() - z)
 
+            print(f'z is {z}, dz is {dz}')
+
             if self._min_z + 1 < z < self._max_z - 1:
                 if dz > 0.1:
                     self.go_to_position(z)
@@ -545,9 +547,11 @@ class FocusLogic(GenericLogic):
                     pass
 
             else:
-                self.log.warning('piezo position out of constraints')
+                self.log.warning('piezo target position out of constraints')
                 self.autofocus_enabled = False
                 self.sigAutofocusError.emit()
+                if search_focus:
+                    self.search_focus_finished()
                 return
 
             worker = AutofocusWorker(self._dt)
@@ -651,6 +655,7 @@ class FocusLogic(GenericLogic):
             if offset != 0:
                 self._autofocus_logic.stage_move_z(offset)
                 self._autofocus_logic.stage_wait_for_idle()
+                sleep(1)
             self.start_autofocus(stop_when_stable=True, search_focus=True)
         else:
             self.log.warn('Search focus can not be used. Calibration or setpoint missing.')

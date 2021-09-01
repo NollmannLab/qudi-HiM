@@ -167,12 +167,18 @@ class Task(InterruptableTask):
         self.ref['flow'].set_pressure(0.0)
 
         # set valve default positions
+        self.ref['valves'].set_valve_position('c', 1)
+        self.ref['valves'].wait_for_idle()
         self.ref['valves'].set_valve_position('b', 1)
         self.ref['valves'].wait_for_idle()
         self.ref['valves'].set_valve_position('a', 1)
         self.ref['valves'].wait_for_idle()
-        self.ref['valves'].set_valve_position('c', 1)
-        self.ref['valves'].wait_for_idle()
+
+        # # verify that flux is closed
+        # is_closed_position = self.ref['valves'].get_valve_position('c')
+        # if is_closed_position != 1:
+        #     self.ref['valves'].set_valve_position('c', 1)
+        #     self.ref['valves'].wait_for_idle()
 
         # enable actions on Fluidics GUI
         self.ref['valves'].enable_valve_positioning()

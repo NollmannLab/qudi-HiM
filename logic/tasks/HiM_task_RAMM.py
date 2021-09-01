@@ -147,15 +147,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
+        # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+        self.num_frames = self.num_z_planes * self.num_laserlines
+        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+
         # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
 
@@ -233,7 +234,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         new_total_volume = self.ref['flow'].total_volume
-                        new_pressure = self.ref['flow'].get_pressure()
+                        new_pressure = self.ref['flow'].get_pressure()[0]  # get pressure returns a list, we just need the first element
                         volume.append(new_total_volume)
                         pressure.append(new_pressure)
 
@@ -243,7 +244,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points
                     new_total_volume = self.ref['flow'].total_volume
-                    new_pressure = self.ref['flow'].get_pressure()
+                    new_pressure = self.ref['flow'].get_pressure()[0]
                     volume.append(new_total_volume)
                     pressure.append(new_pressure)
                     time.sleep(1)
@@ -256,7 +257,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
                     self.log.info(f'Incubation time.. {t} s')
-                    self.ref['valves'].set_valve_position('c', 1)
+                    self.ref['valves'].set_valve_position('c', 1)  # stop flux
                     self.ref['valves'].wait_for_idle()
 
                     # allow abort by splitting the waiting time into small intervals of 30 s
@@ -267,7 +268,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             time.sleep(30)
                     time.sleep(remainder)
 
-                    self.ref['valves'].set_valve_position('c', 2)
+                    self.ref['valves'].set_valve_position('c', 2)  # open flux again
                     self.ref['valves'].wait_for_idle()
                     self.log.info('Incubation time finished')
 
@@ -275,11 +276,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
 
             # set valves to default positions
+            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
+            self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
             self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
             self.ref['valves'].wait_for_idle()
 
             if self.logging:
@@ -328,7 +329,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     counter += 1
                     time.sleep(0.1)
                     ready = self.ref['focus']._stage_is_positioned
-                    if counter > 50:
+                    if counter > 500:
                         break
 
                 reference_position = self.ref['focus'].get_position()  # save it to go back to this plane after imaging
@@ -422,6 +423,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
             self.ref['daq'].start_rinsing(60)
+            start_rinsing_time = time.time()
 
             # inject product
             self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
@@ -462,7 +464,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         new_total_volume = self.ref['flow'].total_volume
-                        new_pressure = self.ref['flow'].get_pressure()
+                        new_pressure = self.ref['flow'].get_pressure()[0]  # get pressure returns a list, we just need the first value
                         volume.append(new_total_volume)
                         pressure.append(new_pressure)
 
@@ -473,7 +475,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points
                     new_total_volume = self.ref['flow'].total_volume
-                    new_pressure = self.ref['flow'].get_pressure()
+                    new_pressure = self.ref['flow'].get_pressure()[0]
                     volume.append(new_total_volume)
                     pressure.append(new_pressure)
                     time.sleep(1)
@@ -504,13 +506,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
+            # stop flux by closing valve towards pump
+            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
+            self.ref['valves'].wait_for_idle()
+
+            # verify if rinsing finished in the meantime
+            current_time = time.time()
+            diff = current_time-start_rinsing_time
+            if diff < 60:
+                time.sleep(diff+1)
+
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
             self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
             self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
-            self.ref['valves'].wait_for_idle()
+
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
@@ -549,6 +560,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # close the fpga session
         self.ref['laser'].end_task_session()

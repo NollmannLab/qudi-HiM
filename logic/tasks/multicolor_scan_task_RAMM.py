@@ -87,6 +87,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
+        # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+        self.num_frames = self.num_z_planes * self.num_laserlines
+        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        self.ref['cam'].start_acquisition()
+
         # download the bitfile for the task on the FPGA
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
         self.ref['laser'].start_task_session(bitfile)
@@ -94,11 +100,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # prepare the daq: set the digital output to 0 before starting the task
         self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-        self.ref['cam'].start_acquisition()
 
         # initialize the counter (corresponding to the number of planes already acquired)
         self.step_counter = 0
@@ -186,6 +187,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # close the fpga session and restart the default session
         self.ref['laser'].end_task_session()
