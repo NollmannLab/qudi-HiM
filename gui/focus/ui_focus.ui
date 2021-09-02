@@ -223,8 +223,8 @@
    </attribute>
    <widget class="QWidget" name="dockWidgetContents_3">
     <layout class="QGridLayout" name="gridLayout_2">
-     <item row="0" column="2">
-      <spacer name="horizontalSpacer_2">
+     <item row="0" column="0">
+      <spacer name="horizontalSpacer_3">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>
@@ -241,27 +241,34 @@
      </item>
      <item row="0" column="1">
       <layout class="QGridLayout" name="gridLayout_8">
-       <item row="7" column="0">
-        <widget class="QLineEdit" name="slope_lineEdit"/>
-       </item>
-       <item row="9" column="0">
-        <widget class="QLineEdit" name="setpoint_lineEdit"/>
-       </item>
-       <item row="2" column="0" colspan="2">
-        <layout class="QVBoxLayout" name="verticalLayout_7">
-         <item>
-          <widget class="PlotWidget" name="calibration_PlotWidget"/>
-         </item>
-        </layout>
-       </item>
-       <item row="10" column="1">
-        <widget class="QPushButton" name="find_offset_PushButton">
+       <item row="9" column="2">
+        <widget class="QPushButton" name="setpoint_PushButton">
          <property name="text">
-          <string>Find offset</string>
+          <string>Define setpoint</string>
          </property>
         </widget>
        </item>
-       <item row="5" column="0" colspan="2">
+       <item row="8" column="2">
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>Precision (nm)</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="2">
+        <widget class="QLabel" name="slope_Label">
+         <property name="text">
+          <string>Slope (um-1)</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0" colspan="3">
         <widget class="QPushButton" name="calibration_PushButton">
          <property name="text">
           <string>Launch calibration</string>
@@ -271,43 +278,43 @@
          </property>
         </widget>
        </item>
-       <item row="9" column="1">
-        <widget class="QPushButton" name="setpoint_PushButton">
+       <item row="2" column="0" colspan="3">
+        <layout class="QVBoxLayout" name="verticalLayout_7">
+         <item>
+          <widget class="PlotWidget" name="calibration_PlotWidget"/>
+         </item>
+        </layout>
+       </item>
+       <item row="10" column="2">
+        <widget class="QPushButton" name="find_offset_PushButton">
          <property name="text">
-          <string>Define setpoint</string>
+          <string>Find offset</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="1">
+        <widget class="QLineEdit" name="offset_lineEdit"/>
+       </item>
+       <item row="10" column="0">
+        <widget class="QLabel" name="offset_unit_label">
+         <property name="text">
+          <string>um</string>
          </property>
         </widget>
        </item>
        <item row="7" column="1">
-        <widget class="QLabel" name="slope_Label">
-         <property name="text">
-          <string>Slope</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="10" column="0">
-        <widget class="QLineEdit" name="offset_lineEdit"/>
+        <widget class="QLineEdit" name="slope_lineEdit"/>
        </item>
        <item row="8" column="1">
-        <widget class="QLabel" name="label_3">
-         <property name="text">
-          <string>Precision</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="0">
         <widget class="QLineEdit" name="precision_lineEdit"/>
+       </item>
+       <item row="9" column="1">
+        <widget class="QLineEdit" name="setpoint_lineEdit"/>
        </item>
       </layout>
      </item>
-     <item row="0" column="0">
-      <spacer name="horizontalSpacer_3">
+     <item row="0" column="2">
+      <spacer name="horizontalSpacer_2">
        <property name="orientation">
         <enum>Qt::Horizontal</enum>
        </property>

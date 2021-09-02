@@ -102,6 +102,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
 
         # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = len(self.roi_names) * self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
@@ -236,6 +237,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # close the fpga session
         self.ref['laser'].end_task_session()

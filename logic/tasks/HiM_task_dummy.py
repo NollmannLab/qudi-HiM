@@ -136,6 +136,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
@@ -201,19 +202,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.log.info(f'Injection of {product} ... ')
                     time.sleep(1)
 
-                    # simulate pressure and volume data and save these data --------------------------------------------
+                    # simulate pressure, volume and flowrate data and save these data ----------------------------------
                     pressure = [0]
                     volume = [0]
+                    flowrate = [0]
 
                     for i in range(100):
                         new_pressure = np.random.normal()
                         pressure.append(new_pressure)
                         new_volume = abs(np.random.normal()) + volume[i]
                         volume.append(new_volume)
+                        new_flowrate = np.random.normal() + 150
+                        flowrate.append(new_flowrate)
 
                     complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
-                    save_injection_data_to_csv(pressure, volume, complete_path)
-                    # simulate pressure and volume data and save these data --------------------------------------------
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
+                    # end of simulate pressure, volume and flowrate data and save these data ---------------------------
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
@@ -372,15 +376,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # add here simulated data for pressure value and total volume
                     pressure = [0]
                     volume = [0]
+                    flowrate = [0]
 
                     for i in range(100):
                         new_pressure = np.random.normal()
                         pressure.append(new_pressure)
                         new_volume = abs(np.random.normal()) + volume[i]
                         volume.append(new_volume)
+                        new_flowrate = np.random.normal() + 150
+                        flowrate.append(new_flowrate)
 
                     complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
-                    save_injection_data_to_csv(pressure, volume, complete_path)
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
@@ -458,6 +465,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592

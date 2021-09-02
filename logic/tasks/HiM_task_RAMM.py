@@ -220,6 +220,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure and volume data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
+                    flowrate = [0]
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
@@ -233,26 +234,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
-                        new_total_volume = self.ref['flow'].total_volume
-                        new_pressure = self.ref['flow'].get_pressure()[0]  # get pressure returns a list, we just need the first element
-                        volume.append(new_total_volume)
-                        pressure.append(new_pressure)
+                        self.append_flow_data(pressure, volume, flowrate)
 
                         if self.aborted:
                             ready = True
                     self.ref['flow'].stop_pressure_regulation_loop()
                     time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
-                    # get the last data points
-                    new_total_volume = self.ref['flow'].total_volume
-                    new_pressure = self.ref['flow'].get_pressure()[0]
-                    volume.append(new_total_volume)
-                    pressure.append(new_pressure)
+                    # get the last data points for flow data
+                    self.append_flow_data(pressure, volume, flowrate)
                     time.sleep(1)
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
                     complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
-                    save_injection_data_to_csv(pressure, volume, complete_path)
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
@@ -446,9 +441,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
-                    # create lists containing pressure and volume data and initialize first value to 0
+                    # create lists containing pressure, volume and flowrate data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
+                    flowrate = [0]
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
@@ -463,10 +459,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
-                        new_total_volume = self.ref['flow'].total_volume
-                        new_pressure = self.ref['flow'].get_pressure()[0]  # get pressure returns a list, we just need the first value
-                        volume.append(new_total_volume)
-                        pressure.append(new_pressure)
+                        self.append_flow_data(pressure, volume, flowrate)
 
                         if self.aborted:
                             ready = True
@@ -474,16 +467,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].stop_pressure_regulation_loop()
                     time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points
-                    new_total_volume = self.ref['flow'].total_volume
-                    new_pressure = self.ref['flow'].get_pressure()[0]
-                    volume.append(new_total_volume)
-                    pressure.append(new_pressure)
+                    self.append_flow_data(pressure, volume, flowrate)
                     time.sleep(1)
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
                     complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
-                    save_injection_data_to_csv(pressure, volume, complete_path)
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
@@ -828,3 +818,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for injection tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+        append them to lists storing all values.
+        :param: list pressure_list
+        :param: list volume_list
+        :param: list flowrate_list
+        :return: None
+        """
+        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
+        new_total_volume = self.ref['flow'].total_volume
+        new_flowrate = self.ref['flow'].get_flowrate()[0]
+        pressure_list.append(new_pressure)
+        volume_list.append(new_total_volume)
+        flowrate_list.append(new_flowrate)

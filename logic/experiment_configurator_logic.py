@@ -195,7 +195,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
-        self.config_dict['dapi_path'] = None  # not necessary, it can be left empty and needs hence to be initialized as empty string
+        self.config_dict['dapi_path'] = '' # not necessary, it can be left empty and needs hence to be initialized as empty string
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
         # add here further dictionary entries that need initialization

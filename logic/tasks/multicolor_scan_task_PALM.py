@@ -101,6 +101,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pos = self.ref['filter'].get_position()
 
         # prepare the camera
+        self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
         frames = len(self.imaging_sequence) * self.num_frames * self.num_z_planes  # self.num_frames = 1 typically, but keep as an option 
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
 
@@ -186,6 +187,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['camera'].reset_camera_after_multichannel_imaging()
+        self.ref['camera'].set_exposure(self.default_exposure)
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()

@@ -120,6 +120,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))  # get the total number of planes
         frames = len(self.roi_names) * num_z_planes_total
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain,
@@ -283,6 +284,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['camera'].reset_camera_after_multichannel_imaging()
+        self.ref['camera'].set_exposure(self.default_exposure)
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()

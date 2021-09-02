@@ -57,7 +57,7 @@ def create_path_for_injection_data(pathstem, rt_label, process, step):
     return complete_path
 
 
-def save_injection_data_to_csv(pressure_col, volume_col, path):
-    df = pd.DataFrame({'pressure': pressure_col, 'volume': volume_col})
+def save_injection_data_to_csv(pressure_col, volume_col, flowrate_col, path):
+    df = pd.DataFrame({'pressure': pressure_col, 'volume': volume_col, 'flowrate': flowrate_col})
     with open(path, 'w') as file:
         df.to_csv(file)
