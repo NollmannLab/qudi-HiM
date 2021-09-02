@@ -737,7 +737,7 @@ class CameraLogic(GenericLogic):
             try:
                 complete_path = path + '.fits'
                 fits_metadata = self.convert_to_fits_metadata(metadata)
-                self._add_fits_header(complete_path, fits_metadata)
+                self.add_fits_header(complete_path, fits_metadata)
             except Exception as e:
                 self.log.warn(f'Metadata not saved: {e}.')
         else:
