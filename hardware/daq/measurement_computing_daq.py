@@ -114,7 +114,28 @@ class MccDAQ(Base):
 
 # Digital output channels ----------------------------------------------------------------------------------------------
     def set_up_do_channel(self):
-        pass
+        daq_dev_info = DaqDeviceInfo(self.board_num)
+        if not daq_dev_info.supports_digital_io:
+            raise Exception('Error: The DAQ device does not support '
+                            'digital I/O')
+
+        print('\nActive DAQ device: ', daq_dev_info.product_name, ' (',
+              daq_dev_info.unique_id, ')\n', sep='')
+
+        dio_info = daq_dev_info.get_dio_info()
+        print(dio_info)
+
+        # Find the first port that supports input, defaulting to None
+        # if one is not found.
+        port = next((port for port in dio_info.port_info if port.supports_output),
+                    None)
+        if not port:
+            raise Exception('Error: The DAQ device does not support '
+                            'digital output')
+
+        # If the port is configurable, configure it for output.
+        if port.is_port_configurable:
+            ul.d_config_port(self.board_num, port.type, DigitalIODirection.OUT)
 
     def write_to_do_channel(self):
         pass
@@ -133,22 +154,23 @@ class MccDAQ(Base):
 
         # Find the first port that supports input, defaulting to None
         # if one is not found.
-        # port = next((port for port in dio_info.port_info if port.supports_input), None)
-        # if not port:
-        #     raise Exception('Error: The DAQ device does not support digital input')
-        # print(port)
+        port = next((port for port in dio_info.port_info if port.supports_input), None)
+        if not port:
+            raise Exception('Error: The DAQ device does not support digital input')
+        print(port)
 
         # If the port is configurable, configure it for input.
-        # if port.is_port_configurable:
-        #     ul.d_config_port(self.board_num, port.type, DigitalIODirection.IN)
+        if port.is_port_configurable:
+            ul.d_config_port(self.board_num, port.type, DigitalIODirection.IN)
 
     def read_di_channel(self):
         daq_dev_info = DaqDeviceInfo(self.board_num)
         dio_info = daq_dev_info.get_dio_info()
-        port = next((port for port in dio_info.port_info if port.supports_input), None)
-        print(port)
+        # port = next((port for port in dio_info.port_info if port.supports_input), None)
+        ports = [port for port in dio_info.port_info if port.supports_input]
+        print(ports)
         # Get a value from the digital port
-        port_value = ul.d_in(self.board_num, port.type)
+        port_value = ul.d_in(self.board_num, ports[0].type)
         print(port_value)
 
 
@@ -267,7 +289,7 @@ class MccDAQ(Base):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Needle rinsing pump---------------------------------------------------------------------------------------------------
-    def write_to_rinsign_pump_channel(self, voltage):
+    def write_to_rinsing_pump_channel(self, voltage):
         """ Start / Stop the needle rinsing pump
 
         :param: float voltage: target voltage to apply to the channel
