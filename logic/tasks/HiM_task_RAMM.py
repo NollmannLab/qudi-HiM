@@ -234,7 +234,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         new_total_volume = self.ref['flow'].total_volume
-                        new_pressure = self.ref['flow'].get_pressure()[0]  # get pressure returns a list, we just need the first element
+                        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
                         volume.append(new_total_volume)
                         pressure.append(new_pressure)
 

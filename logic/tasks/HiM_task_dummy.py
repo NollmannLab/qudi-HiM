@@ -136,6 +136,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # prepare the camera
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
@@ -458,6 +459,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
