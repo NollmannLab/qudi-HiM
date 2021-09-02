@@ -620,12 +620,21 @@ class FluidicsGUI(GUIBase):
     def start_rinsing_clicked(self):
         """ Callback of start / stop rinsing toolbutton.
         Handles the toolbutton state and initiates the start / stop of needle rinsing.
+        Sets also the needle rinsing valve to the correct position before starting a rinsing step.
+        The valve positioning is hardcoded. Attention if another experimental setup is configured differently.
+        Then the rinsing valve and the rinsing position need to be added to a config.
         """
         if self._flow_logic.rinsing_enabled:
             self._mw.rinsing_Action.setText('Start rinsing')
             self._mw.rinsing_time_SpinBox.setDisabled(False)
             self.sigStopRinsing.emit()
         else:
+            # make sure to set the RT rinsing valve to the correct position (pos 1)
+            if self._valve_logic.get_valve_position('b') != 1:
+                self._valve_logic.set_valve_position('b', 1)  # hardcoded version - needs modification in case another system is set up differently (i.e. if RT rinsing valve not as valve 'b', rinse needle not at pos 1)
+                self._valve_logic.wait_for_idle()
+
+            # handle the start of rinsing
             rinsing_time = self._mw.rinsing_time_SpinBox.value()
             self._mw.rinsing_time_SpinBox.setDisabled(True)  # do not allow to modify time when rinsing starts
             self._mw.rinsing_Action.setText('Stop rinsing')
