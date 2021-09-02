@@ -529,8 +529,10 @@ class BasicGUI(GUIBase):
         if self._camera_logic.enabled:  # camera is acquiring
             self.sigInterruptLive.emit()
         # this is executed too fast and is not taken into account because live seems not yet to be interrupted. This is why kinetic time indicator is not updated when live is on.
-        self._camera_logic.set_gain(self._cam_sd.gain_spinBox.value())
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
+        # new_exposure = self._cam_sd.exposure_doubleSpinBox.value()
+        # self.sigSetExposure.emit(new_exposure)
+        self._camera_logic.set_gain(self._cam_sd.gain_spinBox.value())
         self._camera_logic.set_temperature(int(self._cam_sd.temp_spinBox.value()))
         self._mw.temp_setpoint_LineEdit.setText(str(self._cam_sd.temp_spinBox.value()))
         if self._camera_logic.enabled:
