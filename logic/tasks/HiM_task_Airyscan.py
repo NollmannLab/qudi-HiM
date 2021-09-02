@@ -35,6 +35,7 @@ import pandas as pd
 import os
 import time
 from logic.generic_task import InterruptableTask
+from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
@@ -190,6 +191,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
+                    # create lists containing pressure and volume data and initialize first value to 0
+                    pressure = [0]
+                    volume = [0]
+                    flowrate = [self.ref['flow'].get_flowrate()]
+
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
@@ -199,13 +205,25 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     ready = self.ref['flow'].target_volume_reached
                     while not ready:
-                        time.sleep(2)
+                        time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
+                        # retrieve data for data saving at the end of interation
+                        self.append_flow_data(pressure, volume, flowrate)
+
                         if self.aborted:
                             ready = True
+
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    time.sleep(1)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    # get the last data points for flow data
+                    self.append_flow_data(pressure, volume, flowrate)
+                    time.sleep(1)
+
                     self.ref['flow'].set_pressure(0.0)
+
+                    # save pressure and volume data to file
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
@@ -331,6 +349,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
+                    # create lists containing pressure, volume and flowrate data and initialize first value to 0
+                    pressure = [0]
+                    volume = [0]
+                    flowrate = [self.ref['flow'].get_flowrate()]
+
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
@@ -340,13 +363,25 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     ready = self.ref['flow'].target_volume_reached
                     while not ready:
-                        time.sleep(2)
+                        time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
+                        # retrieve data for data saving at the end of interation
+                        self.append_flow_data(pressure, volume, flowrate)
+
                         if self.aborted:
                             ready = True
+
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    # get the last data points
+                    self.append_flow_data(pressure, volume, flowrate)
+                    time.sleep(1)
+
                     self.ref['flow'].set_pressure(0.0)
+
+                    # save pressure and volume data to file
+                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
+                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
@@ -517,6 +552,25 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 ready = True
             # add here a counter to break out of the loop and return false
         return ready
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for injection tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+        append them to lists storing all values.
+        :param: list pressure_list
+        :param: list volume_list
+        :param: list flowrate_list
+        :return: None
+        """
+        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
+        new_total_volume = self.ref['flow'].total_volume
+        new_flowrate = self.ref['flow'].get_flowrate()[0]
+        pressure_list.append(new_pressure)
+        volume_list.append(new_total_volume)
+        flowrate_list.append(new_flowrate)
 
 # to do:
 # lumencor celesta module needs to be adapted to fit the lasercontrol interface.
