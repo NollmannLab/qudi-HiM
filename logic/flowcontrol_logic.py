@@ -201,7 +201,7 @@ class FlowcontrolLogic(GenericLogic):
             pressure = [*pressure.values()]  # retrieve only the values from the dictionary and convert into list
             return pressure
         else:
-            return list(self._daq_logic.get_pressure())
+            return [self._daq_logic.get_pressure()]
 
     def set_pressure(self, pressures, log_entry=True, channels=None):
         """ Set the pressure to the specified channels or all channels. If channels argument is omitted, only a
@@ -260,7 +260,7 @@ class FlowcontrolLogic(GenericLogic):
             pressure_unit = [*pressure_unit.values()]  # retrieve only the values from the dictionary and convert into list
             return pressure_unit
         else:
-            return ''  # add here the corresponding unit if pump is controlled by a daq
+            return ['Volt']  # add here the corresponding unit if pump is controlled by a daq
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Low level methods for flowrate measurement
@@ -369,9 +369,7 @@ class FlowcontrolLogic(GenericLogic):
         :return: None
         """
         flowrate = self.get_flowrate()
-        print('flowrate {:.0f}'.format(flowrate[0]))
         new_pressure = float(self.pid(flowrate[0]))
-        print(f'new_pressure {new_pressure}')
         self.set_pressure(new_pressure, log_entry=False)
 
 # first tests with a simple version where the channels are not specified (we would need signal overloading in the worker thread... to be explored later)
