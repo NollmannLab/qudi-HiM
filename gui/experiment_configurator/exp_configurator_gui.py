@@ -373,6 +373,30 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
 
+        elif experiment == 'Hi-M Airyscan':  # modify to remove the non necessary entries - right now just a copy of Hi-M RAMM
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
+
+            # additional visibility settings
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+
         elif experiment == 'Photobleaching RAMM':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)

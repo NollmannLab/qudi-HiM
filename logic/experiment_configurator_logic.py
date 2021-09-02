@@ -261,6 +261,15 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path', 'dapi_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hi-M Airyscan':
+                if not filename:
+                    filename = 'hi_m_task_airyscan.yml'
+                    keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path',
+                                   'dapi_path']
+                    config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Photobleaching RAMM':
                 if not filename:
                     filename = 'photobleaching_task_RAMM.yml'
