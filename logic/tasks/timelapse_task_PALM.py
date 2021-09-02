@@ -106,6 +106,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # initialize a counter to iterate over the number of cycles to do
         self.counter = 0
+        self.start_time = time.time()
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
@@ -114,13 +115,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if not self.autofocus_ok:
             return False
 
-        start_time = time.time()
+        start_time_cycle = time.time()
 
         # create a save path for the current iteration
         cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+        # self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))  # get the total number of planes
         frames = len(self.roi_names) * num_z_planes_total
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain,
@@ -184,7 +185,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # print(f'start position: {start_position}')
 
                 # prepare the light source output
-                laserline = self.imaging_sequence[i]['laserline']
+                laserline = self.imaging_sequence[i]['lightsource']
                 intensity = self.imaging_sequence[i]['intensity']
                 # reset the intensity dict to zero
                 self.ref['daq'].reset_intensity_dict()
@@ -248,7 +249,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.save_metadata_file(metadata, file_path)
 
         # save roi start times to file
-        roi_start_times = [item - start_time for item in roi_start_times]
+        roi_start_times = [item - self.start_time for item in roi_start_times]
         num = str(self.counter+1).zfill(2)
         file_path = os.path.join(os.path.split(cur_save_path)[0], f'roi_start_times_step_{num}.yml')
         save_roi_start_times_to_file(roi_start_times, file_path)
@@ -262,7 +263,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # waiting time before going to next step
         finish_time = time.time()
-        duration = finish_time - start_time
+        duration = finish_time - start_time_cycle
         wait = self.time_step - duration
         print(f'Finished step in {duration} s. Waiting {wait} s.')
         if wait > 0:
@@ -284,7 +285,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['camera'].reset_camera_after_multichannel_imaging()
-        self.ref['camera'].set_exposure(self.default_exposure)
+        # self.ref['camera'].set_exposure(self.default_exposure)
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()
@@ -326,8 +327,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             num_iterations: 5
             time_step: 120  # in seconds
-            imaging_sequence: [{'laserline': '488 nm', 'intensity': 5}, 'num_z_planes': 10, 'z_step': 0.1, 'filter_pos': 2},
-                               {'laserline': '561 nm', 'intensity': 5}, 'num_z_planes': 12, 'z_step': 0.1, 'filter_pos': 1}]
+            imaging_sequence: [{'lightsource': '488 nm', 'intensity': 5, 'num_z_planes': 10, 'z_step': 0.1, 'filter_pos': 2},
+                               {'lightsource': '561 nm', 'intensity': 5, 'num_z_planes': 12, 'z_step': 0.1, 'filter_pos': 1}]
         """
         try:
             with open(self.user_config_path, 'r') as stream:
@@ -357,7 +358,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # translate the laser lines indicated in user config to required format
         lightsource_dict = {'405 nm': 'laser1', '488 nm': 'laser2', '561 nm': 'laser3', '641 nm': 'laser4'}
         for i in range(len(self.imaging_sequence)):
-            self.imaging_sequence[i]['laserline'] = lightsource_dict[self.imaging_sequence[i]['laserline']]
+            self.imaging_sequence[i]['lightsource'] = lightsource_dict[self.imaging_sequence[i]['lightsource']]
 
     def calculate_start_position(self, centered_focal_plane, num_z_planes, z_step):
         """
