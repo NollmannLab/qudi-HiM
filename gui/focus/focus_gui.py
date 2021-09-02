@@ -151,6 +151,7 @@ class FocusGUI(GUIBase):
         if self._focus_logic._readout == 'camera':
             self._mw.find_offset_PushButton.hide()
             self._mw.offset_lineEdit.hide()
+            self._mw.offset_unit_label.hide()
 
         # initialize the display of the camera
         self.raw_imageitem = pg.ImageItem(axisOrder='row-major')
@@ -402,7 +403,7 @@ class FocusGUI(GUIBase):
         self._mw.calibration_PlotWidget.clear()
         self._mw.calibration_PlotWidget.plot(piezo_position, qpd_signal, symbol='o')
         self._mw.calibration_PlotWidget.plot(piezo_position, fit)
-        self._mw.calibration_PlotWidget.setLabel('bottom', 'piezo position (nm)')
+        self._mw.calibration_PlotWidget.setLabel('bottom', 'piezo position (um)')
         self._mw.calibration_PlotWidget.setLabel('left', 'autofocus signal')
         self._mw.slope_lineEdit.setText("{:.2f}".format(slope))
         self._mw.precision_lineEdit.setText("{:.2f}".format(precision))
