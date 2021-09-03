@@ -246,7 +246,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
             self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
+            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Inject probe
             self.ref['valves'].wait_for_idle()
 
             if self.logging:
