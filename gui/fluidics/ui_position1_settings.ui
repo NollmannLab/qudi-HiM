@@ -17,7 +17,11 @@
    <item>
     <layout class="QGridLayout" name="gridLayout">
      <item row="2" column="1">
-      <widget class="QDoubleSpinBox" name="z_pos_DSpinBox"/>
+      <widget class="QDoubleSpinBox" name="z_pos_DSpinBox">
+       <property name="maximum">
+        <double>100.000000000000000</double>
+       </property>
+      </widget>
      </item>
      <item row="0" column="0">
       <widget class="QLabel" name="label">
@@ -34,7 +38,14 @@
       </widget>
      </item>
      <item row="0" column="1">
-      <widget class="QDoubleSpinBox" name="x_pos_DSpinBox"/>
+      <widget class="QDoubleSpinBox" name="x_pos_DSpinBox">
+       <property name="minimum">
+        <double>-100.000000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>100.000000000000000</double>
+       </property>
+      </widget>
      </item>
      <item row="1" column="0">
       <widget class="QLabel" name="label_2">
@@ -44,7 +55,14 @@
       </widget>
      </item>
      <item row="1" column="1">
-      <widget class="QDoubleSpinBox" name="y_pos_DSpinBox"/>
+      <widget class="QDoubleSpinBox" name="y_pos_DSpinBox">
+       <property name="minimum">
+        <double>-100.000000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>100.000000000000000</double>
+       </property>
+      </widget>
      </item>
      <item row="0" column="2">
       <widget class="QLabel" name="label_4">

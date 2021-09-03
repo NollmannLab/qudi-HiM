@@ -442,6 +442,7 @@ class PositioningLogic(GenericLogic):
 
             else:
                 self.moving = False
+                self._stage.wait_for_idle()
                 new_pos = self.get_position()
                 # self.log.info(new_pos)
 
