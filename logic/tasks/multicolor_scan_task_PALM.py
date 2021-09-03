@@ -1,43 +1,68 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Mar 17 13:46:23 2021
+Qudi-CBS
 
-@author: fbarho
+An extension to Qudi.
 
-This file is an extension to Qudi software
-obtained from <https://github.com/Ulm-IQO/qudi/>
+This module contains a task to perform a multicolor scan on PALM setup.
+(Take at a given position a sequence of images in a stack of planes with different laserlines or intensities.)
 
-Task to perform multicolor z stack imaging
+@author: F. Barho
 
-Config example pour copy-paste:
-    MulticolorScanTask:
-        module: 'multicolor_scan_task_PALM'
-        needsmodules:
-            camera: 'camera_logic'
-            daq: 'daq_ao_logic'
-            filter: 'filterwheel_logic'
-            focus: 'focus_logic'
-        config:
-            path_to_user_config: '/home/barho/qudi-cbs-user-configs/multicolor_scan_task.json'
+Created on Wed Mar 17 2021
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 import yaml
 from datetime import datetime
 import os
 from time import sleep
 from logic.generic_task import InterruptableTask
+from logic.task_helper_functions import get_entry_nested_dict
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task does an acquisition of a series of images from different channels or using different intensities
+    """ This task does an acquisition of a stack of images from different channels or using different intensities.
+
+    Config example pour copy-paste:
+
+    MulticolorScanTask:
+        module: 'multicolor_scan_task_PALM'
+        needsmodules:
+            camera: 'camera_logic'
+            daq: 'lasercontrol_logic'
+            filter: 'filterwheel_logic'
+            focus: 'focus_logic'
+        config:
+            path_to_user_config: 'C:/Users/admin/qudi_files/qudi_task_config_files/multicolor_scan_task_PALM.yml'
     """
-    # ===============================================================================================================
+    # ==================================================================================================================
     # Generic Task methods
-    # ===============================================================================================================
+    # ==================================================================================================================
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
+        self.err_count = None
+        self.laser_allowed = False
+        self.user_param_dict = {}
 
     def startTask(self):
         """ """
@@ -52,6 +77,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['daq'].disable_laser_actions()
 
         self.ref['filter'].disable_filter_actions()
+
+        self.ref['focus'].stop_autofocus()
+        self.ref['focus'].disable_focus_actions()
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -72,13 +100,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             sleep(1)
             pos = self.ref['filter'].get_position()
 
-        # initialize the digital output channel for trigger
-        self.ref['daq'].set_up_do_channel()
-        
-        # initialize the analog input channel that reads the fire
-        self.ref['daq'].set_up_ai_channel()
-
         # prepare the camera
+        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
         frames = len(self.imaging_sequence) * self.num_frames * self.num_z_planes  # self.num_frames = 1 typically, but keep as an option 
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
 
@@ -87,27 +110,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        @return bool: True if the task should continue running, False if it should finish.
+        :return bool: True if the task should continue running, False if it should finish.
         """
         if not self.laser_allowed:
             return False  # skip runTaskStep and directly go to cleanupTask
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # position the piezo
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         self.step_counter += 1
         print(f'plane number {self.step_counter}')
 
         position = self.start_position + (self.step_counter - 1) * self.z_step
         self.ref['focus'].go_to_position(position)
-        print(f'target position: {position} um')
-        sleep(0.03)  # how long is the stabilisation time for Pifoc ?
-        cur_pos = self.ref['focus'].get_position()
-        print(f'current position: {cur_pos} um')
+        # print(f'target position: {position} um')
+        sleep(0.03)  # stabilization time
+        # cur_pos = self.ref['focus'].get_position()
+        # print(f'current position: {cur_pos} um')
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # imaging sequence (image data is spooled to disk)
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # outer loop over the number of frames per color
         for j in range(self.num_frames):  # per default only one frame per plane per color but keep it as an option 
 
@@ -126,11 +149,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 err = self.ref['daq'].send_trigger_and_control_ai()  
             
                 # read fire signal of camera and switch off when the signal is low
-                ai_read = self.ref['daq'].read_ai_channel()
+                ai_read = self.ref['daq'].read_trigger_ai_channel()
                 count = 0
                 while not ai_read <= 2.5:  # analog input varies between 0 and 5 V. use max/2 to check if signal is low
                     sleep(0.001)  # read every ms
-                    ai_read = self.ref['daq'].read_ai_channel()
+                    ai_read = self.ref['daq'].read_trigger_ai_channel()
                     count += 1  # can be used for control and debug
                 self.ref['daq'].voltage_off()
                 # self.log.debug(f'iterations of read analog in - while loop: {count}')
@@ -164,42 +187,42 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['camera'].reset_camera_after_multichannel_imaging()
+        # self.ref['camera'].set_exposure(self.default_exposure)
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()
-        self.ref['daq'].close_do_task()
-        self.ref['daq'].close_ai_task()
 
         # save metadata if task has not been aborted during acquisition
         if self.step_counter == self.num_z_planes:
             if self.file_format == 'fits':
                 metadata = self.get_fits_metadata()
-                self.ref['camera']._add_fits_header(self.complete_path, metadata)
+                self.ref['camera'].add_fits_header(self.complete_path, metadata)
             else:  # save metadata in a txt file
                 metadata = self.get_metadata()
-                file_path = self.complete_path.replace('tiff', 'txt', 1)
+                file_path = self.complete_path.replace('tif', 'txt', 1)
                 self.save_metadata_file(metadata, file_path)
 
         # enable gui actions
         self.ref['camera'].enable_camera_actions()
         self.ref['daq'].enable_laser_actions()
         self.ref['filter'].enable_filter_actions()
+        self.ref['focus'].enable_focus_actions()
 
         self.log.debug(f'number of missed triggers: {self.err_count}')
         self.log.info('cleanupTask finished')
 
-    # ===============================================================================================================
+    # ==================================================================================================================
     # Helper functions
-    # ===============================================================================================================
+    # ==================================================================================================================
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # user parameters
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def load_user_parameters(self):
-        """ this function is called from startTask() to load the parameters given in a specified format by the user
+        """ This function is called from startTask() to load the parameters given by the user in a specific format.
 
-        specify only the path to the user defined config in the (global) config of the experimental setup
+        Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
             sample_name: 'Mysample'
@@ -211,7 +234,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             z_step: 0.25  # in um
             centered_focal_plane: False
             save_path: 'E:\'
-            file_format: 'tiff'
+            file_format: 'tif'
             imaging_sequence = [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
         """
         try:
@@ -250,6 +273,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
 
     def control_user_parameters(self):
+        """ This method checks if the laser lines that will be used are compatible with the chosen filter.
+        :return bool: lasers_allowed
+        """
         # use the filter position to create the key # simpler than using get_entry_netsted_dict method
         key = 'filter{}'.format(self.filter_pos)
         bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']  # list of booleans, laser allowed ? such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
@@ -267,7 +293,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         
     def calculate_start_position(self, centered_focal_plane):
         """
-        @param bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True) or if the focal plane is the bottommost plane in the scan (False)
+        This method calculates the piezo position at which the z stack will start. It can either start in the
+        current plane or calculate an offset so that the current plane will be centered inside the stack.
+
+        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
+                                            or if the focal plane is the bottommost plane in the scan (False)
+
+        :return: float piezo start position
         """
         current_pos = self.ref['focus'].get_position()  # lets assume that we are at focus (user has set focus or run autofocus)
         self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
@@ -283,13 +315,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         else:
             return current_pos  # the scan starts at the current position and moves up
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # file path handling
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def get_complete_path(self, path_stem):
         """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tiff
+        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
         or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
 
         :param: str path_stem such as E:/
@@ -326,12 +358,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         complete_path = os.path.join(path, file_name)
         return complete_path
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # metadata
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text compatible format. """
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['Time'] = datetime.now().strftime(
             '%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ??? # then add a variable to startTask
@@ -355,7 +390,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format. """
+        """ Get a dictionary containing the metadata in a fits header compatible format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['TIME'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
         metadata['SAMPLE'] = (self.sample_name, 'sample name')
@@ -377,7 +415,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def save_metadata_file(self, metadata, path):
-        """" Save a txt file containing the metadata dictionary
+        """ Save a txt file containing the metadata dictionary
 
         :param dict metadata: dictionary containing the metadata
         :param str path: pathname
@@ -385,27 +423,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-
-
-
-def get_entry_nested_dict(nested_dict, val, entry):
-    """ helper function that searches for 'val' as value in a nested dictionary and returns the corresponding value in the category 'entry'
-    example: search in laser_dict (nested_dict) for the label (entry) corresponding to a given wavelength (val)
-    search in filter_dict (nested_dict) for the label (entry) corresponding to a given filter position (val)
-
-    @param: dict nested dict
-    @param: val: any data type, value that is searched for in the dictionary
-    @param: str entry: key in the inner dictionary whose value needs to be accessed
-
-    note that this function is not the typical way how dictionaries should be used. due to the unambiguity in the dictionaries used here,
-    it can however be useful to try to find a key given a value.
-    Hence, in practical cases, the return value 'list' will consist of a single element only. """
-    entrylist = []
-    for outer_key in nested_dict:
-        item = [nested_dict[outer_key][entry] for inner_key, value in nested_dict[outer_key].items() if val == value]
-        if item != []:
-            entrylist.append(*item)
-    return entrylist
-
-

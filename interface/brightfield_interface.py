@@ -37,6 +37,8 @@ class BrightfieldInterface(metaclass=InterfaceMetaclass):
 
     @abstract_interface_method
     def led_control(self, intensity):
-        """
+        """ Set the intensity of the LED to the value intensity (in percent of max. intensity).
+        :param: int intensity: percentage of maximum intensity to be applied to the LED
+        :return: None
         """
         pass

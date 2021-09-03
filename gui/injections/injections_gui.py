@@ -83,8 +83,9 @@ class InjectionsGUI(GUIBase):
     sigSaveInjections = QtCore.Signal(str)
 
     def __init__(self, config, **kwargs):
-        # load connection
         super().__init__(config=config, **kwargs)
+        self._injections_logic = None
+        self._mw = None
 
     def on_activate(self):
         """ Required initialization steps.
@@ -307,8 +308,8 @@ class InjectionsGUI(GUIBase):
         over to the logic where the data is loaded.
         """
         data_directory = self.default_path  # default location to look for the file
-        this_file = QtWidgets.QFileDialog.getOpenFileName(self._mw, 'Load injections', data_directory, 'yaml files ('
-                                                                                                       '*.yaml)')[0]
+        this_file = QtWidgets.QFileDialog.getOpenFileName(self._mw, 'Load injections', data_directory, 'yml files ('
+                                                                                                       '*.yml)')[0]
         if this_file:
             self.sigLoadInjections.emit(this_file)
 
@@ -319,7 +320,7 @@ class InjectionsGUI(GUIBase):
         this_file = QtWidgets.QFileDialog.getSaveFileName(self._mw,
                                                           'Save injection sequence',
                                                           data_directory,
-                                                          'yaml files (*.yaml)')[0]
+                                                          'yml files (*.yml)')[0]
         if this_file:
             self.sigSaveInjections.emit(this_file)
 

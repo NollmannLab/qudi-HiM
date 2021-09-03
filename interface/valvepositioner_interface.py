@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
-
 """
-This file contains the Qudi Interface file to control Hamilton valves daisychain.
+Qudi-CBS
+
+This module contains the interface for the control of a modular valve positioner.
+
+An extension to Qudi.
+
+@author: JB. Fiche, F. Barho
+-----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,51 +24,56 @@ along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
 Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
-
 from core.interface import abstract_interface_method
 from core.meta import InterfaceMetaclass
 
 
-class ValveInterface(metaclass=InterfaceMetaclass):
+class ValvePositionerInterface(metaclass=InterfaceMetaclass):
     """
+    This module contains the interface for the control of a valve positioner.
     """
+
     @abstract_interface_method
     def get_valve_dict(self):
-        """ Retrieves a dictionary with the following entries:
+        """ This method retrieves a dictionary with the following entries, containing relevant information for each
+        valve positioner in a daisychain:
                     {'a': {'daisychain_ID': 'a', 'name': str name, 'number_outputs': int number_outputs},
                     {'b': {'daisychain_ID': 'b', 'name': str name, 'number_outputs': int number_outputs},
                     ...
                     }
 
-        @returns: valve_dict
+        :return: dict valve_dict: dictionary following the example shown above
         """
         pass
 
     @abstract_interface_method
     def get_status(self):
-        """ Read the valve status and return it.
+        """ This method reads the valve status and returns it.
 
-        @return dict: containing the valve ID as key and the str status code as value (N=not executed - Y=idle - *=busy)
+        :return: dict: containing the valve ID as key and the str status code as value (N=not executed - Y=idle - *=busy)
         """
         pass
 
     @abstract_interface_method
     def get_valve_position(self, valve_address):
-        """ Gets current position of the valve positioner
+        """ This method gets the current position of the valve positioner.
 
-        @param str valve_address: ID of the valve
+        :param: str valve_address: ID of the valve positioner
 
-        @return int position: position of the valve specified by valve_address
+        :return: int position: position of the valve positioner specified by valve_address
         """
         pass
 
     @abstract_interface_method
     def set_valve_position(self, valve_address, target_position):
-        """ Sets the valve position for the valve specified by valve_address.
+        """ This method sets the valve position for the valve specified by valve_address.
 
-        @param str: valve address (eg. "a")
-               int: target_position
+        :param: str valve address: ID of the valve positioner (eg. "a")
+        :param: int target_position: new position for the valve at valve_address
+
+        :return: None
         """
         pass
 
@@ -71,7 +82,7 @@ class ValveInterface(metaclass=InterfaceMetaclass):
         """ Wait for the valves to be idle. This is important when one wants to
         read the position of a valve or make sure the valves are not moving before
         starting an injection.
+
+        :return: None
         """
         pass
-
-

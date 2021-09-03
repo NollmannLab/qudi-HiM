@@ -1,35 +1,42 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Nov 16 13:46:16 2020
+Qudi-CBS
 
-@author: fbarho
+This module contains a class representing a Hamilton modular valve positioner (MVP).
 
+An extension to Qudi.
 
-This file contains the class for the Hamilton modular valve positioner (MVP)
+@author: JB. Fiche
 
-based on file valve.py
-Created on Thu Jul 16 16:21:53 2020 
-@author: aymerick
-converting it to qudi style
+Created on Mon Nov 16 2020
+-----------------------------------------------------------------------------------
 
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-Questions pour Franziska : 
-    - pas de try pour l'initializaton. Comment on teste que l'appareil est proprement connecté?
-    - on_deactivate : return 0? Why?
-    - for the moment no time out for the wait for idle -> should add one.
-    - 
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
-
 import serial
 from time import sleep
 
 from core.module import Base
-from interface.valvepositioner_interface import ValveInterface
+from interface.valvepositioner_interface import ValvePositionerInterface
 from core.configoption import ConfigOption
 
 
-class HamiltonValve(Base, ValveInterface):
+class HamiltonValve(Base, ValvePositionerInterface):
     """ Class representing the Hamilton MVP
     
     Example config for copy-paste:
@@ -44,8 +51,8 @@ class HamiltonValve(Base, ValveInterface):
             - 'c'
         name:
             - 'Buffer 8-way valve'
-            - 'Syringe 2-way valve'
             - 'RT rinsing 2-way valve'
+            - 'Syringe 2-way valve'
         number_outputs:
             - 8
             - 2
@@ -67,28 +74,29 @@ class HamiltonValve(Base, ValveInterface):
     # please specify for all elements corresponding information in the same order,
     # starting from the first valve in the daisychain (valve 'a')
     """
-    
-
-#   _com_port = "/dev/ttyS0"   # ConfigOption("com_port", missing="error")
+    # config options
     _com_port = ConfigOption("com_port", missing="error")
-    # print(_com_port)
-
     _num_valves = ConfigOption('num_valves', missing='warn')
     _valve_names = ConfigOption('name', missing='warn')
     _daisychain_IDs = ConfigOption('daisychain_ID', missing='warn')
     _number_outputs = ConfigOption('number_outputs', missing='warn')
-    _valve_positions = ConfigOption('valve_positions', [])  # optional; if labels instead of only valve numbers on the GUI are needed
+    valve_positions = ConfigOption('valve_positions', [])  # optional; if labels instead of only valve numbers on the GUI are desired
 
     _valve_state = {}  # dictionary holding the valve names as keys and their status as values # {'a': status_valve1, ..}
     
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self._serial_connection = None
 
     def on_activate(self):
-        """ Initialization: open the serial port
+        """ Initialization: open the serial port.
         """
-        self._serial_connection = serial.Serial(self._com_port, baudrate=9600, bytesize=serial.SEVENBITS, parity=serial.PARITY_ODD, stopbits=serial.STOPBITS_ONE)
-        sleep(2)  # keep 2 s time delay to ensure that communication has been established
+        try:
+            self._serial_connection = serial.Serial(self._com_port, baudrate=9600, bytesize=serial.SEVENBITS, parity=serial.PARITY_ODD, stopbits=serial.STOPBITS_ONE, timeout=1.0)
+            sleep(2)  # keep 2 s time delay to ensure that communication has been established
+        except serial.SerialException:
+            self.log.error(f'Hamilton MVP not connected. Check if device is switched on.')
+            return
         
         # initialization of the daisy chain
         cmd = "1a\r"
@@ -109,14 +117,19 @@ class HamiltonValve(Base, ValveInterface):
         """
         self._serial_connection.close()
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Valvepositioner interface functions
+# ----------------------------------------------------------------------------------------------------------------------
+
     def get_valve_dict(self):
-        """ Retrieves a dictionary with the following entries:
+        """ This method retrieves a dictionary with the following entries, containing relevant information for each
+        valve positioner in a daisychain:
                     {'a': {'daisychain_ID': 'a', 'name': str name, 'number_outputs': int number_outputs},
                     {'b': {'daisychain_ID': 'b', 'name': str name, 'number_outputs': int number_outputs},
                     ...
                     }
 
-        @returns: valve_dict
+        :return: dict valve_dict: dictionary following the example shown above
         """
         valve_dict = {}
 
@@ -132,9 +145,9 @@ class HamiltonValve(Base, ValveInterface):
         return valve_dict
     
     def get_status(self):
-        """ Read the valve status and return it. 
+        """ This method reads the valve status and returns it.
 
-        @return dict: containing the valve ID as key and the str status code as value (N=not executed - Y=idle - *=busy)
+        :return: dict: containing the valve ID as key and the str status code as value (N=not executed - Y=idle - *=busy)
         """
         for n in range(self._num_valves):
             cmd = chr(n+97) + "F\r"
@@ -145,10 +158,11 @@ class HamiltonValve(Base, ValveInterface):
         return self._valve_state
 
     def get_valve_position(self, valve_address):
-        """ Read the valve position using a specific address.
-        
-        @param str valve_address: (eg. "a")
-        @return int position: position of the selected valve
+        """ This method gets the current position of the valve positioner.
+
+        :param: str valve_address: ID of the valve positioner
+
+        :return: int position: position of the valve positioner specified by valve_address
         """
         if valve_address in self._daisychain_IDs:
             cmd = valve_address + "LQP\r"
@@ -158,31 +172,35 @@ class HamiltonValve(Base, ValveInterface):
         else:
             self.log.warn(f'Valve {valve_address} not available.')
 
-    def set_valve_position(self, valve_address, end_pos):
-        """ Set the valve position using a specific adress. 
-        
-        @param str valve_address: eg. "a"
-        @param int end_pos: new position
+    def set_valve_position(self, valve_address, target_position):
+        """ This method sets the valve position for the valve specified by valve_address.
+
+        :param: str valve address: ID of the valve positioner (eg. "a")
+        :param: int target_position: new position for the valve at valve_address
+
+        :return: None
         """
         if valve_address in self._daisychain_IDs:
             start_pos = self.get_valve_position(valve_address)
             max_pos = self.get_valve_dict()[valve_address]['number_outputs']
-            if end_pos > max_pos:
+            if target_position > max_pos:
                 self.log.warn(f'Target position out of range for valve {valve_address}. Position not set.')
             else:
-                if (start_pos > end_pos and abs(end_pos - start_pos) < max_pos/2) or (start_pos < end_pos and abs(end_pos-start_pos) > max_pos/2):
-                    cmd = valve_address + "LP1" + str(end_pos) + "R\r"
+                if (start_pos > target_position and abs(target_position - start_pos) < max_pos/2) or (start_pos < target_position and abs(target_position-start_pos) > max_pos/2):
+                    cmd = valve_address + "LP1" + str(target_position) + "R\r"
                 else:
-                    cmd = valve_address + "LP0" + str(end_pos) + "R\r"
+                    cmd = valve_address + "LP0" + str(target_position) + "R\r"
                 self.write(cmd)
-                self.log.info(f'Set {self.get_valve_dict()[valve_address]["name"]} to position {end_pos}')
+                self.log.info(f'Set {self.get_valve_dict()[valve_address]["name"]} to position {target_position}')
         else:
             self.log.warn(f'Valve {valve_address} not available.')
 
     def wait_for_idle(self):
-        """ Wait for the valves to be idle. This is important when one wants to 
-        read the position of a valve or make sure the valve are not moving before
+        """ Wait for the valves to be idle. This is important when one wants to
+        read the position of a valve or make sure the valves are not moving before
         starting an injection.
+
+        :return: None
         """
         self.get_status()
         for n in range(self._num_valves):
@@ -192,10 +210,14 @@ class HamiltonValve(Base, ValveInterface):
 
                 # this waits on valve 'a' until idle before moving to the next one
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------------------------------------------------------
+
     def write(self, command):
         """ Clears the input buffer and writes an utf-8 encoded command to the serial port 
         
-        @ param str: command: message to send to the serial port
+        :param: str command: message to send to the serial port
         """
         self._serial_connection.flushInput()
         self._serial_connection.write(command.encode())
@@ -204,11 +226,13 @@ class HamiltonValve(Base, ValveInterface):
         """ Read the buffer of the valve. The first line does not contain relevant
         information. Only the second line is useful.
 
-        @returns str output: read from the valve buffer
+        :return: str output: text read from the valve buffer
         """
         self._serial_connection.read()
         output = self._serial_connection.read()
         output = output.decode('utf-8')
         # output = self._serial_connection.read().decode('utf-8')
-        # print(output)
         return output
+
+# To do: for the moment no time out for the wait for idle -> should add one.
+# add try except in on_activate

@@ -492,11 +492,11 @@ class HamamatsuCamera(object):
         paramtransfer.size = ctypes.sizeof(paramtransfer)
         self.checkStatus(self.dcam.dcamcap_transferinfo(self.camera_handle, ctypes.byref(paramtransfer)), "dcamcap_transferinfo")
         cur_buffer_index = paramtransfer.nNewestFrameIndex  # index of the newest frame
-        print(f'newest frame index: {cur_buffer_index}')
+        # print(f'newest frame index: {cur_buffer_index}')
 
         # copy the data at this index
         paramlock = DCAMBUF_FRAME(0, 0, 0, cur_buffer_index, None, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        print(paramlock)
+        # print(paramlock)
         paramlock.size = ctypes.sizeof(paramlock)
 
         # Lock the frame in the camera buffer & get address.

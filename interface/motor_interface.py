@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-
 """
+Qudi-CBS
+
 This file contains the Qudi Interface file to control motorized stages.
+
+This module was available in Qudi original version and was extended.
+
+-----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +24,6 @@ along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
-
 from core.interface import abstract_interface_method
 from core.meta import InterfaceMetaclass
 
@@ -35,7 +39,7 @@ class MotorInterface(metaclass=InterfaceMetaclass):
     def get_constraints(self):
         """ Retrieve the hardware constrains from the motor device.
 
-        @return dict: dict with constraints for the magnet hardware. These
+        @return dict: dict with constraints for the motor hardware. These
                       constraints will be passed via the logic to the GUI so
                       that proper display elements with boundary conditions
                       could be made.
@@ -165,7 +169,7 @@ class MotorInterface(metaclass=InterfaceMetaclass):
     def calibrate(self, param_list=None):
         """ Calibrates the stage.
 
-        @param dict param_list: param_list: optional, if a specific calibration
+        @param list param_list: param_list: optional, if a specific calibration
                                 of an axis is desired, then the labels of the
                                 needed axis should be passed in the param_list.
                                 If nothing is passed, then all connected axis
@@ -183,7 +187,7 @@ class MotorInterface(metaclass=InterfaceMetaclass):
     def get_velocity(self, param_list=None):
         """ Gets the current velocity for all connected axes.
 
-        @param dict param_list: optional, if a specific velocity of an axis
+        @param list param_list: optional, if a specific velocity of an axis
                                 is desired, then the labels of the needed
                                 axis should be passed as the param_list.
                                 If nothing is passed, then from each axis the
@@ -204,5 +208,12 @@ class MotorInterface(metaclass=InterfaceMetaclass):
                                  to one of the axis.
 
         @return int: error code (0:OK, -1:error)
+        """
+        pass
+
+    @abstract_interface_method
+    def wait_for_idle(self):
+        """ Wait until a motorized stage is in idle state.
+        @return None
         """
         pass

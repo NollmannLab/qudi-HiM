@@ -1,15 +1,34 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Oct 26 14:33:09 2020
+Qudi-CBS
 
-@author: barho
+This file contains a class for the ASI MS2000 translation stage.
 
-This file contains a class for the ASI MS2000 translation stage. 
+An extension to Qudi.
 
-It is an extension to the hardware code base of Qudi software 
-obtained from <https://github.com/Ulm-IQO/qudi/> 
+@author: F. Barho
+
+Created on Mon Oct 26 2020
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
-
+import numpy as np
 import serial
 from time import sleep, time
 
@@ -19,8 +38,12 @@ from interface.brightfield_interface import BrightfieldInterface
 from core.configoption import ConfigOption
 
 
+# ======================================================================================================================
+# Hardware class
+# ======================================================================================================================
+
 class MS2000(Base, MotorInterface, BrightfieldInterface):
-    """ Class representing the ASI MS 2000 xy translation stage.
+    """ Class representing the ASI MS 2000 xy or xyz translation stage.
     
     Example config for copy-paste:
         
@@ -32,37 +55,35 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         third_axis_label: 'z'
         LED connected: False
     """
-
+    # config options
     _com_port = ConfigOption("com_port", missing="error")
     _baud_rate = ConfigOption("baud_rate", 9600, missing="warn")
 
     _first_axis_label = ConfigOption("first_axis_label", "x", missing="warn")
     _second_axis_label = ConfigOption("second_axis_label", "y", missing="warn")
     _third_axis_label = ConfigOption("third_axis_label", None)  # default case is intended for 2 axes stage, for 3 axes specify in config
-   
-    _conversion_factor = 10.0  # user will send positions in um, stage uses 0.1 um
-    axis_list = None
 
     _has_led = ConfigOption("LED connected", False, missing="warn")
+
+    # attributes
+    _conversion_factor = 10.0  # user will send positions in um, stage uses 0.1 um
+    axis_list = None
+    _serial_connection = None
+    _timeout = 15
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
 
     def on_activate(self):
-        """ Initialization: opening serial port and setting internal attributes
-        
-        @returns int: error code (ok: O)
+        """ Initialization: opening serial port and setting internal attributes.
         """
         try:
             self._serial_connection = serial.Serial(
                 self._com_port, baudrate=self._baud_rate, bytesize=8, parity="N", stopbits=1, xonxoff=True
             )
 
-            # add here the setting of private attributes
-            self._timeout = 15
-
             # create a list as iterator for methods that need a specified axis to apply to
-            axis_list = [self._first_axis_label, self._second_axis_label, self._third_axis_label]  # this serves only as local iterator
+            axis_list = [self._first_axis_label, self._second_axis_label, self._third_axis_label]
             self.axis_list = []
             for item in axis_list:
                 if isinstance(item, str):
@@ -86,140 +107,208 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
             if t1 > 5:
                 break
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Motor interface functions
+# ----------------------------------------------------------------------------------------------------------------------
+
     def get_constraints(self):
-        pass
+        """ Retrieve the hardware constrains from the motor device.
+        ASI Stage has no fixed pos_min and pos_max due to variable home position.
+
+        :return dict constraints
+        """
+        constraints = {}
+
+        axis0 = {}
+        axis0['label'] = self._first_axis_label
+        axis0['unit'] = '0.1 um'
+        axis0['vel_min'] = 0
+        axis0['vel_max'] = 7.5  # check in hardware manual
+
+        axis1 = {}
+        axis1['label'] = self._second_axis_label
+        axis1['unit'] = '0.1 um'
+        axis1['vel_min'] = 0
+        axis1['vel_max'] = 7.5  # check in hardware manual
+
+        constraints[axis0['label']] = axis0
+        constraints[axis1['label']] = axis1
+
+        # handle 3 axes case:
+        if self._third_axis_label:
+            axis2 = {}
+            axis2['label'] = self._third_axis_label
+            axis2['unit'] = '0.1 um'
+            axis2['vel_min'] = 0
+            axis2['vel_max'] = 1.9  # check in hardware manual
+
+            constraints[axis2['label']] = axis2
+
+        return constraints
 
     def move_rel(self, param_dict):
-        """ Moves the stage in the given direction relative to the current position.
-        
-        @ param dict param_dict: Dictionary with axis name and relative movement in units of µm
-        
-        @ returns dict pos: Dictionary with the axis name and the current position in µm
-        
-        """
-        pos = {} 
+        """ Moves stage in given direction (relative movement).
 
+        :param dict param_dict: Dictionary with axis name and step (in um units) as key - value pairs
+
+        :return bool: error code (True: ok, False: not ok)
+        """
+        err = False
         try:
             for axis_label in param_dict:
                 if (
                     axis_label in self.axis_list
                 ):  # to ensure that only configured axes are taken into account in case param_dict indicates other axes
-                    step = param_dict[axis_label] * self._conversion_factor
+                    step = np.round(param_dict[axis_label] * self._conversion_factor, decimals=4)  # avoid error due to decimal overflow
                     cmd = f"R {axis_label}={step}\r"
                     self.write(cmd)
-                    # eventually: add here read_error function to be implemented
-                    self.wait_for_idle()  # this timer is necessary to correctly handle write followed by query method. otherwise the serial port is still busy. replace eventually by wait_for_idle method to be implemented
-                    # see get_pos method. it cannot be called directly because we would again iterate over the axis_list.
-                    cmd = f"W {axis_label}\r"
-                    pos[axis_label] = (
-                        float(self.query(cmd)[3:]) / self._conversion_factor
-                    )  # [3:] -> remove the leading 'A: '
-
+                    err = True
                 else:
                     self.log.warn(f"axis {axis_label} is not configured")
-        except:
-            self.log.error("relative movement of ASI MS2000 translation stage is not possible")
-            pos = {}
+        except Exception:
+            self.log.error("Relative movement of ASI MS2000 translation stage is not possible.")
             
-        return pos
-        # pos contains only the axes that were moved. Should the others also be returned ?
+        return err
 
     def move_abs(self, param_dict):
-        """ Moves the stage to the given position.
-        
-        @ param dict param_dict: Dictionary with axis name and absolute position in units of µm
-        
-        @ returns dict pos: Dictionary with axis name and current position in µm
-        
-        """
-        pos = {}
+        """ Moves stage to absolute position (absolute movement).
 
+        :param dict param_dict: Dictionary with axis name and target position (in um units) as key - value pairs
+
+        :return bool: error code (True: ok, False: error)
+        """
+        err = False
         try:
             for axis_label in param_dict:
                 if (
                     axis_label in self.axis_list
                 ):  # to ensure that only configured axes are taken into account in case param_dict indicates other axes
-                    new_pos = param_dict[axis_label] * self._conversion_factor
+                    new_pos = np.round(param_dict[axis_label] * self._conversion_factor, decimals=4)  # avoid error due to decimal overflow
                     cmd = f"M {axis_label}={new_pos}\r"
                     self.write(cmd)
-                    # eventually: add here read_error function to be implemented
-                    self.wait_for_idle()  # this timer is necessary to correctly handle write followed by query method. otherwise the serial port is still busy. replace eventually by wait_for_idle method to be implemented
-                    # see get_pos method. it cannot be called directly because we would again iterate over the axis_list.
-                    cmd = f"W {axis_label}\r"
-                    pos[axis_label] = (
-                        float(self.query(cmd)[3:]) / self._conversion_factor
-                    )  # [3:] -> remove the leading 'A: '
-
+                    err = True
                 else:
                     self.log.warn(f"axis {axis_label} is not configured")
 
-        except:
-            self.log.error("relative movement of ASI MS2000 translation stage is not possible")
-            pos = {}
+        except Exception:
+            self.log.error("Absolute movement of ASI MS2000 translation stage is not possible")
 
-        return pos
+        return err
 
     def abort(self):
-        """ Stops all active motors, stops a movement of the stage if ongoing. 
-        
+        """ Stops movement of the stage.
+
         Attention, the (following) command N+1 is not performed! The N+2 command is again performed.
         new tests on RAMM: following command is perfomed normally ..
-        
-        @ returns: error code (ok: 0)
+
+        :return bool: error code (True: ok, False: error)
         """
         cmd = "\\r"
         self.write(cmd)
         # self._serial_connection.flush() # tried this, also flushInput(), to enable command N+1. does not work.... to be improved
-        return 0
+        return True
 
-    def get_pos(self):
-        """ Gets current position of the translation stage.
-        
-        @ returns: dict pos: Dictionary with axis name and current position of the translation stage
+    def get_pos(self, param_list=None):
+        """ Gets current position of the stage.
+
+        :param list param_list: optional, if a specific position of an axis
+                                is desired, then the labels of the needed
+                                axis should be passed in the param_list.
+                                If nothing is passed, then from each axis the
+                                position is asked.
+
+        :return dict pos: Dictionary with axis name and current position of the translation stage
         """
         pos = {}
 
-        for (
-            axis_label
-        ) in self.axis_list:  # this list is generated above to generalize more easily in case that more axes are added
-            cmd = f"W {axis_label}\r"
-            pos[axis_label] = float(self.query(cmd)[3:]) / self._conversion_factor  # [3:] -> remove the leading 'A: '
+        if not param_list:  # get all axes
+            for axis_label in self.axis_list:  # this list is generated above to generalize more easily in case that more axes are added
+                cmd = f"W {axis_label}\r"
+                pos[axis_label] = float(self.query(cmd)[3:]) / self._conversion_factor  # [3:] -> remove the leading 'A: '
+
+        else:
+            for item in param_list:
+                if item in self.axis_list:
+                    cmd = f"W {item}\r"
+                    pos[item] = float(self.query(cmd)[3:]) / self._conversion_factor
+                else:
+                    self.log.warn(f'Specified axis not available: {item}')
 
         return pos
 
-    def get_status(self):
-        """ Queries if any motors are still busy moving following a serial command. 
-        
-        @ returns: str status: 'N' if no motors running, 'B' if busy
+    def get_status(self, param_list=None):
+        """ Queries if any motors are still busy moving following a serial command.
+
+        :param list param_list: optional, if a specific status of an axis
+                                is desired, then the labels of the needed
+                                axis should be passed in the param_list.
+                                If nothing is passed, then from each axis the
+                                status is asked.
+                                Not used here because all axes are treated as a unity for ASI stage.
+
+        # :return dict: with the axis label as key and the status number as item.  (usual return type)
+        :return: str status: 'N' if no motors runningm 'B' if busy
         """
         cmd = "/ \r"
         status = self.query(cmd)
         return status
 
-    def calibrate(self):
+    def calibrate(self, param_list=None):
         # to be defined what should be done here: AALIGN, ZEROING, HOMING ?
-        """ Performs self-calibration of the axis motor drive circuit. 
-        
-        @ returns error code (ok: 0)
-        """
-        # iterate over axes, for generalization. other option is to hardcode 'AA X Y \r' when always the two axes are used
-        for axis_label in self.axis_list:
-            cmd = f"AA {axis_label} \r"
-            self.write(cmd)
-        return 0
+        """ Performs self-calibration of the axis motor drive circuit.
 
-    def get_velocity(self):
-        """ Gets the current velocity of the translation stage (for the specified axis).
+        :param: list param_list: param_list: optional, if a specific calibration
+                        of an axis is desired, then the labels of the
+                        needed axis should be passed in the param_list.
+                        If nothing is passed, then all connected axis
+                        will be calibrated.
         
-        @ returns dict velo: Dictionary with axis name and current velocity of the specified axis. 
+        :return: int: error code (0:OK, -1:error)
+        """
+        err = -1
+        if not param_list:
+            for axis_label in self.axis_list:
+                cmd = f"AA {axis_label}\r"
+                self.write(cmd)
+                err = 0
+
+        else:
+            for item in param_list:
+                if item in self.axis_list:
+                    cmd = f"AA {item}\r"
+                    self.write(cmd)
+                    err = 0
+                else:
+                    self.log.warn(f'Specified axis not available: {item}')
+        return err
+
+    def get_velocity(self, param_list=None):
+        """ Gets the current velocity of the translation stage for the specified axes or all axes.
+
+        :param list param_list: optional, if a specific velocity of an axis
+                                is desired, then the labels of the needed
+                                axis should be passed as the param_list.
+                                If nothing is passed, then from each axis the
+                                velocity is asked.
+
+        :return dict: Dictionary with axis name and current velocity of the specified axis.
         """
         velo = {}
 
-        for axis_label in self.axis_list:
-            cmd = f"S {axis_label}?\r"
-            velo[axis_label] = float(
-                self.query(cmd)[5:]
-            )  # format from query ':A X=5.745920', remove leading X= and convert to float
+        if not param_list:
+            for axis_label in self.axis_list:
+                cmd = f"S {axis_label}?\r"
+                velo[axis_label] = float(
+                    self.query(cmd)[5:]
+                )  # format from query ':A X=5.745920', remove leading X= and convert to float
+
+        else:
+            for item in param_list:
+                if item in self.axis_list:
+                    cmd = f"S {item}?\r"
+                    velo[item] = float(self.query(cmd)[5:])
+                else:
+                    self.log.warn(f'Specified axis not available: {item}')
 
         return velo
 
@@ -227,11 +316,11 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         """ Sets the velocity at which the stage moves. 
         Velocity is set in millimeters per second. Maximum speed is 7.5 mm/s for standard 6.5 mm pitch leadscrews.
         
-        @ param dict param_dict: Dictionary with axis name and target velocity in mm/s
+        :param dict param_dict: Dictionary with axis name and target velocity in mm/s
         
-        @ returns dict: velo: Dictionary with axis name and current velocity in mm/s 
+        :return int: error code (0:OK, -1:error)
         """
-        velo = {}
+        err = -1
 
         try:
             for axis_label in param_dict:
@@ -239,26 +328,18 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
                     new_velo = param_dict[axis_label]
                     cmd = f"S {axis_label}={new_velo}\r"
                     self.write(cmd)
-                    self.wait_for_idle()  # this timer is necessary to correctly handle write followed by query methods. otherwise the serial port is still busy. replace eventually by wait_for_idle method to be implemented
-                    cmd = f"S {axis_label}?\r"
-                    velo[axis_label] = float(self.query(cmd)[5:])
-
+                    err = 0
                 else:
                     self.log.warn("specified axis {axis_label} not available")
-
-        except:
+        except Exception:
             self.log.error("could not set new velocity")
-            velo = {}
 
-        return velo
+        return err
 
-    ##################
-
-    # other custom functions not defined in the MotorInterface
     def wait_for_idle(self):
-        """ Checks every 1 s until timeout if a motor is running from a serial command 'B' or not 'N'
-        
-        @ returns None
+        """ Wait until a motorized stage is in idle state.
+        Checks every 1 s until timeout if a motor is running from a serial command 'B' or not 'N'
+        :return None
         """
         status = self.get_status()
         waiting_time = 0
@@ -270,46 +351,56 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
                 self.log.error("ASI MS2000 translation stage timeout occurred")
                 break
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Additional custom functions not on the interface
+# ----------------------------------------------------------------------------------------------------------------------
+
     def homing_xy(self):
         """ Moves the stage to homeposition on x and y axes.
         Motor stops when hardware or firmware limit switch is encountered.
         
-        @ returns: error code (ok: 0)
+        :return: error code (ok: 0)
         """
         cmd = "! X Y \r"
         self.write(cmd)
         return 0
 
     def set_to_zero(self):
-        """ Sets the current position as the origin
+        """ Sets the current position as the origin.
         
-        @ returns: error code (ok: 0)
+        :return: error code (ok: 0)
         """
         cmd = "Z \r"
         self.write(cmd)
         return 0
 
-    # brightfield interface
+# ----------------------------------------------------------------------------------------------------------------------
+# Brightfield interface functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def led_control(self, intens):
-        """ sets the intensity of the LED to the value intens (0-99)"""
+        """ Set the intensity of the LED to the value intensity (in percent of max. intensity, 0-99%).
+        :param: int intensity: percentage of maximum intensity to be applied to the LED
+        :return: None
+        """
         if self._has_led:
             # truncate to allowed range
             value = int(min(max(intens, 0), 99))
             cmd = f"LED X={value}? \r"
             self.write(cmd)
-            return 0
         else:
             pass
 
-    # helper functions
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def query(self, command):
-        """ Clears the input buffer and queries an utf-8 encoded command
+        """ Clears the input buffer and queries an utf-8 encoded command.
         
-        @ param string: command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
+        :param: string command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
         
-        @ returns string: answer: formatted and decoded response from serial port
+        :return: string answer: formatted and decoded response from serial port
         """
         self._serial_connection.flushInput()
         self._serial_connection.write(command.encode())
@@ -317,9 +408,10 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         return answer
 
     def write(self, command):
-        """ Clears the input buffer and writes an utf-8 encoded command to the serial port 
+        """ Clears the input buffer and writes an utf-8 encoded command to the serial port .
         
-        @ param string: command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
+        :param string command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
+        :return: None
         """
         self._serial_connection.flushInput()
         self._serial_connection.write(command.encode())

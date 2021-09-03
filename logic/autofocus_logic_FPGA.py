@@ -1,48 +1,52 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Qudi-CBS
 
+This module contains the logic for the autofocus with quadrant photo diode (QPD)
+based readout.
+
+An extension to Qudi.
+
+@authors: JB. Fiche, F. Barho
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
-
 from core.connector import Connector
 from core.configoption import ConfigOption
 from core.util.mutex import Mutex
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 
-import pyqtgraph as pg
 import numpy as np
 from numpy.polynomial import Polynomial as Poly
 from time import sleep
 
 
-# class WorkerSignals(QtCore.QObject):
-#     """ Defines the signals available from a running worker thread """
-#
-#     sigFinished = QtCore.Signal()
-
-
-# class StageAutofocusWorker(QtCore.QRunnable):
-#     """ Worker thread to control the stage position and adjust the piezo position when autofocus in ON
-#     The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators """
-#
-#     def __init__(self, *args, **kwargs):
-#         super(StageAutofocusWorker, self).__init__(*args, **kwargs)
-#         self.signals = WorkerSignals()
-#
-#     @QtCore.Slot()
-#     def run(self):
-#         """ """
-#         sleep(0.5)
-#         self.signals.sigFinished.emit()
-
-
 class AutofocusLogic(GenericLogic):
-    """ This logic connect to the instruments necessary for the autofocus method based on the FPGA + QPD. This logic
-    can be accessed from the focus_logic controlling the piezo position.
+    """ Logic class to control the autofocus using QPD-based readout. Connected hardware is an FPGA that
+    handles the signal readout of the QPD, and a 3 axes translation stage. Moreover, a Thorlabs camera is connected
+    for visual support, without processing its image.
+
+    An autofocus logic class is needed as connector to the focus logic.
 
     autofocus_logic:
-        module.Class: 'autofocus_logic.AutofocusLogic'
+        module.Class: 'autofocus_logic_FPGA.AutofocusLogic'
         autofocus_ref_axis : 'X' # 'Y'
         proportional_gain : 0.1 # in %%
         integration_gain : 1 # in %%
@@ -52,9 +56,8 @@ class AutofocusLogic(GenericLogic):
             fpga: 'nifpga'
             stage: 'ms2000'
     """
-
     # declare connectors
-    fpga = Connector(interface='FPGAInterface')  # to check _ a new interface was defined for FPGA connection
+    fpga = Connector(interface='Base')
     stage = Connector(interface='MotorInterface')
     camera = Connector(interface='CameraInterface')
 
@@ -83,7 +86,9 @@ class AutofocusLogic(GenericLogic):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-        # self.threadpool = QtCore.QThreadPool()
+        self._fpga = None
+        self._stage = None
+        self._camera = None
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -92,6 +97,8 @@ class AutofocusLogic(GenericLogic):
         self._fpga = self.fpga()
         self._stage = self.stage()
         self._camera = self.camera()
+
+        # initialize the camera
         self._camera.set_exposure(self._exposure)
 
     def on_deactivate(self):
@@ -99,44 +106,40 @@ class AutofocusLogic(GenericLogic):
         """
         self.stop_camera_live()
 
-# =======================================================================================
-# Public method for the autofocus, used by all the methods (camera or FPGA/QPD based)
-# =======================================================================================
+# ======================================================================================================================
+# Public methods for the autofocus, used by all the techniques (camera or FPGA/QPD based readout)
+# ======================================================================================================================
         
     def read_detector_signal(self):
-        """ General function returning the reference signal for the autofocus correction. In the case of the
+        """ This method reads the reference signal for the autofocus correction. In the case of the
         method using a FPGA, it returns the QPD signal measured along the reference axis.
+        :return: float: coordinate of the QPD signal on the reference axis  # verify type: float or int ?
         """
         return self.qpd_read_position()
 
     # fpga only
     def read_detector_intensity(self):
-        """ Function used for the focus search. Measured the intensity of the reflection instead of reading its
-        position
+        """ Function used for the focus search. The intensity of the reflection is measured (instead of its x or y
+        position which is read in read_detector_signal.
+        :return: int: intensity of the QPD signal
         """
         return self.qpd_read_sum()
 
     def autofocus_check_signal(self):
-        """ Check that the intensity detected by the QPD is above a specific threshold (300). If the signal is too low,
+        """ Check that the intensity detected by the QPD is above a specific threshold (300) If the signal is too low,
         the function returns False to indicate that the autofocus signal is lost.
         :return bool: True: signal ok, False: signal too low
         """
         qpd_sum = self.qpd_read_sum()
-        print(qpd_sum)
+        # print(qpd_sum)
         if qpd_sum < 300:
             return False
         else:
             return True
 
-    def define_pid_setpoint(self):
-        """ Initialize the pid setpoint
-        """
-        self.qpd_reset()
-        self._setpoint = self.read_detector_signal()
-        return self._setpoint
-
     def init_pid(self):
-        """ Initialize the pid for the autofocus
+        """ Initialize the pid for the autofocus, and reset the number of autofocus iterations.
+        :return: None
         """
         self.qpd_reset()
         self._fpga.init_pid(self._P_gain, self._I_gain, self._setpoint, self._ref_axis)
@@ -145,24 +148,41 @@ class AutofocusLogic(GenericLogic):
         self._autofocus_stable = False
         self._autofocus_iterations = 0
 
-    def read_pid_output(self, check_stabilization):
-        """ Read the pid output signal in order to adjust the position of the objective
+    def define_pid_setpoint(self):
+        """ Initialize the pid setpoint and save it as a class attribute.
+        :return float: setpoint
+        """
+        self.qpd_reset()
+        self._setpoint = self.read_detector_signal()
+        return self._setpoint
+
+    def read_pid_output(self, do_stabilization_check):
+        """ Read the pid output signal in order to adjust the position of the objective.
+        :param: bool do_stabilization_check: if True, the last 10 pid output values are stored and fitted.
+        :return float: pid output:
+                or tuple (float, bool): pid_output, autofocus stable?
         """
         pid_output = self._fpga.read_pid()
 
-        if check_stabilization:
+        if do_stabilization_check:
             self._autofocus_iterations += 1
             self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
+            # self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:2], [pid_output]))
             return pid_output, self.check_stabilization()
         else:
             return pid_output
 
     def check_stabilization(self):
-        """ Check for the stabilization of the focus
+        """ Check for the stabilization of the focus. If at least 10 values of pid readout are present, a linear fit
+        is performed. If the slope is sufficiently low, the autofocus is considered as stable. The class attribute
+        self._autofocus_stable is updated by this function.
+        :return: bool: is the autofocus stable ?
         """
-        if self._autofocus_iterations > 10:
+        if self._autofocus_iterations > 2: # 10:
             p = Poly.fit(np.linspace(0, 9, num=10), self._last_pid_output_values, deg=1)
+            # p = Poly.fit(np.linspace(0, 1, num=2), self._last_pid_output_values, deg=1)
             slope = p(9) - p(0)
+            # slope = p(1) - p(0)
             if np.absolute(slope) < 10:
                 self._autofocus_stable = True
             else:
@@ -171,35 +191,44 @@ class AutofocusLogic(GenericLogic):
         return self._autofocus_stable
 
     def start_camera_live(self):
-        """ Launch live acquisition of the camera
+        """ Launch live acquisition of the camera.
+        :return: None
         """
         self._camera.start_live_acquisition()
         self._camera_acquiring = True
 
     def stop_camera_live(self):
-        """ Stop live acquisition of the camera
+        """ Stop live acquisition of the camera.
+        :return: None
         """
         self._camera.stop_acquisition()
         self._camera_acquiring = False
 
     def get_latest_image(self):
-        """ Get the latest acquired image from the camera. This function returns the raw image as well as the
-        threshold image
+        """ Get the latest acquired image from the camera.
+        :return: np.ndarray im: most recent image from the camera
         """
         im = self._camera.get_acquired_data()
         return im
+
+# ======================================================================================================================
+# Advanced methods for autofocus available only with a 3 axes translation stage (here: autofocus_logic_fpga)
+# ======================================================================================================================
 
     def calibrate_offset(self):
         """ Calibrate the offset between the sample position and a reference on the bottom of the coverslip. This method
         is inspired from the LSM-Zeiss microscope and is used when the sample (such as embryos) is interfering too much
         with the IR signal and makes the regular focus stabilization unstable.
+        :return: float offset: distance to the sample plane where a maximum signal was found
         """
+        self.stage_wait_for_idle()
         # Read the stage position
         z_up = self._stage.get_pos()['z']
         offset = self._focus_offset
 
         # Move the stage by the default offset value along the z-axis
         self.stage_move_z(offset)
+        self.stage_wait_for_idle()
 
         # rescue autofocus when no signal detected
         if not self.autofocus_check_signal():
@@ -211,10 +240,12 @@ class AutofocusLogic(GenericLogic):
         z_step = 0.1  # in µm
 
         self.stage_move_z(-z_range/2)
+        self.stage_wait_for_idle()
 
         for n in range(int(z_range/z_step)):
 
             self.stage_move_z(z_step)
+            self.stage_wait_for_idle()
 
             sum = self.read_detector_intensity()
             print(sum)
@@ -224,13 +255,15 @@ class AutofocusLogic(GenericLogic):
                 break
 
         # Calculate the offset for the stage and move back to the initial position
+
         offset = self._stage.get_pos()['z'] - z_up
         offset = np.round(offset, decimals=1)
 
         # avoid moving stage while QPD signal is read
         sleep(0.1)
 
-        self.stage_move_z(-(offset))
+        self.stage_move_z(-offset)
+        self.stage_wait_for_idle()
 
         # send signal to focus logic that will be linked to define_autofocus_setpoint
         self.sigOffsetDefined.emit()
@@ -240,18 +273,22 @@ class AutofocusLogic(GenericLogic):
         return offset
 
     def rescue_autofocus(self):
-        """ When the autofocus signal is lost, launch a rescuing procedure by using the MS2000 translation stage. The
-        z position of the stage is moved until the piezo signal is found again.
+        """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
+        The stage moves along the z axis until the signal is found.
+        :return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
         """
+        print('doing rescue .. ')
         success = False
         z_range = 20
         while not self.autofocus_check_signal() and z_range <= 40:
 
             self.stage_move_z(-z_range/2)
+            self.stage_wait_for_idle()
 
             for z in range(z_range):
                 step = 1
                 self.stage_move_z(step)
+                self.stage_wait_for_idle()
 
                 if self.autofocus_check_signal():
                     success = True
@@ -260,66 +297,48 @@ class AutofocusLogic(GenericLogic):
 
             if not self.autofocus_check_signal():
                 self.stage_move_z(-z_range/2)
+                self.stage_wait_for_idle()
                 z_range += 10
-
+        print('rescue finished ')
         return success
 
     def stage_move_z(self, step):
+        """ Do a relative movement of the translation stage.
+        :param: float step: target relative movement
+        :return: None
+        """
         self._stage.move_rel({'z': step})
 
-    def do_position_correction(self, step):
-        self._stage.set_velocity({'z': 0.01})
-        sleep(1)
-        self.stage_move_z(step)
+    def stage_wait_for_idle(self):
+        """ This method waits that the connected translation stage is in idle state.
+        :return: None
+        """
         self._stage.wait_for_idle()
+
+    def do_position_correction(self, step):
+        """ This method handles the stage movement which is needed to perform the piezo position correction routine.
+        The autofocus has been switched on in the focus_logic. The stage moves with a low velocity, to ensure
+        that the piezo can follow. After the relative movement, the stage velocity is reset to its default value
+        and a signal is emitted to inform the focus logic that the stage reached its target position.
+        :param: float step: target relative movement
+        :return: None
+        """
+        self._stage.set_velocity({'z': 0.01})
+        self.stage_wait_for_idle()
+        self.stage_move_z(step)
+        self.stage_wait_for_idle()
         self._stage.set_velocity({'z': 1.9})
         self.sigStageMoved.emit()
 
-# ----------------to be completed----------------------------------
-#     def start_piezo_position_correction(self, direction):
-#         """ When the piezo position gets too close to the limits, the MS2000 stage is used to move the piezo back
-#         to a standard position. If the piezo close to the lower limit (<5µm) it is moved to 25µm. If the piezo is too
-#         close to the upper limit (>70µm), it is moved back to 50µm.
-#         """
-#
-#         if direction == "up":
-#             step = 1
-#         elif direction == "down":
-#             step = -1
-#         else:
-#             self.log.warning('no valid direction specified')
-#             return
-#
-#         self._pos_dict = {'z': step}
-#
-#         # this needs to be modified :
-#         if not self._run_autofocus:
-#             self.start_autofocus()
-#
-#         stage_worker = StageAutofocusWorker()
-#         stage_worker.signals.sigFinished.connect(self.run_piezo_position_correction)
-#         self.threadpool.start(stage_worker)
-#
-#     def run_piezo_position_correction(self):
-#         """ Correct the piezo position by moving the MS2000 stage while the autofocus ON
-#         """
-#         z = self.get_position()  # z posiiton of the piezo -- to be modified, this needs to be passed in by the focus_logic
-#         # if not self._autofocus_lost and (z < 25 or z > 50):
-#         if not self.autofocus_check_signal and (z < 25 or z > 50):
-#             self._stage.move_rel(self._pos_dict)
-#
-#             stage_worker = StageAutofocusWorker()
-#             stage_worker.signals.sigFinished.connect(self.run_piezo_position_correction)
-#             self.threadpool.start(stage_worker)
-# ---------------------------------------------------------------
-
-# =================================================================
+# ======================================================================================================================
 # private methods for QPD-based autofocus
-# =================================================================
+# ======================================================================================================================
 
     def qpd_read_position(self):
         """ Read the QPD signal from the FPGA. The signal is read from X/Y positions. In order to make sure we are
         always reading from the latest piezo position, the method is waiting for a new count.
+        :return: float: QPD signal position projected along the x or y axis according to reference axis set in the
+                        configuration    # check return type: int or float ?
         """
         qpd = self._fpga.read_qpd()
         last_count = qpd[3]
@@ -333,18 +352,22 @@ class AutofocusLogic(GenericLogic):
             return qpd[1]
 
     def qpd_read_sum(self):
-        """ Read the SUM signal from the QPD. Returns an indication whether there is a detected signal or not
+        """ Read the sum signal from the QPD.
+        :return: float: intensity of the QPD signal   # check return type: int or float ?
         """
         qpd = self._fpga.read_qpd()
         return qpd[2]
 
     def set_worker_frequency(self):
-        """ Update the worker frequency according to the iteration time of the fpga
+        """ Update the worker frequency according to the iteration time of the fpga, and store it as a class attribute
+        self._pid_frequency
+        :return: None
         """
         qpd = self._fpga.read_qpd()
         self._pid_frequency = qpd[4] / 1000 + 0.01
 
     def qpd_reset(self):
-        """ Reset the QPD counter
+        """ Reset the QPD counter>
+        :return: None
         """
         self._fpga.reset_qpd_counter()

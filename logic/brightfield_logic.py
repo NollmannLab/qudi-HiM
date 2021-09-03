@@ -35,7 +35,7 @@ from core.util.mutex import Mutex
 
 class BrightfieldLogic(GenericLogic):
     """
-    This module controls a white light source.
+    Class to control a white light source.
 
     Example config for copy-paste:
 

@@ -1,15 +1,35 @@
+# -*- coding: utf-8 -*-
 """
-Created on Mon Feb 1 2021
-
-@author: fbarho
+Qudi-CBS
 
 This file contains a class for the Mad city labs piezo controller.
 
-It is an extension to the hardware code base of Qudi software
-obtained from <https://github.com/Ulm-IQO/qudi/>
+An extension to Qudi.
+
+@author: F. Barho
+
+Created on Mon Feb 1 2021
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 import ctypes
-
+import numpy as np
 from core.module import Base
 from interface.motor_interface import MotorInterface
 from core.configoption import ConfigOption
@@ -27,8 +47,12 @@ MCL_INVALID_AXIS		= -7  # Attempting an operation on an axis that does not exist
 MCL_INVALID_HANDLE	    = -8  # The handle is not valid.  Or at least is not valid in this instance of the DLL.
 
 
+# ======================================================================================================================
+# Hardware class
+# ======================================================================================================================
+
 class MCLNanoDrive(Base, MotorInterface):
-    """ Class representing the MCL Nano-Drive (Piezo controller).
+    """ Class representing the MCL Nano-Drive piezo controller.
 
     Example config for copy-paste:
 
@@ -42,22 +66,24 @@ class MCLNanoDrive(Base, MotorInterface):
         found help with return type of MCL_SingleReadZ here:
         https://github.com/ScopeFoundry/HW_mcl_stage/blob/master/mcl_nanodrive.py
     """
-
+    # config options
     dll_location = ConfigOption('dll_location', missing='error')
-
-    handle = None
-
-    # attributes for get_constraints method
-    _axis_label = None
-    _axis_ID = None
     _pos_min = ConfigOption('pos_min', 0, missing='warn')  # in um
     _pos_max = ConfigOption('pos_max', 80, missing='warn')  # in um
     _max_step = ConfigOption('max_step', 1, missing='warn')  # in um
 
+    # attributes
+    handle = None
+    _axis_label = None
+    _axis_ID = None
+
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.dll = None
 
     def on_activate(self):
+        """ Initialization: Connection to the dll.
+        """
         self.dll = ctypes.cdll.LoadLibrary(self.dll_location)
 
         # set return types of certain functions
@@ -74,16 +100,22 @@ class MCLNanoDrive(Base, MotorInterface):
         self.log.debug(f'{num} Nanodrives connected.')
 
         self._axis_label = 'Z'  # one axis controller. Set this arbitrarily to be conform with motor interface
-        self._axis_ID = self.handle  # not really needed .. just for conformity with pifoc get_constraints function. maybe remove ..
+        self._axis_ID = self.handle  # not really needed .. just for conformity with pifoc get_constraints function.
 
     def on_deactivate(self):
+        """ Close connection when deactivating the module.
+        """
         handle = ctypes.c_int(self.handle)
         self.dll.MCL_ReleaseHandle(handle)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Motor interface functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def get_constraints(self):
         """ Retrieve the hardware constrains from the motor device.
 
-        @return dict constraints
+        :return dict constraints
         """
         constraints = {}
 
@@ -100,18 +132,18 @@ class MCLNanoDrive(Base, MotorInterface):
         return constraints
 
     def move_rel(self, param_dict):
-        """ Moves stage in given direction (relative movement)
+        """ Moves stage in given direction (relative movement).
 
-        @param dict param_dict: Dictionary with axis name and step (in um units) as key - value pairs
+        :param dict param_dict: Dictionary with axis name and step (in um units) as key - value pairs
 
-        @return bool: error code (True: ok, False: not ok)   or modify to return position ??
+        :return bool: error code (True: ok, False: not ok)
         """
         # this version is for a param_dict with one entry.
         constraints = self.get_constraints()
         (_, position) = self.get_pos().popitem()  # get_pos returns a dict {axis_label: position}
-        # self.log.info(f'Position: {position}')
 
         (axis, step) = param_dict.popitem()
+        step = np.round(step, decimals=4)  # avoid error due to decimal overflow
 
         if axis == self._axis_label and abs(step) <= constraints[axis]['max_step'] and constraints[axis]['pos_min'] <= position + step <= constraints[axis]['pos_max']:
             new_pos = ctypes.c_double(position + step)
@@ -123,17 +155,20 @@ class MCLNanoDrive(Base, MotorInterface):
                 return False
 
     def move_abs(self, param_dict):
-        """ Moves stage to absolute position (absolute movement)
+        """ Moves stage to absolute position (absolute movement).
+        Use preferably the relative movement. move_abs does not implement a safety check if a too big step will be done.
+        Ramps are handled in the logic modules.
 
-        @param dict param_dict: Dictionary with axis name and target position (in um units) as key - value pairs
+        :param dict param_dict: Dictionary with axis name and target position (in um units) as key - value pairs
 
-        @return bool: error code (True: ok, False: error)       - or modify to return the new position ??
+        :return bool: error code (True: ok, False: error)
         """
         # this version is for a param_dict with one entry.
         constraints = self.get_constraints()
         (_, position) = self.get_pos().popitem()  # get_pos returns a dict {axis_label: position}
 
         (axis, new_pos) = param_dict.popitem()
+        new_pos = np.round(new_pos, decimals=4)  # avoid error due to decimal overflow
 
         if axis == self._axis_label and constraints[axis]['pos_min'] <= new_pos <= constraints[axis]['pos_max']:
             new_pos = ctypes.c_double(new_pos)
@@ -143,77 +178,105 @@ class MCLNanoDrive(Base, MotorInterface):
             else:
                 self.log.warning(f'Could not move axis {axis} to position {position}: {err}.')
                 return False
-        # use preferably the relative movement. move_abs does not implement a safety check if a too big step will be done.
 
     def abort(self):
-        """ Stops movement of the stage
+        """ Stops movement of the stage.
+        Not supported by MCL Piezo stage.
 
-        @return bool: error code (True: ok, False: error)
+        :return bool: error code (True: ok, False: error)
         """
-        pass
+        return False
 
-    def get_pos(self):
-        """ Gets current position of the stage
+    def get_pos(self, param_list=None):
+        """ Gets current position of the stage.
 
-        @return dict: with keys being the axis labels and item the current position.
+        :param list param_list: optional, if a specific position of an axis
+                                is desired, then the labels of the needed
+                                axis should be passed in the param_list.
+                                If nothing is passed, then from each axis the
+                                position is asked.
+
+        :return dict: with keys being the axis labels and item the current position.
         """
-        cur_pos = self.dll.MCL_SingleReadZ(self.handle)
-        if cur_pos < 0:  # then this corresponds to an error code
-            self.log.warn(f'error reading position: {cur_pos}')
+        if not param_list:
+            cur_pos = self.dll.MCL_SingleReadZ(self.handle)
+            if cur_pos < 0:  # then this corresponds to an error code
+                self.log.warn(f'error reading position: {cur_pos}')
+            else:
+                pos = {}
+                pos[self._axis_label] = cur_pos
+                return pos
         else:
-            pos = {}
-            pos[self._axis_label] = cur_pos
-            return pos
-        # note that pifoc returns ordered dict. check if this gives problems for interface.
+            for axis in param_list:
+                if axis in self._axis_label:
+                    cur_pos = self.dll.MCL_SingleReadZ(self.handle)
+                    if cur_pos < 0:
+                        self.log.warn(f'error reading position: {cur_pos}')
+                    else:
+                        pos = {}
+                        pos[self._axis_label] = cur_pos
+                        return pos
+                else:
+                    self.log.warn(f'Specified axis not available: {axis}')
 
     def get_status(self, param_list=None):
-        """ Get the status of the position
+        """ Get the status of the position.
+        Not supported by MCL Piezo stage.
 
-        @param list param_list: optional, if a specific status of an axis
+        :param list param_list: optional, if a specific status of an axis
                                 is desired, then the labels of the needed
                                 axis should be passed in the param_list.
                                 If nothing is passed, then from each axis the
                                 status is asked.
 
-        @return bool err
+        :return dict: with the axis label as key and the status number as item.
         """
         pass
 
     def calibrate(self, param_list=None):
         """ Calibrates the stage.
+        Not supported by MCL Piezo stage.
 
-        @param dict param_list: param_list: optional, if a specific calibration
+        :param list param_list: param_list: optional, if a specific calibration
                                 of an axis is desired, then the labels of the
                                 needed axis should be passed in the param_list.
                                 If nothing is passed, then all connected axis
                                 will be calibrated.
 
-        @return int: error code (0:OK, -1:error)
+        :return int: error code (0:OK, -1:error)
         """
         pass
 
     def get_velocity(self, param_list=None):
         """ Gets the current velocity for all connected axes.
+        Not supported by MCL Piezo stage.
 
-        @param dict param_list: optional, if a specific velocity of an axis
+        :param list param_list: optional, if a specific velocity of an axis
                                 is desired, then the labels of the needed
                                 axis should be passed as the param_list.
                                 If nothing is passed, then from each axis the
                                 velocity is asked.
 
-        @return dict : with the axis label as key and the velocity as item.
+        :return dict: with the axis label as key and the velocity as item.
         """
         self.log.info('get velocity not available')
 
     def set_velocity(self, param_dict):
         """ Write new value for velocity.
+        Not supported by MCL Piezo stage.
 
-        @param dict param_dict: dictionary, which passes all the relevant
+        :param dict param_dict: dictionary, which passes all the relevant
                                 parameters, which should be changed. Usage:
                                  {'axis_label': <the-velocity-value>}.
                                  'axis_label' must correspond to a label given
                                  to one of the axis.
 
-        @return int: error code (0:OK, -1:error)
+        :return int: error code (0:OK, -1:error)
         """
         self.log.info('set velocity not available')
+
+    def wait_for_idle(self):
+        """ Wait until a motorized stage is in idle state.
+        :return: None
+        """
+        pass

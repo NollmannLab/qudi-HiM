@@ -1,10 +1,32 @@
 # -*- coding: utf-8 -*-
 """
+Qudi-CBS
+
+This module contains the logic to control a modular valve positioner (MVP)
+
+An extension to Qudi.
+
+@author: F. Barho
+
 Created on Thu Mars 4 2021
+-----------------------------------------------------------------------------------
 
-@author: fbarho
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This module contains the logic to control the valves
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 from qtpy import QtCore
 from logic.generic_logic import GenericLogic
@@ -13,15 +35,17 @@ from core.connector import Connector
 
 class ValveLogic(GenericLogic):
     """
-    Class containing the logic to control the valves
+    Class containing the logic to control the valve positioner.
 
     Example config for copy-paste:
 
     valve_logic:
         module.Class: 'valve_logic.ValveLogic'
+        connect:
+            valves: 'valve_dummy'
     """
     # declare connectors
-    valves = Connector(interface='ValveInterface')
+    valves = Connector(interface='ValvePositionerInterface')
 
     # signals
     sigPositionChanged = QtCore.Signal(str, int)
@@ -37,6 +61,7 @@ class ValveLogic(GenericLogic):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self._valves = None
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -44,15 +69,20 @@ class ValveLogic(GenericLogic):
         # connector
         self._valves = self.valves()
 
+        # initialization of attributes according to hardware configuration
         self.valve_dict = self._valves.get_valve_dict()
         self.valve_names = [self.valve_dict[key]['name'] for key in self.valve_dict]
         self.max_positions = [self.valve_dict[key]['number_outputs'] for key in self.valve_dict]
         self.valve_IDs = [self.valve_dict[key]['daisychain_ID'] for key in self.valve_dict]
-        self.valve_positions = self._valves._valve_positions
+        self.valve_positions = self._valves.valve_positions
 
     def on_deactivate(self):
         """ Perform required deactivation. """
         pass
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Getter and setter methods
+# ----------------------------------------------------------------------------------------------------------------------
 
     def get_valve_position(self, valve_id):
         """ Read the valve position of the specified valve.
@@ -77,10 +107,19 @@ class ValveLogic(GenericLogic):
         """
         return self._valves.get_valve_dict()
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------------------------------------------------------
+
     def wait_for_idle(self):
         """ Wait for valves to be set to position.
+        :return None
         """
         self._valves.wait_for_idle()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods to handle the user interface state
+# ----------------------------------------------------------------------------------------------------------------------
 
     def disable_valve_positioning(self):
         """ This method provides a security to avoid modifying the valve position from GUI, for example during Tasks. """

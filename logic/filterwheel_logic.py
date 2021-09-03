@@ -1,13 +1,34 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Nov 17 09:07:59 2020
+Qudi-CBS
 
-@author: fbarho
+This module contains the logic to control a motorized filter wheel and provides a security on the laser selection
+depending on the mounted filter.
 
-This module contains the logic to control a filter wheel and provides a security on the laser selection depending on
-the mounted filter. """
+An extension to Qudi.
 
+@author: F. Barho
+
+Created on Tue Nov 17 2020
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
+"""
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
@@ -17,7 +38,6 @@ class FilterwheelLogic(GenericLogic):
     """
     Class for the control of a motorized filterwheel.
     """
-
     # declare connectors
     wheel = Connector(interface='FilterwheelInterface')
     lasercontrol = Connector(interface='LaserControlLogic')
@@ -36,22 +56,26 @@ class FilterwheelLogic(GenericLogic):
     def on_activate(self):
         """ Initialisation performed during activation of the module.
         """
-        self.get_filter_dict()
+        self.filter_dict = self.get_filter_dict()
 
     def on_deactivate(self):
         """ Perform required deactivation. """
         pass
 
-    @QtCore.Slot(int)
+# ----------------------------------------------------------------------------------------------------------------------
+# Getter and setter methods
+# ----------------------------------------------------------------------------------------------------------------------
+
     def set_position(self, position):
         """ Checks if the filterwheel can move (only if lasers are off), resets the intensity values of all lasers to 0
         to avoid having a laser line which may be forbidden with the newly set filter and changes position if possible.
 
-        @params: position: new filter wheel position
+        :param: int position: new filter wheel position
 
-        @returns: None
+        :return: None
         """
-        if not self.lasercontrol().enabled:  # do not allow changing filter while lasers are on # Combobox on gui is also disabled but this here is an additional security to prevent setting filter via iPython console
+        if not self.lasercontrol().enabled:  # do not allow changing filter while lasers are on
+            # Combobox on gui is also disabled but this is an additional security to prevent setting filter via iPython console
             self.lasercontrol().reset_intensity_dict()  # set all values to 0 before changing the filter
             err = self.wheel().set_position(position)
             if err == 0:
@@ -61,7 +85,9 @@ class FilterwheelLogic(GenericLogic):
             self.log.warn('Laser is on. Can not change filter')
 
     def get_position(self):
-        """ Get the current position from the hardware """
+        """ Get the current position from the hardware.
+        :return: int pos: current filter position
+        """
         pos = self.wheel().get_position()
         return pos
 
@@ -71,10 +97,14 @@ class FilterwheelLogic(GenericLogic):
                      'filter2': {'label': 'filter2', 'name': str(name), 'position': 2, 'lasers': bool list},
                     ...
                     }
+        :return: dict filter dict
         """
         filter_dict = self.wheel().get_filter_dict()
-        self.filter_dict = filter_dict
         return filter_dict
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods to handle the user interface state
+# ----------------------------------------------------------------------------------------------------------------------
 
     def disable_filter_actions(self):
         """ This method provides a security to avoid chaning filter from GUI, for example during Tasks. """
@@ -83,5 +113,3 @@ class FilterwheelLogic(GenericLogic):
     def enable_filter_actions(self):
         """ This method resets filter selection from GUI to callable state, for example after Tasks. """
         self.sigEnableFilterActions.emit()
-
-

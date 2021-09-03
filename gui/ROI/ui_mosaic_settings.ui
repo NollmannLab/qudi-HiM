@@ -65,10 +65,10 @@
       <item row="1" column="1">
        <widget class="QDoubleSpinBox" name="x_pos_DSpinBox">
         <property name="minimum">
-         <double>-10000.000000000000000</double>
+         <double>-90000.000000000000000</double>
         </property>
         <property name="maximum">
-         <double>10000.000000000000000</double>
+         <double>90000.000000000000000</double>
         </property>
        </widget>
       </item>

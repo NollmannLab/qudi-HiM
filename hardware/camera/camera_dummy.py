@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Dummy implementation for camera_interface.
+Qudi-CBS
 
+This file contains the dummy implementation for a camera.
+
+This module was available in Qudi original version and was extended.
+
+-----------------------------------------------------------------------------------
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -17,6 +22,7 @@ along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
 Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 
 import numpy as np
@@ -27,7 +33,7 @@ from interface.camera_interface import CameraInterface
 
 
 class CameraDummy(Base, CameraInterface):
-    """ Dummy hardware for camera interface
+    """ Dummy implementation of a microscope camera.
 
     Example config for copy-paste:
 
@@ -39,21 +45,18 @@ class CameraDummy(Base, CameraInterface):
         exposure: 0.1 
         gain: 1.0
     """
-
+    # config options
     _support_live = ConfigOption('support_live', True)
     _camera_name = ConfigOption('camera_name', 'Dummy camera')  # 'Dummy camera' 'iXon Ultra 897'
     _resolution = ConfigOption('resolution', (720, 1280))  # (720, 1280) indicate (nb rows, nb cols) because row-major config is used in gui module
+    _exposure = ConfigOption('exposure', .1)
+    _gain = ConfigOption('gain', 1.)
 
+    # camera attributes
     _live = False  # attribute indicating if the camera is currently in live mode
     _acquiring = False  # attribute indicating if the camera is currently acquiring  an image
-    _exposure = ConfigOption('exposure', .1) 
-    _gain = ConfigOption('gain', 1.)
     _has_temp = False
     _has_shutter = False
-
-    # uncomment if _has_temp = True
-    # temperature = 17
-    # _default_temperature = 12
 
     image_size = _resolution
     n_frames = 1
@@ -64,6 +67,13 @@ class CameraDummy(Base, CameraInterface):
     _progress = 0
 
     _frame_transfer = False
+
+    # only needed for simulations with _has_temp = True
+    temperature = 17
+    _default_temperature = 12
+
+    def __init__(self, config, **kwargs):
+        super().__init__(config=config, **kwargs)
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -76,40 +86,134 @@ class CameraDummy(Base, CameraInterface):
         """
         self.stop_acquisition()
 
-    def get_name(self):
-        """ Retrieve an identifier of the camera that the GUI can print
+# ======================================================================================================================
+# Camera Interface functions
+# ======================================================================================================================
 
-        @return string: name for the camera
+# ----------------------------------------------------------------------------------------------------------------------
+# Getter and setter methods
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def get_name(self):
+        """ Retrieve an identifier of the camera that the GUI can print.
+
+        :return: string: name for the camera
         """
         return self._camera_name
 
     def get_size(self):
-        """ Retrieve size of the image in pixel
+        """ Retrieve size of the image in pixel.
 
-        @return tuple: Size (width, height)
+        :return: tuple (int, int): Size (width, height)
         """
         return self.image_size[1], self.image_size[0]
 
-    def support_live_acquisition(self):
-        """ Return whether or not the camera can take care of live acquisition
+    def set_exposure(self, exposure):
+        """ Set the exposure time in seconds.
 
-        @return bool: True if supported, False if not
+        :param: float exposure: desired new exposure time
+
+        :return: bool: Success ?
+        """
+        self._exposure = exposure
+        return True
+
+    def get_exposure(self):
+        """ Get the exposure time in seconds.
+
+        :return: float exposure time
+        """
+        return self._exposure
+
+    def set_gain(self, gain):
+        """ Set the gain.
+
+        :param: int gain: desired new gain
+
+        :return: bool: Success ?
+        """
+        self._gain = gain
+        return True
+
+    def get_gain(self):
+        """ Get the gain.
+
+        :return: int gain
+        """
+        return self._gain
+
+    def get_ready_state(self):
+        """ Is the camera ready for an acquisition ?
+
+        :return: bool: ready ?
+        """
+        return not (self._live or self._acquiring)
+
+    def set_image(self, hbin, vbin, hstart, hend, vstart, vend):
+        """  Sets a ROI on the sensor surface.
+
+        We don't use the binning parameters but they are needed in the
+        function call to be conform with syntax of andor camera.
+        :param: int hbin: number of pixels to bin horizontally
+        :param: int vbin: number of pixels to bin vertically.
+        :param: int hstart: Start column (inclusive)
+        :param: int hend: End column (inclusive)
+        :param: int vstart: Start row (inclusive)
+        :param: int vend: End row (inclusive).
+
+        :return: error code: ok = 0
+        """
+        self.image_size = (abs(vend-vstart)+1, abs(hend-hstart)+1, )  # rows, cols
+        return 0
+
+    def get_progress(self):
+        """ Retrieves the total number of acquired images during a movie acquisition.
+
+        :return: int progress: total number of acquired images.
+        """
+        n_frames = self.n_frames
+        self._progress += 1
+        progress = self._progress
+        if progress == n_frames:
+            self._live = False
+            self._progress = 0
+            return n_frames
+        return progress
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods to query the camera properties
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def support_live_acquisition(self):
+        """ Return whether or not the camera can take care of live acquisition.
+
+        :return: bool: True if supported, False if not
         """
         return self._support_live
 
-    def start_live_acquisition(self):
-        """ Start a continuous acquisition
+    def has_temp(self):
+        """ Does the camera support setting of the temperature?
 
-        @return bool: Success ?
+        :return: bool: has temperature ?
         """
-        if self._support_live:
-            self._live = True
-            self._acquiring = False
+        return self._has_temp
 
+    def has_shutter(self):
+        """ Is the camera equipped with a mechanical shutter?
+
+        :return: bool: has shutter ?
+        """
+        return self._has_shutter
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods to handle camera acquisitions
+# ----------------------------------------------------------------------------------------------------------------------
+
+# Methods for displaying images on the GUI -----------------------------------------------------------------------------
     def start_single_acquisition(self):
         """ Start a single acquisition
 
-        @return bool: Success ?
+        :return: bool: Success ?
         """
         if self._live:
             return False
@@ -119,125 +223,50 @@ class CameraDummy(Base, CameraInterface):
             self._acquiring = False
             return True
 
+    def start_live_acquisition(self):
+        """ Start a continuous acquisition
+
+        :return: bool: Success ?
+        """
+        if self._support_live:
+            self._live = True
+            self._acquiring = False
+            return True
+        else:
+            return False
+
     def stop_acquisition(self):
         """ Stop/abort live or single acquisition
 
-        @return bool: Success ?
+        :return: bool: Success ?
         """
         self._live = False
         self._acquiring = False
-
-    def get_acquired_data(self):
-        """ Return an array of last acquired image.
-
-        @return numpy array: image data in format [[row],[row]...]
-
-        Each pixel might be a float, integer or sub pixels
-        """
-        if self.n_frames > 1:
-            data = self._data_generator(size=(self.n_frames, self.image_size[0], self.image_size[1]))  # * self._exposure * self._gain
-        else:
-            data = self._data_generator(size=self.image_size)  # * self._exposure * self._gain
-        return data
-
-    def set_exposure(self, exposure):
-        """ Set the exposure time in seconds
-
-        @param float exposure: desired new exposure time
-
-        @return float: newly set exposure time
-        """
-        self._exposure = exposure
-        return self._exposure
-
-    def get_exposure(self):
-        """ Get the exposure time in seconds
-
-        @return float exposure time
-        """
-        return self._exposure
-
-    def set_gain(self, gain):
-        """ Set the gain
-
-        @param float gain: desired new gain
-
-        @return float: new gain setting
-        """
-        self._gain = gain
-        return self._gain
-
-    def get_gain(self):
-        """ Get the gain
-
-        @return float: exposure gain
-        """
-        return self._gain
-
-    def get_ready_state(self):
-        """ Is the camera ready for an acquisition ?
-
-        @return bool: ready ?
-        """
-        return not (self._live or self._acquiring)
-    
-    def has_temp(self):
-        """ Does the camera support setting of the temperature?
-        
-        @return bool: has temperature ?
-        """
-        return self._has_temp
-
-    # for tests do as if temperature available
-    # uncomment if _has_temp is set to True
-    # def set_temperature(self, temp):
-    #     """ Set the temperature setpoint
-    #
-    #     @param int temp: desired new temperature
-    #
-    #     @return: bool: success ?
-    #     """
-    #     self.temperature = temp
-    #     return True
-    #
-    # def get_temperature(self):
-    #     """ Get the current temperature
-    #
-    #     @return float: temperature
-    #     """
-    #     return self.temperature
-    #
-    # def is_cooler_on(self):
-    #     """ checks the cooler state """
-    #     return 1
-    ##########################
-
-    def has_shutter(self):
-        """ Is the camera equipped with a shutter?
-
-        @return bool: has shutter ?
-        """
-        return self._has_shutter
-
-    def start_movie_acquisition(self, n_frames):
-        """ set the conditions to save a movie and start the acquisition
-
-        @param int n_frames: number of frames
-
-        @return bool: Success ?
-        """
-        # handle the variables indicating the status
-        if self.support_live_acquisition():
-            self._live = True
-            self._acquiring = False
-        self.n_frames = n_frames
-        self.log.info('started movie acquisition')
         return True
 
-    def finish_movie_acquisition(self):
-        """ resets the conditions used to save a movie to default
+# Methods for saving image data ----------------------------------------------------------------------------------------
+    def start_movie_acquisition(self, n_frames):
+        """ Set the conditions to save a movie and start the acquisition (typically kinetic / fixed length mode).
 
-        @return bool: Success ?
+        :param: int n_frames: number of frames
+
+        :return: bool: Success ?
+        """
+        if not self._live and not self._acquiring:  # video can only be started if not yet in live or acquisition mode
+            # handle the variables indicating the status
+            if self.support_live_acquisition():
+                self._live = True
+                self._acquiring = False
+            self.n_frames = n_frames
+            self.log.info('started movie acquisition')
+            return True
+        else:
+            return False
+
+    def finish_movie_acquisition(self):
+        """ Reset the conditions used to save a movie to default.
+
+        :return: bool: Success ?
         """
         self._live = False
         self._acquiring = False
@@ -246,44 +275,85 @@ class CameraDummy(Base, CameraInterface):
         return True
 
     def wait_until_finished(self):
-        """ waits until an acquisition is finished
+        """ Wait until an acquisition is finished.
 
-        @return None
+        :return: None
         """
-        time.sleep(1)
+        time.sleep(0.5)
+
+# Methods for acquiring image data using synchronization between lightsource and camera---------------------------------
+    def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
+        """ Set the camera state for an experiment using synchronization between lightsources and the camera.
+        Using typically an external trigger.
+
+        :param: int frames: number of frames in a kinetic series / fixed length mode
+        :param: float exposure: exposure time in seconds
+        :param: int gain: gain setting
+        :param: str save_path: complete path (without fileformat suffix) where the image data will be saved
+        :param: str file_format: selected fileformat such as 'tiff', 'fits', ..
+
+        :return: None
+        """
+        pass
+
+    def reset_camera_after_multichannel_imaging(self):
+        """ Reset the camera to a default state after an experiment using synchronization between lightsources and
+         the camera.
+
+         :return: None
+         """
+        pass
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for image data retrieval
+# ----------------------------------------------------------------------------------------------------------------------
 
     def get_most_recent_image(self):
-        """ Returns an np array of the most recent image.
+        """ Return an array of last acquired image. Used for live display on gui during save procedures
 
-        Used for live display on gui during save procedures"""
-        data = np.random.normal(size=self.image_size)  # * self._exposure * self._gain
+        :return: numpy array: image data in format [[row],[row]...]
+
+        Each pixel might be a float, integer or sub pixels
+        """
+        data = np.random.normal(size=self.image_size) * self._exposure * self._gain
         # data = data.astype(np.int16)  # type conversion
         return data
 
-    def set_image(self, hbin, vbin, hstart, hend, vstart, vend):
-        """ Allows to reduce the actual sensor size
-        We don't use the binning parameters but they are needed in the
-        function call to be conform with syntax of andor camera
-        @param int hbin: number of pixels to bin horizontally
-        @param int vbin: number of pixels to bin vertically.
-        @param int hstart: Start column (inclusive)
-        @param int hend: End column (inclusive)
-        @param int vstart: Start row (inclusive)
-        @param int vend: End row (inclusive).
-        """
-        self.image_size = (abs(vend-vstart)+1, abs(hend-hstart)+1, )  # rows, cols
-        return 0
+    def get_acquired_data(self):
+        """ Return an array of last acquired image in case of a run till abort acquisition
+        or of the complete data in case of a fixed length acquisition.
 
-    # helper method to get data which is equivalent to kinetic series (n_frames > 1 allowed)
-    def _data_generator(self, size):
+        :return: numpy array: image data in format [[row],[row]...]
+
+        Each pixel might be a float, integer or sub pixels
+        """
+        if self.n_frames > 1:
+            data = self._data_generator(size=(self.n_frames, self.image_size[0], self.image_size[1])) * self._exposure * self._gain
+        else:
+            data = self._data_generator(size=self.image_size) * self._exposure * self._gain
+        return data
+
+# ======================================================================================================================
+# Non-Interface functions
+# ======================================================================================================================
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper functions
+# ----------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def _data_generator(size):
         """ Allows to generate 2D or 3D data
-        @param: int tuple size (width, height) or (depth, width, height)
-        @return: np.array(float) data
+        :param: int tuple size (width, height) or (depth, width, height)
+        :return: np.array(float) data
         """
         data = np.random.normal(size=size)
         return data
 
-    # just for tests of the gui  # pseudo-interface functions specific to andor camera
+# ----------------------------------------------------------------------------------------------------------------------
+# Simulation of Andor camera
+# ----------------------------------------------------------------------------------------------------------------------
+
     def _set_spool(self, active, mode, filenamestem, framebuffer):
         """ Simulates the spooling functionality of the andor camera.
          This function must be available if camera name is set to iXon Ultra 897
@@ -296,29 +366,20 @@ class CameraDummy(Base, CameraInterface):
             pass
 
     def get_kinetic_time(self):
-        """ Simulates kinetic time method of andor camera
-        This function must be available if camera name is set to iXon Ultra 897"""
+        """ Simulates kinetic time method of andor camera.
+        This function must be available if camera name is set to iXon Ultra 897.
+
+        :return: float kinetic time """
         if self._frame_transfer:
             return self._exposure + 0.123
         else:
             return self._exposure + 0.7654321
 
-    def get_progress(self):
-        """ retrieves the total number of acquired images during a movie acquisition"""
-        n_frames = self.n_frames
-        self._progress += 1
-        progress = self._progress
-        if progress == n_frames:
-            self._live = False
-            self._progress = 0
-            return n_frames
-        return progress
-
     def _set_frame_transfer(self, transfer_mode):
         """ set the frame transfer mode
 
-        @param: int tranfer_mode: 0: off, 1: on
-        @returns: int error code 0 = ok, -1 = error
+        :param: int tranfer_mode: 0: off, 1: on
+        :returns: int error code 0 = ok, -1 = error
         """
         if transfer_mode == 1:
             self._frame_transfer = True
@@ -332,10 +393,36 @@ class CameraDummy(Base, CameraInterface):
             self.log.info('Camera dummy: specify the transfer_mode to set frame transfer, transfer_mode {}'.format(transfer_mode))
             err = -1
         return err
-    
-    
-    def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
-        pass
-    
-    def reset_camera_after_multichannel_imaging(self):
-        pass
+
+    # temperature getter / setter functions
+    def set_temperature(self, temp):
+        """ Set the temperature setpoint.
+
+        :param int temp: desired new temperature
+
+        :return: bool: success ?
+        """
+        self.temperature = temp
+        return True
+
+    def get_temperature(self):
+        """ Get the current temperature.
+
+        :return int: temperature
+        """
+        return self.temperature
+
+    def is_cooler_on(self):
+        """ Checks the status of the cooler.
+
+        :return: int: 0: cooler is off, 1: cooler is on
+        """
+        return 1
+
+    def _set_cooler(self, state):
+        """ This method is called to switch the cooler on or off
+
+        :params: bool state: cooler on = True, cooler off = False
+
+        :return: error message: ok = 0 """
+        return 0

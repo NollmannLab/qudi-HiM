@@ -1,42 +1,67 @@
 # -*- coding: utf-8 -*-
 """
+Qudi-CBS
+
+An extension to Qudi.
+
+This module contains a task to perform multicolor imaging on PALM setup.
+(Take at a given position a sequence of images with different laserlines or intensities).
+
+@author: F. Barho
+
 Created on Tue Feb 2 2021
+-----------------------------------------------------------------------------------
 
-@author: fbarho
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
 
-This file is an extension to Qudi software
-obtained from <https://github.com/Ulm-IQO/qudi/>
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
 
-Task to perform multicolor imaging
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
-Config example pour copy-paste:
-    MulticolorImagingTask:
-        module: 'multicolor_imaging_task'
-        needsmodules:
-            camera: 'camera_logic'
-            daq: 'lasercontrol_logic'
-            filter: 'filterwheel_logic'
-        config:
-            path_to_user_config: '/home/barho/qudi-cbs-user-configs/multichannel_imaging_task.json'
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 import yaml
 from datetime import datetime
 import os
 from time import sleep
 from logic.generic_task import InterruptableTask
+from logic.task_helper_functions import get_entry_nested_dict
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task does an acquisition of a series of images from different channels or using different intensities
+    """ This task does an acquisition of a series of images from different channels or using different intensities.
+
+    Config example pour copy-paste:
+
+    MulticolorImagingTask:
+        module: 'multicolor_imaging_task_PALM'
+        needsmodules:
+            camera: 'camera_logic'
+            daq: 'lasercontrol_logic'
+            filter: 'filterwheel_logic'
+        config:
+            path_to_user_config: 'C:/Users/admin/qudi_files/qudi_task_config_files/multicolor_imaging_task_PALM.yml'
     """
-    # ===============================================================================================================
+    # ==================================================================================================================
     # Generic Task methods
-    # ===============================================================================================================
+    # ==================================================================================================================
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
+        self.err_count = None
+        self.laser_allowed = False
+        self.user_param_dict = {}
 
     def startTask(self):
         """ """
@@ -71,33 +96,29 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             sleep(1)
             pos = self.ref['filter'].get_position()
 
-        # initialize the digital output channel for trigger
-        self.ref['daq'].set_up_do_channel()
-        
-        # initialize the analog input channel that reads the fire
-        self.ref['daq'].set_up_ai_channel()
-
         # prepare the camera
+        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
         frames = len(self.imaging_sequence) * self.num_frames 
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        @return bool: True if the task should continue running, False if it should finish.
+        :return bool: True if the task should continue running, False if it should finish.
         """
         if not self.laser_allowed:
             return False  # skip runTaskStep and directly go to cleanupTask
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # imaging sequence (image data is spooled to disk)
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # this task has only one step until a data set is prepared and saved
-        # but loops over the number of frames per channel and the channels)
+        # but loops over the number of frames per channel and the channels
 
         # outer loop over the number of frames per color
         for j in range(self.num_frames):
 
-            # use a while loop to catch the exception when a trigger is missed and just repeat the missed image (in case one trigger was missed)
+            # use a while loop to catch the exception when a trigger is missed and just repeat the missed image
+            # (in case one trigger was missed)
             i = 0
             while i < len(self.imaging_sequence):
                 # reset the intensity dict to zero
@@ -112,11 +133,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 err = self.ref['daq'].send_trigger_and_control_ai()  
             
                 # read fire signal of camera and switch off when the signal is low
-                ai_read = self.ref['daq'].read_ai_channel()
+                ai_read = self.ref['daq'].read_trigger_ai_channel()
                 count = 0
                 while not ai_read <= 2.5:  # analog input varies between 0 and 5 V. use max/2 to check if signal is low
                     sleep(0.001)  # read every ms
-                    ai_read = self.ref['daq'].read_ai_channel()
+                    ai_read = self.ref['daq'].read_trigger_ai_channel()
                     count += 1  # can be used for control and debug
                 self.ref['daq'].voltage_off()
                 # self.log.debug(f'iterations of read analog in - while loop: {count}')
@@ -131,16 +152,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 else:
                     i += 1  # increment to continue with the next image
 
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         # metadata saving
-        # ------------------------------------------------------------------------------------------
+        # --------------------------------------------------------------------------------------------------------------
         self.ref['camera'].abort_acquisition()  # after this, temperature can be retrieved for metadata
         if self.file_format == 'fits':
             metadata = self.get_fits_metadata()
-            self.ref['camera']._add_fits_header(self.complete_path, metadata)
+            self.ref['camera'].add_fits_header(self.complete_path, metadata)
         else:  # save metadata in a txt file
             metadata = self.get_metadata()
-            file_path = self.complete_path.replace('tiff', 'txt', 1)
+            file_path = self.complete_path.replace('tif', 'txt', 1)
             self.save_metadata_file(metadata, file_path)
 
         return False
@@ -158,41 +179,40 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('cleanupTask called')
 
         self.ref['camera'].reset_camera_after_multichannel_imaging()
+        # self.ref['camera'].set_exposure(self.default_exposure)
 
         self.ref['daq'].voltage_off()  # as security
         self.ref['daq'].reset_intensity_dict()
-        self.ref['daq'].close_do_task()
-        self.ref['daq'].close_ai_task()
-
-        self.log.debug(f'number of missed triggers: {self.err_count}')
 
         # enable gui actions
         self.ref['camera'].enable_camera_actions()
         self.ref['daq'].enable_laser_actions()
         self.ref['filter'].enable_filter_actions()
 
+        self.log.debug(f'number of missed triggers: {self.err_count}')
         self.log.info('cleanupTask finished')
 
-    # ===============================================================================================================
+    # ==================================================================================================================
     # Helper functions
-    # ===============================================================================================================
+    # ==================================================================================================================
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # user parameters
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def load_user_parameters(self):
-        """ this function is called from startTask() to load the parameters given in a specified format by the user
+        """ This function is called from startTask() to load the parameters given by the user in a specific format.
 
-        specify only the path to the user defined config in the (global) config of the experimental setup
+        Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
-        user must specify the following dictionary (here with example entries):
+        The config file contains the following dictionary (here with example entries):
+            sample_name: 'MySample'
             filter_pos: 1
             exposure: 0.05  # in s
             gain: 0
             num_frames: 1  # number of frames per color
-            save_path: 'E:\\Data'
-            file_format: 'tiff'
+            save_path: 'E:\\'
+            file_format: 'tif'
             imaging_sequence = [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
         """
         try:
@@ -227,6 +247,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines = len(self.imaging_sequence)
 
     def control_user_parameters(self):
+        """ This method checks if the laser lines that will be used are compatible with the chosen filter.
+        :return bool: lasers_allowed
+        """
         # use the filter position to create the key # simpler than using get_entry_nested_dict method
         key = 'filter{}'.format(self.filter_pos)
         bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']  # list of booleans, laser allowed ? such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
@@ -242,13 +265,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 break  # stop if at least one forbidden laser is found
         return lasers_allowed
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # file path handling
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def get_complete_path(self, path_stem):
         """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_MulticolorImaging_samplename/movie_001.tiff
+        such as path_stem/YYYY_MM_DD/001_MulticolorImaging_samplename/movie_001.tif
         or path_stem/YYYY_MM_DD/027_MulticolorImaging_samplename/movie_027.fits
 
         :param: str path_stem such as E:/
@@ -285,12 +308,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         complete_path = os.path.join(path, file_name)
         return complete_path
 
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # metadata
-    # ------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text compatible format. """
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ??? # then add a variable to startTask
         metadata['Sample name'] = self.sample_name
@@ -311,7 +337,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format. """
+        """ Get a dictionary containing the metadata in a fits header compatible format.
+
+        :return: dict metadata
+        """
         metadata = {}
         metadata['TIME'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
         metadata['SAMPLE'] = (self.sample_name, 'sample name')
@@ -331,7 +360,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def save_metadata_file(self, metadata, path):
-        """" Save a txt file containing the metadata dictionary
+        """" Save a txt file containing the metadata dictionary.
 
         :param dict metadata: dictionary containing the metadata
         :param str path: pathname
@@ -339,24 +368,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-
-def get_entry_nested_dict(nested_dict, val, entry):
-    """ helper function that searches for 'val' as value in a nested dictionary and returns the corresponding value in the category 'entry'
-    example: search in laser_dict (nested_dict) for the label (entry) corresponding to a given wavelength (val)
-    search in filter_dict (nested_dict) for the label (entry) corresponding to a given filter position (val)
-
-    @param: dict nested dict
-    @param: val: any data type, value that is searched for in the dictionary
-    @param: str entry: key in the inner dictionary whose value needs to be accessed
-
-    note that this function is not the typical way how dictionaries should be used. due to the unambiguity in the dictionaries used here,
-    it can however be useful to try to find a key given a value.
-    Hence, in practical cases, the return value 'list' will consist of a single element only. """
-    entrylist = []
-    for outer_key in nested_dict:
-        item = [nested_dict[outer_key][entry] for inner_key, value in nested_dict[outer_key].items() if val == value]
-        if item != []:
-            entrylist.append(*item)
-    return entrylist
-

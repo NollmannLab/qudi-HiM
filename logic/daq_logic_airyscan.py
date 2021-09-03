@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Wed March 24, 2021
+Created on Wed June 23, 2021
 
 @author: fbarho
 
 A general module to control any DAQ functionality (analog input / output, digital input / output)
 except the laser control which is handled by a dedicated module (lasercontrol_logic)
 
-Used for the DAQ on RAMM setup. This module may be reorganized later into individual parts for different functionality.
+Used for the DAQ on Airyscan setup. This module may be reorganized later into individual parts for different functionality.
 """
 
 from core.connector import Connector
@@ -48,6 +48,9 @@ class DAQaoLogic(GenericLogic):
     # declare connectors
     daq = Connector(interface='Base')
 
+    # attributes
+    _pressure = 0.0
+
     # signals
     sigRinsingDurationFinished = QtCore.Signal()
 
@@ -68,28 +71,13 @@ class DAQaoLogic(GenericLogic):
         pass
 
 
-    def read_piezo(self):
-        """
-        """
-        return self._daq.read_piezo()
+# needle rinsing
 
-    def move_piezo(self, pos, autostart=True, timeout=10):
-        """
-        """
-        self._daq.move_piezo(pos, autostart=True, timeout=10)
-
-    def write_to_do_channel(self, num_samp, digital_write, channel):
-        """ use the digital output as trigger """
-        self._daq.write_to_do_channel(num_samp, digital_write, channel)
-
-    def read_do_channel(self, num_samp, channel):
-        return self._daq.read_do_channel(num_samp, channel)
-
-    def write_to_pump_ao_channel(self, voltage, autostart=True, timeout=10):
-        self._daq.write_to_pump_ao_channel(voltage, autostart, timeout)
+    def write_to_pump_ao_channel(self, voltage):
+        self._daq.write_to_pump_ao_channel(voltage)
 
     def start_rinsing(self, duration):
-        self.write_to_pump_ao_channel(-3.0)
+        self.write_to_pump_ao_channel(1.0)
         worker = Worker(duration)
         worker.signals.sigFinished.connect(self.stop_rinsing)
         self.threadpool.start(worker)
@@ -98,10 +86,15 @@ class DAQaoLogic(GenericLogic):
         self.write_to_pump_ao_channel(0.0)
         self.sigRinsingDurationFinished.emit()
 
+# handle pressure for fluidics system
 
+    def write_to_fluidics_pump_ao_channel(self, voltage):
+        self._daq.write_to_fluidics_pump_ao_channel(voltage)
 
+    def set_pressure(self, pressure):
+        voltage = pressure   # do we assume proportionality ??? or apply a transformation to convert pressure to a voltage
+        self._pressure = pressure  # store the setting in a class attribute to use it for get pressure method
+        self.write_to_fluidics_pump_ao_channel(voltage)
 
-
-
-
-
+    def get_pressure(self):
+        return self._pressure
