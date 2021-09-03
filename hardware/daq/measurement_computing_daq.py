@@ -57,6 +57,8 @@ class MccDAQ(Base):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.board_num = None
+        self.port = None
 
     # def __init__(self, *args, **kwargs):
     #     super().__init__(*args, **kwargs)
@@ -80,6 +82,9 @@ class MccDAQ(Base):
         # Add the first DAQ device to the UL with the specified board number
         ul.create_daq_device(self.board_num, device)
 
+        self.port = self.get_dio_port()
+        print(f'port: {self.port}')
+
     def on_deactivate(self):
         """ Required deactivation steps.
         """
@@ -89,8 +94,43 @@ class MccDAQ(Base):
 # DAQ utility functions
 # ----------------------------------------------------------------------------------------------------------------------
 
+# Get the port
+    def get_dio_port(self):
+        """ Get the available port from the device and configure it as output port.
+        :return: mcculw.device_info.dio_info.PortInfo object """
+        daq_dev_info = DaqDeviceInfo(self.board_num)
+        if not daq_dev_info.supports_digital_io:
+            raise Exception('Error: The DAQ device does not support '
+                            'digital I/O')
+
+        dio_info = daq_dev_info.get_dio_info()
+        print(f'port_info: {dio_info.port_info}')
+        num_ports = dio_info.num_ports
+        print(f'num_ports: {num_ports}')
+
+        # Find the first port that supports input, defaulting to None
+        # if one is not found.
+        port = next((port for port in dio_info.port_info), None)
+        if not port:
+            raise Exception('Error: The DAQ device does not support '
+                            'digital output')
+
+        if port.is_port_configurable:
+            ul.d_config_port(self.board_num, port.type, DigitalIODirection.OUT)
+            print('port configured as OUT')
+
+        return port
+
 # Analog output channels -----------------------------------------------------------------------------------------------
+
     def write_to_ao_channel(self, voltage, channel):
+        """ Write a voltage to an analog output channel.
+
+        :param: float voltage: target voltage value to apply to the channel
+        :param: int channel: number of the addressed channel
+
+        :return: None
+        """
         daq_dev_info = DaqDeviceInfo(self.board_num)
         if not daq_dev_info.supports_analog_output:
             raise Exception('Error: The DAQ device does not support '
@@ -107,182 +147,70 @@ class MccDAQ(Base):
 # Analog input channels ------------------------------------------------------------------------------------------------
     # no ai channels for this daq
     def read_ai_channel(self, channel):
+        """ Read a value from an analog input channel.
+
+        :param: int channel: identifier number of the requested channel
+
+        :return: float data: value read from the ai channel
+        """
         daq_dev_info = DaqDeviceInfo(self.board_num)
         if not daq_dev_info.supports_analog_input:
             raise Exception('Error: The DAQ device does not support '
                             'analog input')
 
 # Digital output channels ----------------------------------------------------------------------------------------------
-    def set_up_do_channel(self):
-        daq_dev_info = DaqDeviceInfo(self.board_num)
-        if not daq_dev_info.supports_digital_io:
-            raise Exception('Error: The DAQ device does not support '
-                            'digital I/O')
+    def set_up_do_channel(self, channel_number):
+        """ Define a line in a digital port as output channel.
+        :param channel_number: number of the do channel (do line, bit) in the range of the available dio configurable
+                            lines, that shall be used for digital output
+        :return: None
+        """
+        # If the bit in the port is configurable, configure it for output.
+        if self.port.is_bit_configurable:
+            ul.d_config_bit(self.board_num, self.port.type, channel_number, DigitalIODirection.OUT)
 
-        print('\nActive DAQ device: ', daq_dev_info.product_name, ' (',
-              daq_dev_info.unique_id, ')\n', sep='')
+    def write_to_do_channel(self, channel, num_samp, digital_write):
+        """ Write a value to a digital output channel.
+        The channel needs to be configured previously using set_up_do_channel method.
 
-        dio_info = daq_dev_info.get_dio_info()
-        print(dio_info)
+        :param: channel: identifier of the virtual channel (number of the bit / do line in a port)
+        :param: int num_samp: number of values to write (one single value here). This argument is needed for
+                            compatibility with daq_logic. Set it to 1 when calling the function from logic.
+        :param: int digital_write: value to write
 
-        # Find the first port that supports input, defaulting to None
-        # if one is not found.
-        port = next((port for port in dio_info.port_info if port.supports_output),
-                    None)
-        if not port:
-            raise Exception('Error: The DAQ device does not support '
-                            'digital output')
-
-        # If the port is configurable, configure it for output.
-        if port.is_port_configurable:
-            ul.d_config_port(self.board_num, port.type, DigitalIODirection.OUT)
-
-    def write_to_do_channel(self):
-        pass
+        :return: None
+        """
+        print('Setting', self.port.type.name, channel, 'to', digital_write)
+        # Output the value to the channel (bit)
+        # ul.d_out(self.board_num, port.type, digital_write)
+        ul.d_bit_out(self.board_num, self.port.type, channel, digital_write)
 
 # Digital input channels -----------------------------------------------------------------------------------------------
-    def set_up_di_channel(self):
-        daq_dev_info = DaqDeviceInfo(self.board_num)
-        if not daq_dev_info.supports_digital_io:
-            raise Exception('Error: The DAQ device does not support digital I/O')
+    def set_up_di_channel(self, channel_number):
+        """ Define a line in a digital port as input channel.
+        :param channel_number: number of the di channel (di line, bit) in the range of the available dio configurable
+                            lines, that shall be used for digital input
+        :return: None
+        """
+        # If the bit in the port is configurable, configure it for output.
+        if self.port.is_bit_configurable:
+            ul.d_config_bit(self.board_num, self.port.type, channel_number, DigitalIODirection.IN)
 
-        dio_info = daq_dev_info.get_dio_info()
-        print(dio_info)
+    def read_di_channel(self, channel, num_samp=1):
+        """ Read a value from a digital input channel.
+        The channel needs to be configured previously using set_up_di_channel method.
 
-        print(f'port info: {dio_info.port_info}')
-        print([port for port in dio_info.port_info if port.supports_input])
+        :param: channel: identifier of the virtual channel (number of the bit / di line in a port)
+        :param: int num_samp: number of values to write (one single value here). This argument is needed for
+                            compatibility with daq_logic. Defaults to 1.
+        :return: int bit_value: value read from the di line
+        """
+        bit_value = ul.d_bit_in(self.board_num, self.port.type, channel)
+        return bit_value
 
-        # Find the first port that supports input, defaulting to None
-        # if one is not found.
-        port = next((port for port in dio_info.port_info if port.supports_input), None)
-        if not port:
-            raise Exception('Error: The DAQ device does not support digital input')
-        print(port)
-
-        # If the port is configurable, configure it for input.
-        if port.is_port_configurable:
-            ul.d_config_port(self.board_num, port.type, DigitalIODirection.IN)
-
-    def read_di_channel(self):
-        daq_dev_info = DaqDeviceInfo(self.board_num)
-        dio_info = daq_dev_info.get_dio_info()
-        # port = next((port for port in dio_info.port_info if port.supports_input), None)
-        ports = [port for port in dio_info.port_info if port.supports_input]
-        print(ports)
-        # Get a value from the digital port
-        port_value = ul.d_in(self.board_num, ports[0].type)
-        print(port_value)
-
-
-
-    # def read_di(self):
-    #     # By default, the example detects and displays all available devices and
-    #     # selects the first device listed. Use the dev_id_list variable to filter
-    #     # detected devices by device ID (see UL documentation for device IDs).
-    #     # If use_device_detection is set to False, the board_num variable needs to
-    #     # match the desired board number configured with Instacal.
-    #     use_device_detection = True
-    #     dev_id_list = []
-    #     board_num = 0
-    #
-    #     try:
-    #         if use_device_detection:
-    #             self.config_first_detected_device(board_num, dev_id_list)
-    #
-    #         daq_dev_info = DaqDeviceInfo(board_num)
-    #         if not daq_dev_info.supports_digital_io:
-    #             raise Exception('Error: The DAQ device does not support '
-    #                             'digital I/O')
-    #
-    #         print('\nActive DAQ device: ', daq_dev_info.product_name, ' (',
-    #               daq_dev_info.unique_id, ')\n', sep='')
-    #
-    #         dio_info = daq_dev_info.get_dio_info()
-    #
-    #         # Find the first port that supports input, defaulting to None
-    #         # if one is not found.
-    #         port = next((port for port in dio_info.port_info if port.supports_input),
-    #                     None)
-    #         if not port:
-    #             raise Exception('Error: The DAQ device does not support '
-    #                             'digital input')
-    #
-    #         # If the port is configurable, configure it for input.
-    #         if port.is_port_configurable:
-    #             ul.d_config_port(board_num, port.type, DigitalIODirection.IN)
-    #
-    #         # Get a value from the digital port
-    #         port_value = ul.d_in(board_num, port.type)
-    #
-    #         # Get a value from the first digital bit
-    #         bit_num = 0
-    #         bit_value = ul.d_bit_in(board_num, port.type, bit_num)
-    #
-    #         # Display the port value
-    #         print(port.type.name, 'Value:', port_value)
-    #         # Display the bit value
-    #         print('Bit', bit_num, 'Value:', bit_value)
-    #     except Exception as e:
-    #         print('\n', e)
-    #     finally:
-    #         if use_device_detection:
-    #             ul.release_daq_device(board_num)
-    # #
-    # def write_do():
-    #     # By default, the example detects and displays all available devices and
-    #     # selects the first device listed. Use the dev_id_list variable to filter
-    #     # detected devices by device ID (see UL documentation for device IDs).
-    #     # If use_device_detection is set to False, the board_num variable needs to
-    #     # match the desired board number configured with Instacal.
-    #     use_device_detection = True
-    #     dev_id_list = []
-    #     board_num = 0
-    #
-    #     try:
-    #         if use_device_detection:
-    #             self.config_first_detected_device(board_num, dev_id_list)
-    #
-    #         daq_dev_info = DaqDeviceInfo(board_num)
-    #         if not daq_dev_info.supports_digital_io:
-    #             raise Exception('Error: The DAQ device does not support '
-    #                             'digital I/O')
-    #
-    #         print('\nActive DAQ device: ', daq_dev_info.product_name, ' (',
-    #               daq_dev_info.unique_id, ')\n', sep='')
-    #
-    #         dio_info = daq_dev_info.get_dio_info()
-    #
-    #         # Find the first port that supports input, defaulting to None
-    #         # if one is not found.
-    #         port = next((port for port in dio_info.port_info if port.supports_output),
-    #                     None)
-    #         if not port:
-    #             raise Exception('Error: The DAQ device does not support '
-    #                             'digital output')
-    #
-    #         # If the port is configurable, configure it for output.
-    #         if port.is_port_configurable:
-    #             ul.d_config_port(board_num, port.type, DigitalIODirection.OUT)
-    #
-    #         port_value = 0xFF
-    #
-    #         print('Setting', port.type.name, 'to', port_value)
-    #
-    #         # Output the value to the port
-    #         ul.d_out(board_num, port.type, port_value)
-    #
-    #         bit_num = 0
-    #         bit_value = 0
-    #         print('Setting', port.type.name, 'bit', bit_num, 'to', bit_value)
-    #
-    #         # Output the value to the bit
-    #         ul.d_bit_out(board_num, port.type, bit_num, bit_value)
-    #
-    #     except Exception as e:
-    #         print('\n', e)
-    #     finally:
-    #         if use_device_detection:
-    #             ul.release_daq_device(board_num)
+    def test_function(self):
+        self.set_up_do_channel(0)  # configure bit 0 as output
+        self.set_up_di_channel(2)  # configure bit 2 as input
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Various functionality of DAQ
@@ -296,14 +224,14 @@ class MccDAQ(Base):
 
         :return: None
         """
-        if voltage >= 0 and voltage <= 10: # replace by reading limits from device
+        if 0 <= voltage <= 10:  # replace by reading limits from device
             self.write_to_ao_channel(voltage, self.rinsing_pump_channel)
         else:
             self.log.warning('Voltage not in allowed range.')
 
 # Flowcontrol pump------------------------------------------------------------------------------------------------------
     def write_to_fluidics_pump_channel(self, voltage):
-        if voltage >= 0 and voltage <= 10: # replace by reading limits from device
+        if 0 <= voltage <= 10:  # replace by reading limits from device
             self.write_to_ao_channel(voltage, self.fluidics_pump_channel)
         else:
             self.log.warning('Voltage not in allowed range.')

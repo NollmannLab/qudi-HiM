@@ -110,7 +110,7 @@ class DAQLogic(GenericLogic):
 # Low-level methods for digital input / output
 # ----------------------------------------------------------------------------------------------------------------------
 # For these low-level methods, it is needed to pass in a taskhandle (see hardware module) as argument
-# (for connected NI-DAQ).
+# (for connected NI-DAQ). The argument is called channel to be more general.
 # This can for example be done in tasks (even though we access a private attribute from the NI-DAQ hardware class).
 # Add here: how to use this for other daq types ?
 
