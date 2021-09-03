@@ -178,7 +178,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # define the parameters of the fpga session for the laserline:
                 wavelengths = [0, 0, 0, 0]
-                wavelength = self.imaging_sequence[i]['laserline']
+                wavelength = self.imaging_sequence[i]['lightsource']
                 wavelength = self.lightsource_dict[wavelength]
                 wavelengths.insert(0, wavelength)  # generate a list of length 5 having only a first entry different from zero
 
@@ -315,8 +315,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             num_iterations: 5
             time_step: 120  # in seconds
-            imaging_sequence: [{'laserline': '488 nm', 'intensity': 5}, 'num_z_planes': 10, 'z_step': 0.1},
-                               {'laserline': '561 nm', 'intensity': 5}, 'num_z_planes': 12, 'z_step': 0.1}]
+            imaging_sequence: [{'lightsource': '488 nm', 'intensity': 5}, 'num_z_planes': 10, 'z_step': 0.1},
+                               {'lightsource': '561 nm', 'intensity': 5}, 'num_z_planes': 12, 'z_step': 0.1}]
         """
         try:
             with open(self.user_config_path, 'r') as stream:
@@ -439,7 +439,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Exposure time (s)'] = self.exposure
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['laserline']
+            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['lightsource']
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i]['intensity']
             metadata[f'Scan step length {i+1} (um)'] = self.imaging_sequence[i]['z_step']
             metadata[f'Scan total length {i+1} (um)'] = self.imaging_sequence[i]['num_z_planes'] * self.imaging_sequence[i]['z_step']
@@ -455,7 +455,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
         metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
         for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['laserline'], f'laser line {i+1}')
+            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['lightsource'], f'laser line {i+1}')
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i]['intensity'], f'laser intensity {i+1}')
             metadata[f'Z_STEP{i+1}'] = (self.imaging_sequence[i]['z_step'], f'scan step length (um) {i+1}')
             metadata[f'Z_TOTAL{i+1}'] = (self.imaging_sequence[i]['num_z_planes'] * self.imaging_sequence[i]['z_step'], f'scan total length (um) {i+1}')

@@ -294,7 +294,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.num_iterations = self.user_param_dict['num_iterations']
-                self.time_step = self.user_param_dict['time_step']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
 
         except Exception as e:  # add the type of exception
@@ -416,7 +415,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['laserline']
+            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['lightsource']
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i]['intensity']
         return metadata
 
@@ -432,7 +431,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Z_TOTAL'] = (self.z_step * self.num_z_planes, 'scan total length (um)')
         metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
         for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['laserline'], f'laser line {i+1}')
+            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['lightsource'], f'laser line {i+1}')
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i]['intensity'], f'laser intensity {i+1}')
         return metadata
 
