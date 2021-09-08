@@ -49,3 +49,15 @@ def update_default_info(path, user_param_dict, image_path, fileformat, num_cycle
 
     with open(path, 'w') as outfile:
         yaml.safe_dump(upper_dict, outfile, default_flow_style=False)
+
+
+def write_dict_to_file(path, dictionary):
+    """ Helper function, to write a dictionary to a file.
+    Used for example to write the dapi channel info file, but can be used flexibly.
+    Could replace write_status_didt_to_file method.
+    :param: str path: complete path to the file
+    :param: dict dictionary: dictionary that is to be saved
+    :return: None
+    """
+    with open(path, 'w') as outfile:
+        yaml.safe_dump(dictionary, outfile, default_flow_style=False)
