@@ -78,6 +78,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.log.info('started Task')
 
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
@@ -148,7 +150,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].close_default_session()
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 

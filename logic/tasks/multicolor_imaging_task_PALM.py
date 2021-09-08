@@ -68,6 +68,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('started Task')
         self.err_count = 0  # initialize the error counter (counts number of missed triggers for debug)
 
+        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['camera'].stop_live_mode()
         self.ref['camera'].disable_camera_actions()
@@ -97,7 +99,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pos = self.ref['filter'].get_position()
 
         # prepare the camera
-        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
         frames = len(self.imaging_sequence) * self.num_frames 
         self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
 
