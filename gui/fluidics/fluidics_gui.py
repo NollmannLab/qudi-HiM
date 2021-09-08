@@ -99,6 +99,7 @@ class FluidicsGUI(GUIBase):
         pos1_x_default: 12.0
         pos1_y_default: 4.5
         pos1_z_default: 89.0
+        exp_setup: 'RAMM'  # or 'Airyscan'
         connect:
             valve_logic: 'valve_logic'
             flowcontrol_logic: 'flowcontrol_logic'
@@ -114,6 +115,7 @@ class FluidicsGUI(GUIBase):
     pos1_x_default = ConfigOption('pos1_x_default', 0)
     pos1_y_default = ConfigOption('pos1_y_default', 0)
     pos1_z_default = ConfigOption('pos1_z_default', 0)
+    exp_setup = ConfigOption('exp_setup', '')
 
     # Signals
     # signals for valve settings
@@ -629,10 +631,8 @@ class FluidicsGUI(GUIBase):
             self._mw.rinsing_time_SpinBox.setDisabled(False)
             self.sigStopRinsing.emit()
         else:
-            # make sure to set the RT rinsing valve to the correct position (pos 1)
-            if self._valve_logic.get_valve_position('b') != 1:
-                self._valve_logic.set_valve_position('b', 1)  # hardcoded version - needs modification in case another system is set up differently (i.e. if RT rinsing valve not as valve 'b', rinse needle not at pos 1)
-                self._valve_logic.wait_for_idle()
+            #  make sure to set the RT rinsing valve to the correct position, different cases for the experimental setups
+            self.set_valves_for_rinsing(self.exp_setup)
 
             # handle the start of rinsing
             rinsing_time = self._mw.rinsing_time_SpinBox.value()
@@ -647,6 +647,32 @@ class FluidicsGUI(GUIBase):
         self._mw.rinsing_Action.setText('Start rinsing')
         self._mw.rinsing_Action.setChecked(False)
         self._mw.rinsing_time_SpinBox.setDisabled(False)
+
+    def set_valves_for_rinsing(self, exp_setup):
+        """ Helper function when rinsing is started via GUI. Verify if the valves are positioned correctly
+        for the respective setup, and modify if necessary, to avoid injecting air or injecting in a wrong tube.
+        As the exact steps depend on the experimental setup, this information is retrieved as config option.
+        If deployed on new setup, add the respective valve positioning sequence.
+
+        :param: str exp_setup: identifier of the experimental setup ('RAMM' or 'Airyscan' are supported currently)
+        :return: None
+        """
+        if exp_setup == 'RAMM':
+            if self._valve_logic.get_valve_position('b') != 1:
+                self._valve_logic.set_valve_position('b', 1)
+                self._valve_logic.wait_for_idle()
+
+        elif exp_setup == 'Airyscan':
+            if self._valve_logic.get_valve_position('a') != 3:
+                self._valve_logic.set_valve_position('a', 3)
+                self._valve_logic.wait_for_idle()
+
+            if self._valve_logic.get_valve_position('b') != 2:
+                self._valve_logic.set_valve_position('b', 2)
+                self._valve_logic.wait_for_idle()
+
+        else:
+            pass
 
 # Disable/Enable user interface actions --------------------------------------------------------------------------------
     @QtCore.Slot()
