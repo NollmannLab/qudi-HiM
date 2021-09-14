@@ -231,10 +231,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         rt_injection += 1
                         needle_pos += 1
                     elif rt_injection > 0 and valve_pos == 7:
+                        self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: close
+                        self.ref['valves'].wait_for_idle()
                         self.ref['pos'].start_move_to_target(needle_pos)
                         rt_injection += 1
                         needle_pos += 1
                         time.sleep(15)
+                        self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
+                        self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
                     # create lists containing pressure and volume data and initialize first value to 0
