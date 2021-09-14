@@ -67,7 +67,7 @@ class AutofocusLogic(GenericLogic):
     _threshold = None  # for compatibility with focus logic, not used
 
     # autofocus attributes
-    _focus_offset = ConfigOption('focus_offset', 0, missing='warn')
+    _default_focus_offset = ConfigOption('focus_offset', 0, missing='warn')
     _ref_axis = ConfigOption('autofocus_ref_axis', 'X', missing='warn')
     _autofocus_stable = False
     _autofocus_iterations = 0
@@ -131,7 +131,7 @@ class AutofocusLogic(GenericLogic):
         :return bool: True: signal ok, False: signal too low
         """
         qpd_sum = self.qpd_read_sum()
-        # print(qpd_sum)
+        print("Autofocus check signal : SUM = {}".format(qpd_sum))
         if qpd_sum < 300:
             return False
         else:
@@ -224,7 +224,7 @@ class AutofocusLogic(GenericLogic):
         self.stage_wait_for_idle()
         # Read the stage position
         z_up = self._stage.get_pos()['z']
-        offset = self._focus_offset
+        offset = self._default_focus_offset
 
         # Move the stage by the default offset value along the z-axis
         self.stage_move_z(offset)
@@ -232,26 +232,36 @@ class AutofocusLogic(GenericLogic):
 
         # rescue autofocus when no signal detected
         if not self.autofocus_check_signal():
-            self.rescue_autofocus()
+             self.rescue_autofocus()
 
         # Look for the position with the maximum intensity - for the QPD the SUM signal is used.
         max_sum = 0
-        z_range = 5  # in µm
-        z_step = 0.1  # in µm
+        z_range = 50  # in µm
+        z_step = 1  # in µm
 
         self.stage_move_z(-z_range/2)
         self.stage_wait_for_idle()
+        #max_qpd_pos = self.read_detector_signal()
+        n_step = int(z_range/z_step)
 
-        for n in range(int(z_range/z_step)):
+        for n in range(n_step):
 
             self.stage_move_z(z_step)
             self.stage_wait_for_idle()
 
-            sum = self.read_detector_intensity()
-            print(sum)
-            if sum > max_sum:
-                max_sum = sum
-            elif sum < max_sum and max_sum > 500:
+            # qpd_sum[n] = self.read_detector_intensity()
+            # qpd_pos[n] = self.read_detector_signal()
+            # print("SUM={} - POS={}".format(qpd_sum, qpd_pos))
+            # if np.abs(qpd_pos) < max_qpd_pos :
+            #     max_qpd_pos = np.abs(qpd_pos)
+            # elif np.abs(qpd_pos) > max_qpd_pos and qpd_sum>400:
+            #     break
+
+            qpd_sum = self.read_detector_intensity()
+            print("SUM={}".format(qpd_sum))
+            if qpd_sum > max_sum:
+                max_sum = qpd_sum
+            elif qpd_sum < max_sum and max_sum > 400:
                 break
 
         # Calculate the offset for the stage and move back to the initial position
@@ -259,14 +269,17 @@ class AutofocusLogic(GenericLogic):
         offset = self._stage.get_pos()['z'] - z_up
         offset = np.round(offset, decimals=1)
 
+        # send signal to focus logic that will be linked to define_autofocus_setpoint
+        self.sigOffsetDefined.emit()
+
         # avoid moving stage while QPD signal is read
-        sleep(0.1)
+        sleep(0.5)
 
         self.stage_move_z(-offset)
         self.stage_wait_for_idle()
 
-        # send signal to focus logic that will be linked to define_autofocus_setpoint
-        self.sigOffsetDefined.emit()
+        # # send signal to focus logic that will be linked to define_autofocus_setpoint
+        # self.sigOffsetDefined.emit()
 
         self._focus_offset = offset
 
@@ -279,9 +292,10 @@ class AutofocusLogic(GenericLogic):
         """
         print('doing rescue .. ')
         success = False
-        z_range = 20
-        while not self.autofocus_check_signal() and z_range <= 40:
+        z_range = 40
+        while not self.autofocus_check_signal() and z_range <= 80:
 
+            print("Search range is dz={}µm".format(z_range))
             self.stage_move_z(-z_range/2)
             self.stage_wait_for_idle()
 
@@ -298,7 +312,7 @@ class AutofocusLogic(GenericLogic):
             if not self.autofocus_check_signal():
                 self.stage_move_z(-z_range/2)
                 self.stage_wait_for_idle()
-                z_range += 10
+                z_range += 20
         print('rescue finished ')
         return success
 
@@ -314,6 +328,8 @@ class AutofocusLogic(GenericLogic):
         :return: None
         """
         self._stage.wait_for_idle()
+        pos = self._stage.get_pos()
+        # print("stage position : {}".format(pos))
 
     def do_position_correction(self, step):
         """ This method handles the stage movement which is needed to perform the piezo position correction routine.
@@ -356,6 +372,7 @@ class AutofocusLogic(GenericLogic):
         :return: float: intensity of the QPD signal   # check return type: int or float ?
         """
         qpd = self._fpga.read_qpd()
+        # print(qpd)
         return qpd[2]
 
     def set_worker_frequency(self):
