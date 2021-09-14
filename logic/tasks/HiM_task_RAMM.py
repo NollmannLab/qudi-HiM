@@ -184,6 +184,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
 
+            print("Probe counter : {}".format(self.probe_counter))
+            print("Probe list : {}".format(self.probe_list))
+
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
