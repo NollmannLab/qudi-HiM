@@ -137,6 +137,7 @@ class FocusLogic(GenericLogic):
     # autofocus attributes
     _calibration_range = 2  # Autofocus calibration range in µm
     _slope = None
+    _precision = None
     _z0 = None
     _dt = None
     _calibrated = False
@@ -396,9 +397,9 @@ class FocusLogic(GenericLogic):
 
         # measure the precision of the autofocus
         iterations = 30
-        precision = self.measure_precision(iterations)
+        self._precision = self.measure_precision(iterations)
 
-        self.sigPlotCalibration.emit(piezo_position, autofocus_signal, p(piezo_position), self._slope, precision)
+        self.sigPlotCalibration.emit(piezo_position, autofocus_signal, p(piezo_position), self._slope, self._precision)
 
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.stop_camera_live()
