@@ -354,7 +354,7 @@ class FocusLogic(GenericLogic):
         detected by the QPD or the camera. This methods updates the class attribute _autofocus_lost.
         :return: None
         """
-        self._autofocus_lost = not self._autofocus_logic.autofocus_check_signal
+        self._autofocus_lost = not self._autofocus_logic.autofocus_check_signal()
 
 # Calibration of the autofocus -----------------------------------------------------------------------------------------
     def calibrate_focus_stabilization(self):
