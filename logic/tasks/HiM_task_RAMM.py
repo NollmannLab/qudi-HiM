@@ -806,7 +806,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         metadata = {}
         metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = self.exposure
+        metadata['Exposure time (s)'] = np.round(self.exposure,3)
         metadata['Scan step length (um)'] = self.z_step
         metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
         # metadata['Filter'] = 'filtername'  # or without this entry ???
@@ -817,7 +817,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # to check where the problem comes from :
         # metadata['x position'] = self.ref['roi'].stage_position[0]
         # metadata['y position'] = self.ref['roi'].stage_position[1]
-        # pixel size ???
+
+        # add autofocus information :
+        metadata['Autofocus offset'] = self.ref['focus']._autofocus_logic._focus_offset
+        #metadata['Autofocus calibration precision'] = self.ref['focus']._autofocus_logic._focus_offset
+        metadata['Autofocus calibration slope'] = self.ref['focus']._slope
+        metadata['Autofocus setpoint'] = self.ref['focus']._autofocus_logic._setpoint
+
         return metadata
 
     def get_fits_metadata(self):
