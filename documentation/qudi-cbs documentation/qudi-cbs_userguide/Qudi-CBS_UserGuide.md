@@ -414,8 +414,14 @@ The injection dockwidget contains the tools to define the hybridization and phot
 ![](imgs/injections_gui.png)
 
 
-
-
+<u>**Important for the RAMM**</u> : 
+- Regarding the probes positions numbers, there is no need to start at 1 and/or keep incrementing in ascending order by step of 1. You can indicate the probes positions in the order you want (2,5,11,3, etc.) 
+- For the Hybridization manager, you can call **Probes** several times. For the first call, the needle will be at the position indicated in the probe list. Then, for each new call, the needle will move to the next position on the tray. For example, a Fiducial tube is in position #1 and a DAPI tube in position #2. An example of hybridization injection could then be :
+  - Probe,1500ul,150ul/min = the needle is in position #1 and injection of fiducial
+  - Injection of wb
+  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of fiducial
+  - Injection of ssc
+  - Injection of ib
 
 ### Experiment Configurator GUI
 
@@ -663,6 +669,13 @@ It is now needed to open the shutter of the 785 nm laser.
 - Select the ROIMulticolorScanTask and start it by clicking on the start button in the toolbar.  
 
 You can monitor the position the stage is currently at, using the ROI selector GUI (without using the tracking mode). The logger in the Qudi manager GUI will inform you when data has been acquired and saved. 
+
+If you want to follow the experiment progress with Bokeh, make sure to manually update the permissions of the folder where the data are saved. To so so :
+- click right on the folder and go to properties
+- NFS attributes
+- check Group/W and Other/W
+- apply
+
 
 ### Step 2: RT hybridization cycles 
 

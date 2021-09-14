@@ -58,6 +58,8 @@ class Task(InterruptableTask):
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter = None
         self.user_param_dict = {}
+        self.needle_pos = 0
+        self.rt_injection = 0
 
     def startTask(self):
         """ """
@@ -84,6 +86,9 @@ class Task(InterruptableTask):
             # position the needle in the probe
             self.ref['pos'].start_move_to_target(self.probe_list[0][0])
 
+            # keep in memory the position of the needle
+            self.needle_pos = self.probe_list[self.probe_counter-1][0]
+
         # set the valve default positions for injection
         self.ref['valves'].set_valve_position('b', 2)  # inject probe
         self.ref['valves'].wait_for_idle()
@@ -108,6 +113,18 @@ class Task(InterruptableTask):
             valve_pos = self.buffer_dict[product]
             self.ref['valves'].set_valve_position('a', valve_pos)
             self.ref['valves'].wait_for_idle()
+
+            # for the RAMM, the needle is connected to valve position 7. If this valve is called more than once,
+            # the needle will be moved to the next position. The procedure was added to make the DAPI injection
+            # easier.
+            if self.rt_injection == 0 and valve_pos == 7:
+                self.rt_injection += 1
+                self.needle_pos += 1
+            elif self.rt_injection > 0 and valve_pos == 7:
+                self.ref['pos'].start_move_to_target(self.needle_pos)
+                self.rt_injection += 1
+                self.needle_pos += 1
+                sleep(15)
 
             # pressure regulation
             self.ref['flow'].set_pressure(0.0)  # as initial value

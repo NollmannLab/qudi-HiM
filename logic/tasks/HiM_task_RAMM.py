@@ -185,6 +185,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
 
+            # keep in memory the position of the needle
+            needle_pos = self.probe_list[self.probe_counter-1][0]
+            rt_injection = 0
+
             print("Probe counter : {}".format(self.probe_counter))
             print("Probe list : {}".format(self.probe_list))
 
@@ -219,6 +223,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     valve_pos = self.buffer_dict[product]
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
+
+                    # for the RAMM, the needle is connected to valve position 7. If this valve is called more than once,
+                    # the needle will be moved to the next position. The procedure was added to make the DAPI injection
+                    # easier.
+                    if rt_injection == 0 and valve_pos == 7:
+                        rt_injection += 1
+                        needle_pos += 1
+                    elif rt_injection > 0 and valve_pos == 7:
+                        self.ref['pos'].start_move_to_target(needle_pos)
+                        rt_injection += 1
+                        needle_pos += 1
+                        time.sleep(15)
 
                     # pressure regulation
                     # create lists containing pressure and volume data and initialize first value to 0
