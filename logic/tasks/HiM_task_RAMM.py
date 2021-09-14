@@ -285,7 +285,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     for i in range(num_steps):
                         if not self.aborted:
                             time.sleep(30)
-                            print("Elapsed time : {}s".format(i*30))
+                            print("Elapsed time : {}s".format((i+1)*30))
                     time.sleep(remainder)
 
                     self.ref['valves'].set_valve_position('c', 2)  # open flux again
@@ -806,23 +806,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         metadata = {}
         metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = np.round(self.exposure,3)
+        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
         metadata['Scan step length (um)'] = self.z_step
         metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
-        # metadata['Filter'] = 'filtername'  # or without this entry ???
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        # to check where the problem comes from :
-        # metadata['x position'] = self.ref['roi'].stage_position[0]
-        # metadata['y position'] = self.ref['roi'].stage_position[1]
+
+        # add translation stage position
+        metadata['x position'] = float(self.ref['roi'].stage_position[0])
+        metadata['y position'] = float(self.ref['roi'].stage_position[1])
 
         # add autofocus information :
-        metadata['Autofocus offset'] = self.ref['focus']._autofocus_logic._focus_offset
-        #metadata['Autofocus calibration precision'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['Autofocus calibration slope'] = self.ref['focus']._slope
-        metadata['Autofocus setpoint'] = self.ref['focus']._autofocus_logic._setpoint
+        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
+        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision,2))
+        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
+        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
 
         return metadata
 
