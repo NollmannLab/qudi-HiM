@@ -38,6 +38,7 @@ from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_logging_functions import write_dict_to_file
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -74,6 +75,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('started Task')
 
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
@@ -97,11 +100,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
+        # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
+        if self.is_dapi:
+            imag_dict = {'imaging_sequence': self.imaging_sequence}
+            dapi_channel_info_path = os.path.join(self.directory, 'dapi_channel_info.yml')
+            write_dict_to_file(dapi_channel_info_path, imag_dict)
+
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 

@@ -76,6 +76,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('started Task')
         self.err_count = 0  # initialize the error counter (counts number of missed triggers for debug)
 
+        # retrieve default exposure for camera to reset it at the end of task
+        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
@@ -119,9 +122,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         while not pos == self.filter_pos:
             sleep(1)
             pos = self.ref['filter'].get_position()
-
-        # retrieve default exposure for camera to reset it at the end of task
-        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
