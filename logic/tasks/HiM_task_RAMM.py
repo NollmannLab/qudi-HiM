@@ -261,6 +261,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     for i in range(num_steps):
                         if not self.aborted:
                             time.sleep(30)
+                            print("Elapsed time : {}s".format(i*30))
                     time.sleep(remainder)
 
                     self.ref['valves'].set_valve_position('c', 2)  # open flux again
@@ -268,7 +269,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.log.info('Incubation time finished')
 
                 if self.logging:
-                    add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
+                    try:
+                        add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
+                    except OSError as err:
+                        print("OSError was found : {}".format(err))
+                        print("path : {}".format(self.log_path))
+                        print("probe counter : {}".format(self.probe_counter))
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
