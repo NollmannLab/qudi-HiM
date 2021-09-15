@@ -581,6 +581,21 @@ class FocusLogic(GenericLogic):
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
 
+    def update_autofocus_offset_parameters(self, offset, setpoint):
+        """ From the gui, it is possible to manually indicate which offset and setpoint should be used for the
+        autofocus. This is particularly useful in case the program crashed and the user wants to reuse the same
+        parameters.
+        :param: float offset & float setpoint values previously saved by the user
+        :return: None
+        """
+        # Define the offset value and display it on the main window
+        self.sigOffsetCalibration.emit(offset)
+        self._autofocus_logic._focus_offset = offset
+        # Define the setpoint value and display it on the main window
+        self._setpoint_defined = True
+        self.sigSetpointDefined.emit(setpoint)
+        self._autofocus_logic._setpoint = setpoint
+
     def rescue_autofocus(self):
         """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
         The stage moves along the z axis until the signal is found.
