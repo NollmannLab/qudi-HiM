@@ -19,11 +19,19 @@ def add_log_entry(path, cycle, process, event, level='info'):
     :param str event: message describing the logged event
     :param: str level: 'info', 'warning', 'error'
     """
-    timestamp = datetime.now()
-    entry = {'timestamp': [timestamp], 'cycle_no': [cycle], 'process': [process], 'event': [event], 'level': [level]}
-    df_line = pd.DataFrame(entry, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-    with open(path, 'a') as file:
-        df_line.to_csv(file, index=False, header=False)
+    try:
+        timestamp = datetime.now()
+        entry = {'timestamp': [timestamp], 'cycle_no': [cycle], 'process': [process], 'event': [event], 'level': [level]}
+        df_line = pd.DataFrame(entry, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+        with open(path, 'a') as file:
+            df_line.to_csv(file, index=False, header=False)
+    except OSError as error:
+        print('An error occurred in logic.task_logging_functions : {}'.format(error))
+        print('path : {}'.format(path))
+        print('cycle : {}'.format(cycle))
+        print('process : {}'.format(process))
+        print('event : {}'.format(event))
+        print('file : {}'.format(file))
 
 
 def update_default_info(path, user_param_dict, image_path, fileformat, num_cycles, num_roi, num_inj_hybr, num_inj_photobl):
