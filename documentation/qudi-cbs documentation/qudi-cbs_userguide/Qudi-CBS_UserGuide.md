@@ -185,7 +185,7 @@ The following actions are available:
 #### Settings menu:
 
 - PID settings: Open a dialog to modify the parameters for the proportional-integral-differential (PID) stabilization of the focus position. 
-
+- Offset settings : Open a dialog box to indicate previous values for the offset and the autofocus setpoint. This option is only available for the RAMM and should be used only as a **rescuing option for the autofocus parameters after a crash**.
 #### Manual focus toolbar:
 
 - *Reinitialize*: Move the piezo stage gradually to the initial position defined in the setup specific configuration file. The movement can be monitored by the displayed z position in the manual focus dockwidget or in the timetrace, if activated. 
