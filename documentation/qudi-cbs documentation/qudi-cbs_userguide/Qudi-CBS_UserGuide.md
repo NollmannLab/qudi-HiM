@@ -419,7 +419,7 @@ The injection dockwidget contains the tools to define the hybridization and phot
 - For the Hybridization manager, you can call **Probes** several times. For the first call, the needle will be at the position indicated in the probe list. Then, for each new call, the needle will move to the next position on the tray. For example, a Fiducial tube is in position #1 and a DAPI tube in position #2. An example of hybridization injection could then be :
   - Probe,1500ul,150ul/min = the needle is in position #1 and injection of fiducial
   - Injection of wb
-  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of fiducial
+  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of DAPI
   - Injection of ssc
   - Injection of ib
 
