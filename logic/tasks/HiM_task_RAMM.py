@@ -842,6 +842,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
         metadata['X_POS'] = (self.ref['roi'].stage_position[0], 'x position')
         metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
+
+        # add autofocus information :
+        metadata['AUTO_OFF'] = self.ref['focus']._autofocus_logic._focus_offset
+        metadata['AUTO_PREC'] = np.round(self.ref['focus']._precision,2)
+        metadata['AUTO_SLOPE'] = np.round(self.ref['focus']._slope, 3)
+        metadata['AUTO_SETP'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+
         # pixel size
         return metadata
 
