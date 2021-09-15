@@ -264,25 +264,23 @@ class AutofocusLogic(GenericLogic):
             elif qpd_sum < max_sum and max_sum > 400:
                 break
 
-        # Calculate the offset for the stage and move back to the initial position
-
+        # Calculate the offset for the stage
         offset = self._stage.get_pos()['z'] - z_up
         offset = np.round(offset, decimals=1)
 
-        # send signal to focus logic that will be linked to define_autofocus_setpoint
+        # Send signal to focus logic that will be linked to define_autofocus_setpoint. The autofocus setpoint is defined
+        # on the bottom of the coverslip, at the oil/glass interface
         self.sigOffsetDefined.emit()
 
         # avoid moving stage while QPD signal is read
         sleep(0.5)
 
+        # move the stage back to its original position
         self.stage_move_z(-offset)
         self.stage_wait_for_idle()
 
-        # # send signal to focus logic that will be linked to define_autofocus_setpoint
-        # self.sigOffsetDefined.emit()
-
+        # save the offset
         self._focus_offset = offset
-
         return offset
 
     def rescue_autofocus(self):
