@@ -143,7 +143,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
-                                len(self.probe_list), last_roi_number, len(hybr_list), len(photobl_list))
+                                self.probe_dict, last_roi_number, len(hybr_list), len(photobl_list))
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # close default FPGA session
@@ -684,7 +684,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             with open(self.injections_path, 'r') as stream:
                 documents = yaml.safe_load(stream)  # yaml.full_load when yaml package updated
                 buffer_dict = documents['buffer']
-                probe_dict = documents['probes']
+                self.probe_dict = documents['probes']
                 self.hybridization_list = documents['hybridization list']
                 self.photobleaching_list = documents['photobleaching list']
 
@@ -692,7 +692,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.buffer_dict = dict([(value, key) for key, value in buffer_dict.items()])
             # create a list out of probe_dict and order by ascending position
             # (for example: probes in pos 2, 5, 6, 9, 10 is ok but not 10, 2, 5, 6, 9)
-            self.probe_list = sorted(probe_dict.items())  # list of tuples, such as [(1, 'RT1'), (2, 'RT2')]
+            self.probe_list = sorted(self.probe_dict.items())  # list of tuples, such as [(1, 'RT1'), (2, 'RT2')]
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
