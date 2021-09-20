@@ -331,7 +331,7 @@ class FocusGUI(GUIBase):
     def update_offset_parameters(self):
         """ Callback of ok button in offset settings dialog. Update the chosen parameters. """
         offset = float(self._w_offset.Offset_doubleSpinBox.value())
-        setpoint = float(self._w_offset.Setpoint_doubleSpinBox.value())
+        setpoint = int(self._w_offset.Setpoint_doubleSpinBox.value())
         self._focus_logic.update_autofocus_offset_parameters(offset, setpoint)
 
     def keep_offset_parameters(self):
