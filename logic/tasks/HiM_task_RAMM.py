@@ -529,14 +529,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             current_time = time.time()
             diff = current_time-start_rinsing_time
             if diff < 60:
-                time.sleep(diff+1)
+                time.sleep(60-diff+1)
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
             self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
             self.ref['valves'].wait_for_idle()
-
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
