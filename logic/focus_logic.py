@@ -610,14 +610,14 @@ class FocusLogic(GenericLogic):
         The autofocus method with readout on a reference plane is used.
         :return: None
         """
-        self.stop_autofocus()
         self.piezo_correction_running = True
+        self.stop_autofocus()
         success = True
 
         piezo_pos = self.get_position()
 
         if (piezo_pos < 10) or (piezo_pos > 50):  # correction necessary
-            print('doing piezo position correction..')
+            print('doing piezo position correction.')
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
             self._autofocus_logic.stage_move_z(offset)
