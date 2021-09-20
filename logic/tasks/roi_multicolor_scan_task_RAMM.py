@@ -139,6 +139,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
         self.ref['roi'].stage_wait_for_idle()
 
+        # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
+        self.ref['focus'].do_piezo_position_correction()
+        busy = True
+        while busy:
+            sleep(0.5)
+            busy = self.ref['focus'].piezo_correction_running
+
         # autofocus
         self.ref['focus'].start_search_focus()
         # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane

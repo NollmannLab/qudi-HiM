@@ -317,13 +317,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
-            self.ref['focus'].do_piezo_position_correction()
-            busy = self.ref['focus'].piezo_correction_running
-            while busy:
-                time.sleep(0.5)
-                busy = self.ref['focus'].piezo_correction_running
-
             for item in self.roi_names:
                 if self.aborted:
                     break
@@ -339,6 +332,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['roi'].stage_wait_for_idle()
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
+
+                # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50) ---------------
+                self.ref['focus'].do_piezo_position_correction()
+                busy = True
+                while busy:
+                    time.sleep(0.5)
+                    busy = self.ref['focus'].piezo_correction_running
 
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
