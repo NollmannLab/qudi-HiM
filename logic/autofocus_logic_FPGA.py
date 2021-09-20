@@ -71,6 +71,7 @@ class AutofocusLogic(GenericLogic):
     _ref_axis = ConfigOption('autofocus_ref_axis', 'X', missing='warn')
     _autofocus_stable = False
     _autofocus_iterations = 0
+    _focus_offset = 0 # Set to zero until the calibration is performed
 
     # pid attributes
     _pid_frequency = 0.2  # in s, frequency for the autofocus PID update
