@@ -445,16 +445,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         metadata = {}
         metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = self.exposure
+        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
         metadata['Scan step length (um)'] = self.z_step
         metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        metadata['x position'] = self.ref['roi'].stage_position[0]
-        metadata['y position'] = self.ref['roi'].stage_position[1]
-        # pixel size ???
+            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
+
+        # add translation stage position
+        metadata['x position'] = float(self.ref['roi'].stage_position[0])
+        metadata['y position'] = float(self.ref['roi'].stage_position[1])
+
+        # add autofocus information :
+        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
+        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
+        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
+        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
+
         return metadata
 
     def get_fits_metadata(self):
@@ -475,6 +483,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
         # metadata['ROI001'] = (self.ref['roi'].get_roi_position('ROI001'), 'ROI 001 position')
         # pixel size
+
+        # add autofocus information :
+        metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
+        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
+        metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
+        metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+
         return metadata
 
     def save_metadata_file(self, metadata, path):

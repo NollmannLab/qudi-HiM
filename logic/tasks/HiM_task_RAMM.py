@@ -839,10 +839,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
 
         # add autofocus information :
-        metadata['AUTO_OFF'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['AUTO_PREC'] = np.round(self.ref['focus']._precision,2)
-        metadata['AUTO_SLOPE'] = np.round(self.ref['focus']._slope, 3)
-        metadata['AUTO_SETP'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+        metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
+        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
+        metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
+        metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
 
         # pixel size
         return metadata
