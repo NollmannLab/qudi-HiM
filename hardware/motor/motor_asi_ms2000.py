@@ -88,6 +88,11 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
             for item in axis_list:
                 if isinstance(item, str):
                     self.axis_list.append(item)
+
+            # if the z axis is available, define the default speed for this axis
+            if len(axis_list) == 3:
+                self.set_velocity({'z': 1.9})
+
         except Exception:
             self.log.error(f'ASI MS2000 automated stage not connected. Check if device is switched on.')
 
