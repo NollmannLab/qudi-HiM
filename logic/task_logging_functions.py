@@ -7,8 +7,11 @@ def write_status_dict_to_file(path, status_dict):
     """ Write the current status dictionary to a yaml file.
     :param: dict status_dict: dictionary containing a summary describing the current state of the experiment.
     """
-    with open(path, 'w') as outfile:
-        yaml.safe_dump(status_dict, outfile, default_flow_style=False)
+    try:
+        with open(path, 'w') as outfile:
+            yaml.safe_dump(status_dict, outfile, default_flow_style=False)
+    except OSError as error:
+        print('An error occurred in logic.task_logging_functions : {}'.format(error))
 
 
 def add_log_entry(path, cycle, process, event, level='info'):
@@ -27,11 +30,6 @@ def add_log_entry(path, cycle, process, event, level='info'):
             df_line.to_csv(file, index=False, header=False)
     except OSError as error:
         print('An error occurred in logic.task_logging_functions : {}'.format(error))
-        print('path : {}'.format(path))
-        print('cycle : {}'.format(cycle))
-        print('process : {}'.format(process))
-        print('event : {}'.format(event))
-        print('file : {}'.format(file))
 
 
 def update_default_info(path, user_param_dict, image_path, fileformat, probes_dict, num_roi, num_inj_hybr, num_inj_photobl):
