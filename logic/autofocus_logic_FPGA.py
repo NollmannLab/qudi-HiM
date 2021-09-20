@@ -179,12 +179,12 @@ class AutofocusLogic(GenericLogic):
         self._autofocus_stable is updated by this function.
         :return: bool: is the autofocus stable ?
         """
-        if self._autofocus_iterations > 2: # 10:
+        if self._autofocus_iterations > 10: #2
             p = Poly.fit(np.linspace(0, 9, num=10), self._last_pid_output_values, deg=1)
             # p = Poly.fit(np.linspace(0, 1, num=2), self._last_pid_output_values, deg=1)
-            slope = p(9) - p(0)
+            slope = (p(9) - p(0))/10
             # slope = p(1) - p(0)
-            if np.absolute(slope) < 10:
+            if np.absolute(slope) < 1:
                 self._autofocus_stable = True
             else:
                 self._autofocus_stable = False
@@ -338,7 +338,7 @@ class AutofocusLogic(GenericLogic):
         :param: float step: target relative movement
         :return: None
         """
-        self._stage.set_velocity({'z': 0.01})
+        self._stage.set_velocity({'z': 0.0025})
         self.stage_wait_for_idle()
         self.stage_move_z(step)
         self.stage_wait_for_idle()
