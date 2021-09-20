@@ -20,7 +20,7 @@
      <x>0</x>
      <y>0</y>
      <width>902</width>
-     <height>22</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuMenu">
@@ -45,6 +45,7 @@
      <string>Settings</string>
     </property>
     <addaction name="pid_settings_Action"/>
+    <addaction name="offset_settings_Action"/>
    </widget>
    <addaction name="menuMenu"/>
    <addaction name="menuView"/>
@@ -534,6 +535,11 @@
    </property>
    <property name="text">
     <string>Search focus</string>
+   </property>
+  </action>
+  <action name="offset_settings_Action">
+   <property name="text">
+    <string>Offset settings</string>
    </property>
   </action>
  </widget>

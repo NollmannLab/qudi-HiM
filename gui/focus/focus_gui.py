@@ -56,6 +56,19 @@ class PIDSettingDialog(QtWidgets.QDialog):
         uic.loadUi(ui_file, self)
 
 
+class OffsetSettingDialog(QtWidgets.QDialog):
+    """ Create the SettingsDialog window, based on the corresponding *.ui file.
+    """
+    def __init__(self):
+        # Get the path to the *.ui file
+        this_dir = os.path.dirname(__file__)
+        ui_file = os.path.join(this_dir, 'ui_autofocus_offset_parameters.ui')
+
+        # Load it
+        super(OffsetSettingDialog, self).__init__()
+        uic.loadUi(ui_file, self)
+
+
 class FocusWindow(QtWidgets.QMainWindow):
     """ Class defined for the main window (not the module).
     """
@@ -90,7 +103,7 @@ class FocusWindowCE(FocusWindow):
 
 class FocusGUI(GUIBase):
     """ Tools to position the piezo to set the focus, and to calibrate and start focus stabilization (= autofocus),
-    or to search the focues (= autofocus using the option stop when stable, focus is eventually searched on a reference
+    or to search the focus (= autofocus using the option stop when stable, focus is eventually searched on a reference
     plane below the sample surface plane, if the setup disposes of a 3 axes stage).
 
     Example config for copy-paste:
@@ -148,6 +161,11 @@ class FocusGUI(GUIBase):
             self._mw.threshold_label.hide()
             self._mw.threshold_SpinBox.hide()
             # self._mw.im_display_dockWidget.hide()
+
+            # initiate the windows for the autofocus offset here since this method is not available in the camera
+            # configuration (because the ASI stage is not available with the z axis).
+            self.init_offset_settings_ui()
+
         if self._focus_logic._readout == 'camera':
             self._mw.find_offset_PushButton.hide()
             self._mw.offset_lineEdit.hide()
@@ -188,6 +206,7 @@ class FocusGUI(GUIBase):
         # menubar
         self._mw.close_MenuAction.triggered.connect(self._mw.close)
         self._mw.pid_settings_Action.triggered.connect(self.open_pid_settings)
+        self._mw.offset_settings_Action.triggered.connect(self.open_offset_settings)
         # toolbar
         self._mw.piezo_init_Action.triggered.connect(self.piezo_init_clicked)
         self._mw.tracking_Action.triggered.connect(self.start_tracking_clicked)
@@ -287,6 +306,41 @@ class FocusGUI(GUIBase):
         """ Callback of cancel button in PID settings dialog. Reestablish former PID parameters. """
         self._w_pid.Pgain_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._P_gain)
         self._w_pid.Igain_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._I_gain)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for the autofocus offset settings window
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def init_offset_settings_ui(self):
+        """ Initialize the window for the pid parameters.
+        """
+        # Create the offset settings window
+        self._w_offset = OffsetSettingDialog()
+        # Connect the action of the settings window with the code:
+        self._w_offset.accepted.connect(self.update_offset_parameters)  # ok button
+        self._w_offset.rejected.connect(self.keep_offset_parameters)  # cancel buttons
+
+        # Set default parameters on start
+        self.keep_offset_parameters()
+
+    def open_offset_settings(self):
+        """ Open the offset settings menu.
+        """
+        self._w_offset.exec_()
+
+    def update_offset_parameters(self):
+        """ Callback of ok button in offset settings dialog. Update the chosen parameters. """
+        offset = float(self._w_offset.Offset_doubleSpinBox.value())
+        setpoint = float(self._w_offset.Setpoint_doubleSpinBox.value())
+        self._focus_logic.update_autofocus_offset_parameters(offset, setpoint)
+
+    def keep_offset_parameters(self):
+        """ Callback of cancel button in offset settings dialog. Reestablish former offset parameters. """
+        offset = self._focus_logic._autofocus_logic._focus_offset
+        setpoint = self._focus_logic._autofocus_logic._setpoint
+        if offset != 0 and setpoint is not None:
+            self._w_offset.Offset_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._focus_offset)
+            self._w_offset.Setpoint_doubleSpinBox.setValue(self._focus_logic._autofocus_logic._setpoint)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Slots for manual piezo positioning

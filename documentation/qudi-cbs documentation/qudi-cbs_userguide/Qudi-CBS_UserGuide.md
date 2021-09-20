@@ -185,7 +185,7 @@ The following actions are available:
 #### Settings menu:
 
 - PID settings: Open a dialog to modify the parameters for the proportional-integral-differential (PID) stabilization of the focus position. 
-
+- Offset settings : Open a dialog box to indicate previous values for the offset and the autofocus setpoint. This option is only available for the RAMM and should be used only as a **rescuing option for the autofocus parameters after a crash**.
 #### Manual focus toolbar:
 
 - *Reinitialize*: Move the piezo stage gradually to the initial position defined in the setup specific configuration file. The movement can be monitored by the displayed z position in the manual focus dockwidget or in the timetrace, if activated. 
@@ -419,7 +419,7 @@ The injection dockwidget contains the tools to define the hybridization and phot
 - For the Hybridization manager, you can call **Probes** several times. For the first call, the needle will be at the position indicated in the probe list. Then, for each new call, the needle will move to the next position on the tray. For example, a Fiducial tube is in position #1 and a DAPI tube in position #2. An example of hybridization injection could then be :
   - Probe,1500ul,150ul/min = the needle is in position #1 and injection of fiducial
   - Injection of wb
-  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of fiducial
+  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of DAPI
   - Injection of ssc
   - Injection of ib
 

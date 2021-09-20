@@ -159,6 +159,7 @@ class Task(InterruptableTask):
             for i in range(num_steps):
                 if not self.aborted:
                     sleep(30)
+                    print("Elapsed time : {}s".format((i + 1) * 30))
 
             if not self.aborted:
                 sleep(remainder)
