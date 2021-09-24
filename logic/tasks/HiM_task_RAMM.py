@@ -262,6 +262,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                         if self.aborted:
                             ready = True
+
                     self.ref['flow'].stop_pressure_regulation_loop()
                     time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points for flow data
