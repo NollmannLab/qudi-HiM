@@ -103,7 +103,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
         if self.is_dapi:
             imag_dict = {'imaging_sequence': self.imaging_sequence}
-            dapi_channel_info_path = os.path.join(self.directory, 'dapi_channel_info.yml')
+            dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
             write_dict_to_file(dapi_channel_info_path, imag_dict)
 
         # close default FPGA session
@@ -300,8 +300,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.user_param_dict = yaml.safe_load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
-                self.is_dapi = self.user_param_dict['dapi']
-                self.is_rna = self.user_param_dict['rna']
+                self.is_dapi = self.user_param_dict['DAPI']
+                self.is_rna = self.user_param_dict['RNA']
                 self.exposure = self.user_param_dict['exposure']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
                 self.z_step = self.user_param_dict['z_step']  # in um
@@ -392,9 +392,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # special format if option dapi or rna checked in experiment configurator
         if self.is_dapi:
-            foldername = f'{prefix}_HiM_{self.sample_name}_dapi'
+            foldername = f'{prefix}_HiM_{self.sample_name}_DAPI'
         elif self.is_rna:
-            foldername = f'{prefix}_HiM_{self.sample_name}_rna'
+            foldername = f'{prefix}_HiM_{self.sample_name}_RNA'
         else:
             foldername = f'{prefix}_Scan_{self.sample_name}'
 
@@ -432,9 +432,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
 
         if self.is_dapi:
-            file_name = f'scan_{self.prefix}_dapi_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_DAPI_{roi_number_inv}.{self.file_format}'
         elif self.is_rna:
-            file_name = f'scan_{self.prefix}_rna_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_RNA_{roi_number_inv}.{self.file_format}'
         else:
             file_name = f'scan_{self.prefix}_{roi_number_inv}.{self.file_format}'
 
