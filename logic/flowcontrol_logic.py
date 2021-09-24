@@ -439,7 +439,9 @@ class FlowcontrolLogic(GenericLogic):
         self.total_volume += flowrate * sampling_interval / 60
         self.total_volume = np.round(self.total_volume, decimals=3)  # as safety to avoid entering into the else part when target volume is not yet reached due to data overflow
         self.time_since_start += sampling_interval
-        # print(self.total_volume, self.time_since_start, target_volume)
+
+        print("The target volume is {}, the total volume is {}, the duration of injection is {}".format(target_volume, self.total_volume, self.time_since_start))
+
         self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start)
         if self.total_volume < target_volume:
             self.target_volume_reached = False
