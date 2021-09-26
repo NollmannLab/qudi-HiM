@@ -143,7 +143,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
-                                self.probe_dict, last_roi_number, len(hybr_list), len(photobl_list))
+                                self.probe_dict, last_roi_number, hybr_list, photobl_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # close default FPGA session
