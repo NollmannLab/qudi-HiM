@@ -143,7 +143,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
-                                self.probe_dict, last_roi_number, len(hybr_list), len(photobl_list))
+                                self.probe_dict, last_roi_number, hybr_list, photobl_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # close default FPGA session
@@ -413,6 +413,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     metadata = self.get_metadata()
                     file_path = cur_save_path.replace('tif', 'yaml', 1)
                     self.save_metadata_file(metadata, file_path)
+
+                # calculate and save projection for bokeh --------------------------------------------------------------
+                self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
 
                 # save file with z positions (same procedure for either file format)
                 file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
@@ -874,3 +877,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         pressure_list.append(new_pressure)
         volume_list.append(new_total_volume)
         flowrate_list.append(new_flowrate)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for acquisition tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def calculate_save_projection(num_channel, image_array, saving_path):
+
+        # According to the number of channels acquired, split the stack accordingly
+        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+
+        # For each channel, the projection is calculated and saved as a npy file
+        for n_channel in range(num_channel):
+            image_array = deinterleaved_array_list[n_channel]
+            projection = image_array.max(axis=0)
+            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+            np.save(path, projection)

@@ -32,7 +32,7 @@ def add_log_entry(path, cycle, process, event, level='info'):
         print('An error occurred in logic.task_logging_functions : {}'.format(error))
 
 
-def update_default_info(path, user_param_dict, image_path, fileformat, probes_dict, num_roi, num_inj_hybr, num_inj_photobl):
+def update_default_info(path, user_param_dict, image_path, fileformat, probes_dict, num_roi, inj_hybr, inj_photobl):
     """ Create a dictionary with relevant entries for the default info file and save it under the specified path.
 
     :param: str path: complete path to the default_info file
@@ -51,6 +51,8 @@ def update_default_info(path, user_param_dict, image_path, fileformat, probes_di
     #     os.makedirs(path)  # recursive creation of all directories on the path
 
     num_cycles = len(probes_dict)
+    num_inj_hybr = len(inj_hybr)
+    num_inj_photobl = len(inj_photobl)
     info_dict = {'image_path': image_path, 'fileformat': fileformat, 'num_cycles': num_cycles, 'probes': probes_dict,
                  'last_num_roi': num_roi, 'num_injections_hybr': num_inj_hybr,
                  'num_injections_photobl': num_inj_photobl}
