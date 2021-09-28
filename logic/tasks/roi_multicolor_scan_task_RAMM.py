@@ -67,6 +67,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
+        print("Path to user config file : {}".format(self.user_config_path))
         self.roi_counter = None
         self.directory = None
         self.user_param_dict = {}
@@ -300,8 +301,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.user_param_dict = yaml.safe_load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
-                self.is_dapi = self.user_param_dict['DAPI']
-                self.is_rna = self.user_param_dict['RNA']
+                self.is_dapi = self.user_param_dict['dapi']
+                self.is_rna = self.user_param_dict['rna']
                 self.exposure = self.user_param_dict['exposure']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
                 self.z_step = self.user_param_dict['z_step']  # in um
