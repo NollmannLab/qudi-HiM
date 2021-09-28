@@ -415,7 +415,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.save_metadata_file(metadata, file_path)
 
                 # calculate and save projection for bokeh --------------------------------------------------------------
+                #start = time.time()
                 self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
+                #stop = time.time()
+                #print("Projection calculation time : {}".format(stop-start))
 
                 # save file with z positions (same procedure for either file format)
                 file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
