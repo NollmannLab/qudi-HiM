@@ -250,8 +250,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
                     sampling_interval = 1  # in seconds
-                    self.ref['flow'].start_volume_measurement(self.hybridization_list[step]['volume'],
-                                                              sampling_interval)
+                    self.ref['flow'].start_volume_measurement(self.hybridization_list[step]['volume']) # sampling_interval)
 
                     ready = self.ref['flow'].target_volume_reached
                     while not ready:
@@ -476,8 +475,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
                     # start counting the volume of buffer or probe
                     sampling_interval = 1  # in seconds
-                    self.ref['flow'].start_volume_measurement(self.photobleaching_list[step]['volume'],
-                                                              sampling_interval)
+                    self.ref['flow'].start_volume_measurement(self.photobleaching_list[step]['volume'])
+                                                              #sampling_interval)
 
                     ready = self.ref['flow'].target_volume_reached
 
