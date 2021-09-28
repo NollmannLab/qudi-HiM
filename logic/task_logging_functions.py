@@ -55,7 +55,8 @@ def update_default_info(path, user_param_dict, image_path, fileformat, probes_di
     num_inj_photobl = len(inj_photobl)
     info_dict = {'image_path': image_path, 'fileformat': fileformat, 'num_cycles': num_cycles, 'probes': probes_dict,
                  'last_num_roi': num_roi, 'num_injections_hybr': num_inj_hybr,
-                 'num_injections_photobl': num_inj_photobl}
+                 'num_injections_photobl': num_inj_photobl, 'injections_hybridization': inj_hybr,
+                 'injections_photobleaching': inj_photobl}
 
     upper_dict = {'user_parameters': user_param_dict, 'exp_tracker_app_dict': info_dict}
 
