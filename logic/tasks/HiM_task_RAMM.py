@@ -894,6 +894,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # For each channel, the projection is calculated and saved as a npy file
         for n_channel in range(num_channel):
             image_array = deinterleaved_array_list[n_channel]
-            projection = image_array.max(axis=0)
+            projection = np.max(image_array, axis=0)
             path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
             np.save(path, projection)
