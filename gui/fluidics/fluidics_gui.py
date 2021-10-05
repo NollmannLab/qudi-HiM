@@ -598,8 +598,8 @@ class FluidicsGUI(GUIBase):
             self._mw.volume_measurement_Action.setText('Stop volume measurement')
             self.sigStartVolumeMeasurement.emit(target_volume, sampling_interval)
 
-    @QtCore.Slot(int, int)
-    def update_volume_and_time(self, total_volume, time):
+    @QtCore.Slot(int, int, int, int)
+    def update_volume_and_time(self, total_volume, time, flow_rate, pressure):
         """ Callback of a signal emitted from logic informing the GUI about the new total volume
         and time since start of the measurement.
 
@@ -608,6 +608,8 @@ class FluidicsGUI(GUIBase):
         """
         self._mw.volume_LineEdit.setText(str(total_volume))
         self._mw.time_since_start_LineEdit.setText(str(time))  # change formatting: maybe in min:sec when > 60 s ??
+        self._mw.flowrate_LineEdit.setText(str(flow_rate))
+        self._mw.pressure_LineEdit.setText(str(pressure))
 
     @QtCore.Slot()
     def reset_volume_measurement_button(self):
