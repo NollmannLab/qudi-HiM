@@ -1,17 +1,29 @@
 import yaml
 from datetime import datetime
 import pandas as pd
+from time import sleep
 
 
 def write_status_dict_to_file(path, status_dict):
     """ Write the current status dictionary to a yaml file.
     :param: dict status_dict: dictionary containing a summary describing the current state of the experiment.
     """
-    try:
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(status_dict, outfile, default_flow_style=False)
-    except OSError as error:
-        print('An error occurred in logic.task_logging_functions : {}'.format(error))
+    n_attempt = 0
+    success = False
+
+    while n_attempt < 10 and success is False:
+        try:
+            with open(path, 'w') as outfile:
+                yaml.safe_dump(status_dict, outfile, default_flow_style=False)
+                success = True
+        except OSError as error:
+            # print('An error occurred in logic.task_logging_functions : {}'.format(error))
+            n_attempt += 1
+            sleep(0.1)
+
+    if success is False:
+        print('write_status_dict_to_file : Unable to write in the following file : {} - error code : {}'.format(path,
+                                                                                                                error))
 
 
 def add_log_entry(path, cycle, process, event, level='info'):
@@ -22,14 +34,25 @@ def add_log_entry(path, cycle, process, event, level='info'):
     :param str event: message describing the logged event
     :param: str level: 'info', 'warning', 'error'
     """
-    try:
-        timestamp = datetime.now()
-        entry = {'timestamp': [timestamp], 'cycle_no': [cycle], 'process': [process], 'event': [event], 'level': [level]}
-        df_line = pd.DataFrame(entry, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-        with open(path, 'a') as file:
-            df_line.to_csv(file, index=False, header=False)
-    except OSError as error:
-        print('An error occurred in logic.task_logging_functions : {}'.format(error))
+    n_attempt = 0
+    success = False
+
+    while n_attempt < 10 and success is False:
+        try:
+            timestamp = datetime.now()
+            entry = {'timestamp': [timestamp], 'cycle_no': [cycle], 'process': [process], 'event': [event], 'level': [level]}
+            df_line = pd.DataFrame(entry, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+            with open(path, 'a') as file:
+                df_line.to_csv(file, index=False, header=False)
+            success = True
+        except OSError as error:
+            # print('An error occurred in logic.task_logging_functions : {} - the path of the file was : {}'.format(error,
+            #                                                                                                       path))
+            n_attempt += 1
+            sleep(0.1)
+
+    if success is False:
+        print('add_log_entry : Unable to write in the following file : {} - error code : {}'.format(path, error))
 
 
 def update_default_info(path, user_param_dict, image_path, fileformat, probes_dict, num_roi, inj_hybr, inj_photobl):
