@@ -31,6 +31,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 import numpy as np
 import serial
 from time import sleep, time
+import re
 
 from core.module import Base
 from interface.motor_interface import MotorInterface
@@ -407,9 +408,13 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         
         :return: string answer: formatted and decoded response from serial port
         """
+
         self._serial_connection.flushInput()
+        self._serial_connection.flushOutput()
         self._serial_connection.write(command.encode())
         answer = self._serial_connection.readline().decode().strip()
+        # print("ASI stage query {}".format(command))
+        # print("ASI stage query return : {}".format(answer))
         return answer
 
     def write(self, command):
@@ -418,5 +423,21 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         :param string command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
         :return: None
         """
-        self._serial_connection.flushInput()
-        self._serial_connection.write(command.encode())
+        n_attempt = 0
+        success = False
+
+        while n_attempt < 10 and success is False:
+            self._serial_connection.flushInput()
+            self._serial_connection.flushOutput()
+            self._serial_connection.write(command.encode())
+            answer = self._serial_connection.readline().decode().strip()
+            is_match = bool(re.match(":A", answer))
+            if is_match is True:
+                success = True
+                break
+            else:
+                n_attempt += 1
+                sleep(0.1)
+
+        if success is False:
+            print('The ASI stage is unable to execute the command : {}'. format(command))
