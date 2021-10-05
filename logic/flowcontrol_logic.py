@@ -56,7 +56,7 @@ class WorkerSignals(QtCore.QObject):
 
 
 class MeasurementWorker(QtCore.QRunnable):
-    """ Worker thread to monitor the pressure and the flowrate every x seconds when measuring mode is on.
+    """ Worker thread to monitor the pressure and the flow-rate every x seconds when measuring mode is on.
 
     The worker handles only the waiting time, and emits a signal that serves to trigger the update of indicators on GUI.
     """
@@ -145,7 +145,7 @@ class FlowcontrolLogic(GenericLogic):
     # signals
     sigUpdateFlowMeasurement = QtCore.Signal(list, list)
     sigUpdatePressureSetpoint = QtCore.Signal(float)
-    sigUpdateVolumeMeasurement = QtCore.Signal(int, int)
+    sigUpdateVolumeMeasurement = QtCore.Signal(int, int, int, int)
     sigTargetVolumeReached = QtCore.Signal()
     sigRinsingFinished = QtCore.Signal()
     sigDisableFlowActions = QtCore.Signal()
@@ -447,13 +447,14 @@ class FlowcontrolLogic(GenericLogic):
         :return: None
         """
         flowrate = self.get_flowrate()[0]
+        pressure = self.get_pressure()[0]
         self.total_volume += flowrate * self.sampling_interval / 60
         self.total_volume = np.round(self.total_volume, decimals=3)  # as safety to avoid entering into the else part when target volume is not yet reached due to data overflow
         self.time_since_start += self.sampling_interval
 
-        print("The target volume is {}, the total volume is {}, the duration of injection is {}".format(self.target_volume, self.total_volume, self.time_since_start))
+        #  print("The target volume is {}, the total volume is {}, the duration of injection is {}".format(self.target_volume, self.total_volume, self.time_since_start))
 
-        self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start)
+        self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start, flowrate, pressure)
 
         # The second conditions was added to avoid target volume error. Sometimes, the target volume is never reached
         # and the pump keeps injecting without stopping.
