@@ -125,7 +125,8 @@ class FluidicsGUI(GUIBase):
     sigSetPressure = QtCore.Signal(float)
     sigStartFlowMeasure = QtCore.Signal()
     sigStopFlowMeasure = QtCore.Signal()
-    sigStartVolumeMeasurement = QtCore.Signal(int, int)
+    # sigStartVolumeMeasurement = QtCore.Signal(int, int)
+    sigStartVolumeMeasurement = QtCore.Signal(int)
     sigStopVolumeMeasurement = QtCore.Signal()
     sigStartRinsing = QtCore.Signal(int)
     sigStopRinsing = QtCore.Signal()
@@ -594,9 +595,10 @@ class FluidicsGUI(GUIBase):
             self.sigStopVolumeMeasurement.emit()
         else:
             target_volume = 500000  # np.inf  --> caused problems because the value is sometimes large negative !
-            sampling_interval = 1  # in seconds, fixed for measurement started from GUI
+            # sampling_interval = 1  # in seconds, fixed for measurement started from GUI
             self._mw.volume_measurement_Action.setText('Stop volume measurement')
-            self.sigStartVolumeMeasurement.emit(target_volume, sampling_interval)
+            self.sigStartVolumeMeasurement.emit(target_volume)
+            # self.sigStartVolumeMeasurement.emit(target_volume, sampling_interval)
 
     @QtCore.Slot(int, int, int, int)
     def update_volume_and_time(self, total_volume, time, flow_rate, pressure):
