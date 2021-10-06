@@ -536,9 +536,7 @@ class FocusLogic(GenericLogic):
 
             # calculate the necessary movement of piezo dz
             z = self._z0 + pid / self._slope
-
             dz = np.absolute(self.get_position() - z)
-
             print(f'z is {z}, dz is {dz}')
 
             if self._min_z + 1 < z < self._max_z - 1:
@@ -556,7 +554,8 @@ class FocusLogic(GenericLogic):
                 return
 
             worker = AutofocusWorker(self._dt)
-            worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable, search_focus=search_focus))
+            worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+                                                       search_focus=search_focus))
             self.threadpool.start(worker)
 
     def stop_autofocus(self):

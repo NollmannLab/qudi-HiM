@@ -168,6 +168,19 @@ class Nifpga(Base, LasercontrolInterface):
 
         :return list [x_value, y_value, i_value, count, duration]
         """
+        # This modification was added to make sure the signal measured from the qpd is related to the actual position of
+        # the stage (and not a previous one). The signal from the qpd is indeed average out, and it takes ~30ms between
+        # each new measurement.
+        count_t0 = self.counter.read()
+        n_attempt = 0
+
+        while self.counter.read() == count_t0 and n_attempt < 100:
+            sleep(0.01)
+            n_attempt += 1
+
+        if n_attempt == 100:
+            print('ni_fpga.py : FPGA counter is stuck or communication is lost')
+
         x_value = self.qpd_x_read.read()
         y_value = self.qpd_y_read.read()
         i_value = self.qpd_i_read.read()

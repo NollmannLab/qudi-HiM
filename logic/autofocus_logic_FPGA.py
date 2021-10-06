@@ -131,7 +131,6 @@ class AutofocusLogic(GenericLogic):
         the function returns False to indicate that the autofocus signal is lost.
         :return bool: True: signal ok, False: signal too low
         """
-        print("autofocus_logic_FPGA.py autofocus_check_signal")
         qpd_sum = self.qpd_read_sum()
         print("Autofocus check signal : SUM = {}".format(qpd_sum))
         if qpd_sum < 300:
@@ -143,7 +142,7 @@ class AutofocusLogic(GenericLogic):
         """ Initialize the pid for the autofocus, and reset the number of autofocus iterations.
         :return: None
         """
-        self.qpd_reset()
+        # self.qpd_reset()
         self._fpga.init_pid(self._P_gain, self._I_gain, self._setpoint, self._ref_axis)
         self.set_worker_frequency()
 
@@ -250,7 +249,7 @@ class AutofocusLogic(GenericLogic):
 
             self.stage_move_z(z_step)
             self.stage_wait_for_idle()
-            sleep(0.1)
+            # sleep(0.1)
 
             # qpd_sum[n] = self.read_detector_intensity()
             # qpd_pos[n] = self.read_detector_signal()
@@ -291,7 +290,6 @@ class AutofocusLogic(GenericLogic):
         The stage moves along the z axis until the signal is found.
         :return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
         """
-        print("autofocus_logic_FPGA.py rescue_autofocus")
         success = False
         z_range = 40  # in µm - starting range for the search
         z_step = 1  # in µm
@@ -305,7 +303,7 @@ class AutofocusLogic(GenericLogic):
             for z in range(z_range):
                 self.stage_move_z(z_step)
                 self.stage_wait_for_idle()
-                sleep(0.1)
+                # sleep(0.1)
 
                 if self.autofocus_check_signal():
                     success = True
@@ -324,14 +322,12 @@ class AutofocusLogic(GenericLogic):
         :param: float step: target relative movement
         :return: None
         """
-        print("autofocus_logic_FPGA.py stage_move_z")
         self._stage.move_rel({'z': step})
 
     def stage_wait_for_idle(self):
         """ This method waits that the connected translation stage is in idle state.
         :return: None
         """
-        print("autofocus_logic_FPGA.py stage_wait_for_idle")
         self._stage.wait_for_idle()
         pos = self._stage.get_pos()
         # print("stage position : {}".format(pos))
@@ -377,7 +373,6 @@ class AutofocusLogic(GenericLogic):
         :return: float: intensity of the QPD signal   # check return type: int or float ?
         """
         qpd = self._fpga.read_qpd()
-        # print(qpd)
         return qpd[2]
 
     def set_worker_frequency(self):
