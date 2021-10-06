@@ -223,6 +223,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
 
+        # save the projection of the acquired stack if DAPI was checked (for experiment tracking option)
+        if self.is_dapi:
+            self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
+
         # save file with z positions (same procedure for either file format)
         file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
         save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
@@ -509,3 +513,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for acquisition tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def calculate_save_projection(num_channel, image_array, saving_path):
+
+        # According to the number of channels acquired, split the stack accordingly
+        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+
+        # For each channel, the projection is calculated and saved as a npy file
+        for n_channel in range(num_channel):
+            image_array = deinterleaved_array_list[n_channel]
+            projection = np.max(image_array, axis=0)
+            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+            np.save(path, projection)
