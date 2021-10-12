@@ -67,13 +67,14 @@ class MccDAQ(Base):
     trigger_out7_zen = ConfigOption('OUT7_ZEN', None, missing='warn')
     counter_out8_zen = ConfigOption('OUT8_ZEN', None, missing='warn')
 
-    def __init__(self, config, **kwargs):
-        super().__init__(config=config, **kwargs)
-        self.board_num = None
-        self.port = None
+    # def __init__(self, config, **kwargs):
+    #     super().__init__(config=config, **kwargs)
+    #     self.board_num = None
+    #     self.port = None
 
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        # super().__init__(*args, **kwargs)
+        pass
 
     def on_activate(self):
         """ Initialization steps when module is called.
@@ -254,23 +255,38 @@ class MccDAQ(Base):
         else:
             self.log.warning('Voltage not in allowed range.')
 
-# Send trigger for ZEN experiment and wait for the trigger bach when experiment starts ---------------------------------
+# Send trigger for ZEN experiment and wait for the trigger back when experiment starts ---------------------------------
     def zen_starting_experiment_trigger(self):
         pass
 
+# Wait for ZEN trigger -------------------------------------------------------------------------------------------------
+    def wait_zen_trigger(self):
+        pass
+
+# Wait global exposure trigger from camera _____________________________________________________________________________
+    def wait_global_exposure_start(self):
+        pass
+
+# Wait global exposure trigger end -------------------------------------------------------------------------------------
+    def wait_global_exposure_end(self):
+        pass
+
+# Send trigger to laser source celesta ---------------------------------------------------------------------------------
+    def trigger_laser_line(self, channel):
+        pass
 
 
 if __name__ == '__main__':
     mcc_daq = MccDAQ()
+    print(mcc_daq._wavelengths)
     mcc_daq.on_activate()
     # mcc_daq.write_to_ao_channel(0, 0)
-    mcc_daq.write_to_pump_ao_channel(1)
-    sleep(2)
-    mcc_daq.write_to_pump_ao_channel(0)
+    # mcc_daq.set_up_do_channel(2)
 
-    mcc_daq.write_to_fluidics_pump_ao_channel(1)
-    sleep(2)
-    mcc_daq.write_to_fluidics_pump_ao_channel(0)
+    mcc_daq.write_to_do_channel(2, 0, 1)
+    sleep(1)
+    mcc_daq.write_to_do_channel(2, 0, 0)
+
 
     mcc_daq.on_deactivate()
     # mcc_daq.config_first_detected_device(0)
