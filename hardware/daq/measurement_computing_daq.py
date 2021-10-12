@@ -6,7 +6,7 @@ This file contains a class for the Measurement Computing DAQ.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F.Barho / JB.Fiche
 
 Created on Wed June 6 2021
 -----------------------------------------------------------------------------------
@@ -47,6 +47,7 @@ class MccDAQ(Base):
             module.Class: 'daq.measurement_computing_daq.MccDAQ'
             rinsing_pump_channel: 0
             fluidics_pump_channel: 1
+            ...
 
     """
 
@@ -54,6 +55,17 @@ class MccDAQ(Base):
     # ao channels
     rinsing_pump_channel = ConfigOption('rinsing_pump_channel', None, missing='warn')
     fluidics_pump_channel = ConfigOption('fluidics_pump_channel', None, missing='warn')
+    _wavelengths = ConfigOption('wavelengths', None)
+    _laser_write_ao_channels = ConfigOption('laser_ao_channels', None)
+
+    # channel_405nm = ConfigOption('405nm', None, missing='warn')
+    # channel_477nm = ConfigOption('477nm', None, missing='warn')
+    # channel_546nm = ConfigOption('546nm', None, missing='warn')
+    # channel_638nm = ConfigOption('638nm', None, missing='warn')
+    # channel_750nm = ConfigOption('750nm', None, missing='warn')
+    trigger_in7_zen = ConfigOption('IN7_ZEN', None, missing='warn')
+    trigger_out7_zen = ConfigOption('OUT7_ZEN', None, missing='warn')
+    counter_out8_zen = ConfigOption('OUT8_ZEN', None, missing='warn')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -213,7 +225,7 @@ class MccDAQ(Base):
         self.set_up_di_channel(2)  # configure bit 2 as input
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Various functionality of DAQ
+# Various functionality of DAQ for the Airy-scan microscope
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Needle rinsing pump---------------------------------------------------------------------------------------------------
@@ -231,10 +243,20 @@ class MccDAQ(Base):
 
 # Flowcontrol pump------------------------------------------------------------------------------------------------------
     def write_to_fluidics_pump_channel(self, voltage):
+        """ Control the pump voltage
+
+        :param: float voltage: target voltage to apply to the channel
+
+        :return: None
+        """
         if 0 <= voltage <= 10:  # replace by reading limits from device
             self.write_to_ao_channel(voltage, self.fluidics_pump_channel)
         else:
             self.log.warning('Voltage not in allowed range.')
+
+# Send trigger for ZEN experiment and wait for the trigger bach when experiment starts ---------------------------------
+    def zen_starting_experiment_trigger(self):
+        pass
 
 
 

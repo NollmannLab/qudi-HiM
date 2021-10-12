@@ -6,7 +6,7 @@ This module contains a class representing a Lumencor celesta laser source.
 
 An extension to Qudi.
 
-@author: JB. Fiche
+@author: JB.Fiche
 
 Created on Thur June 24 2021
 -----------------------------------------------------------------------------------
