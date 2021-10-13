@@ -29,12 +29,13 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import urllib.request
-import numpy as np
 from core.module import Base
 from core.configoption import ConfigOption
+from interface.lasercontrol_interface import LasercontrolInterface
+from time import sleep
 
 
-class LumencorCelesta(Base):
+class LumencorCelesta(Base, LasercontrolInterface):
     """ Class representing the Lumencor celesta laser source.
 
     Example config for copy-paste:
@@ -50,32 +51,24 @@ class LumencorCelesta(Base):
             - "546"
             - "638"
             - "750"
-        allowed_wavelengths :
-            - True
-            - False
-            - True
-            - False
-            - True
-            - True
-            - True
-
     """
 
     # config options
     _ip = ConfigOption('ip', missing='error')
     _wavelengths = ConfigOption('wavelengths', missing='error')
-    _allowed_wavelengths = ConfigOption('allowed_wavelengths', missing='error')
+    _laser_channels = ConfigOption('laser_channels', missing='error')
+    # _allowed_wavelengths = ConfigOption('allowed_wavelengths', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-        self.laser_check = {}
+        # self.laser_check = {}
         self.laser_lines = {}
 
     def on_activate(self):
         """ Initialization: test whether the celesta is connected
         """
-        self.laser_check = dict(zip(self._wavelengths, self._allowed_wavelengths))
-        self.laser_lines = dict(zip(self._wavelengths, np.linspace(0, 6, num=7, dtype=int)))
+        # self.laser_check = dict(zip(self._wavelengths, self._allowed_wavelengths))
+        # self.laser_lines = dict(zip(self._wavelengths, np.linspace(0, 6, num=7, dtype=int)))
         try:
             message = self.lumencor_httpcommand(self._ip, 'GET VER')
             print('Lumencor source version {} was found'.format(message['message']))
@@ -88,10 +81,75 @@ class LumencorCelesta(Base):
         self.zero_all()
         self.set_ttl(False)
 
+    def status(self):
+        """ Ask for the laser source status (0:OK - 6:Standby - 7:Warming up - 1/2/3/4/5:Errors)
+        """
+        message = self.lumencor_httpcommand(self._ip, 'GET STAT')
+        status = message['message']
+
+        if status.find('A STAT') == -1:
+            self.log.warning('Communication with the Celesta is currently impossible')
+        elif status == 'A STAT 1' or status == 'A STAT 2' or status == 'A STAT 3':
+            self.log.warning('There is an issue with the celesta source : overheating')
+        return status
+
     def wakeup(self):
-        """ Wake up the celesta source when it is in standby mode
+        """ Wake up the celesta source when it is in standby mode and wait for the warmup procedure to be done
         """
         self.lumencor_httpcommand(self._ip, 'WAKEUP')
+        self.log.warning('Celesta is in stand-by mode. Launching warming-up procedure ... wait a few seconds')
+        status = self.status()
+        while status == 'A STAT 7':
+            sleep(0.5)
+            status = self.status()
+        self.log.info('Celesta laser source is ready!')
+# ----------------------------------------------------------------------------------------------------------------------
+# Lasercontrol Interface functions
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def apply_voltage(self, intensity, laser_on):
+        """ Writes a voltage to the specified channel. Historical name since the intensity of laser is usually
+        controlled through an AOTF. However in this case, the laser selection and intensity control is allowed by
+        directly communicating with the laser source.
+
+        :param: float voltage: voltage value to be applied
+        :param: str channel: analog output line such as /Dev1/AO0
+
+        :return: None
+        """
+
+        # check whether the laser source is in stand-by mode
+        status = self.status()
+        if status == "A STAT 6":
+            self.wakeup()
+
+        # define the intensity for each line
+        self.set_intensity_all_laser_lines(intensity)
+
+        # switch ON only the lines with an intensity > 0
+        self.set_state_all_laser_lines(laser_on)
+
+    def get_dict(self):
+        """ Retrieves the channel name and the voltage range for each analog output for laser control from the
+        configuration file and associates it to the laser wavelength which is controlled by this channel.
+
+        Make sure that the config contains all the necessary elements.
+
+        :return: dict laser_dict
+        """
+        laser_dict = {}
+
+        for i, item in enumerate(
+                self._wavelengths):  # use any of the lists retrieved as config option, just to have an index variable
+            label = 'laser{}'.format(i + 1)  # create a label for the i's element in the list starting from 'laser1'
+
+            dic_entry = {'label': label,
+                         'wavelength': self._wavelengths[i],
+                         'channel': self._laser_channels[i]}
+
+            laser_dict[dic_entry['label']] = dic_entry
+
+        return laser_dict
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Getter and setter functions
@@ -132,7 +190,7 @@ class LumencorCelesta(Base):
         else:
             self.lumencor_httpcommand(self._ip, 'SET TTLENABLE 0')
 
-    def set_laserline_intensity(self, wavelength, intensity):
+    def set_intensity_selected_laser_lines(self, wavelength, intensity):
         """ Set laser line intensity to a given value
 
             wavelength : array of string - indicate the selected laser line
@@ -147,10 +205,17 @@ class LumencorCelesta(Base):
                 line = self.laser_lines[channel_wavelength]
                 laser_lines_intensity[line] = channel_intensity
 
-        command = 'SET MULCHINT {}'.format(' '.join(map(str, laser_lines_intensity)))
+        self.set_intensity_all_laser_lines(laser_lines_intensity)
+
+    def set_intensity_all_laser_lines(self, intensity):
+        """ Set the intensity of all laser lines at oonce
+
+            intensity : array of int - indicate the laser power (in per thousand)
+        """
+        command = 'SET MULCHINT {}'.format(' '.join(map(str, intensity)))
         self.lumencor_httpcommand(self._ip, command)
 
-    def set_laserline_on_off(self, wavelength, state):
+    def set_selected_laser_line_on_off(self, wavelength, state):
         """ Switch specified laser line to ON or OFF
 
             wavelength : array of string - indicate the selected laser line
@@ -165,7 +230,14 @@ class LumencorCelesta(Base):
                 line = self.laser_lines[channel_wavelength]
                 laser_lines_state[line] = channel_state
 
-        command = 'SET MULCH {}'.format(' '.join(map(str, laser_lines_state)))
+        self.set_state_all_laser_lines(laser_lines_state)
+
+    def set_state_all_laser_lines(self, state):
+        """ Switch all laser lines to the specified state ON or OFF
+
+            state : array of int - indicate 0 to switch OFF the specified line, or 1 to switch it ON.
+        """
+        command = 'SET MULCH {}'.format(' '.join(map(str, state)))
         self.lumencor_httpcommand(self._ip, command)
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -179,7 +251,7 @@ class LumencorCelesta(Base):
         http://lumencor.com/wp-content/uploads/sites/11/2019/01/57-10018.pdf
         """
         command_full = r'http://' + ip + '/service/?command=' + command.replace(' ', '%20')
-        # print('Commande envoyee au Celesta : {}'.format(command_full))
+        print(command_full)
         with urllib.request.urlopen(command_full) as response:
             message = eval(response.read())  # the default is conveniently JSON so eval creates dictionary
             if message['message'][0] == 'E':
