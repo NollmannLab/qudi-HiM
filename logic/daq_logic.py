@@ -162,7 +162,7 @@ class DAQLogic(GenericLogic):
 # The following methods are defined in the hardware module to avoid having to deal with the corresponding taskhandle,
 # which would be the case if using the low-level methods above.
 # ----------------------------------------------------------------------------------------------------------------------
-# Methods for analog in/out channels controlling a piezo
+# Methods for analog in/out channels controlling a piezo - not used for the moment on any setup
 # ----------------------------------------------------------------------------------------------------------------------
 
     def read_piezo(self):

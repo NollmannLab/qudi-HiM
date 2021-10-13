@@ -37,9 +37,10 @@ from mcculw.device_info import DaqDeviceInfo
 
 from core.module import Base
 from core.configoption import ConfigOption
+from interface.lasercontrol_interface import LasercontrolInterface
 
 
-class MccDAQ(Base):
+class MccDAQ(Base, LasercontrolInterface):
     """ Class representing the measurement computing DAQ.
 
     Example config for copy-paste:
@@ -52,11 +53,14 @@ class MccDAQ(Base):
     """
 
     # config options
-    # ao channels
+    # ao channels for the fluidics
     rinsing_pump_channel = ConfigOption('rinsing_pump_channel', None, missing='warn')
     fluidics_pump_channel = ConfigOption('fluidics_pump_channel', None, missing='warn')
+
+    # parameters for the laser control
     _wavelengths = ConfigOption('wavelengths', None)
     _laser_write_ao_channels = ConfigOption('laser_ao_channels', None)
+    _ao_voltage_range = ConfigOption('ao_voltage_range', default=(0, 5))
 
     # channel_405nm = ConfigOption('405nm', None, missing='warn')
     # channel_477nm = ConfigOption('477nm', None, missing='warn')
@@ -67,14 +71,14 @@ class MccDAQ(Base):
     trigger_out7_zen = ConfigOption('OUT7_ZEN', None, missing='warn')
     counter_out8_zen = ConfigOption('OUT8_ZEN', None, missing='warn')
 
-    # def __init__(self, config, **kwargs):
-    #     super().__init__(config=config, **kwargs)
-    #     self.board_num = None
-    #     self.port = None
+    def __init__(self, config, **kwargs):
+        super().__init__(config=config, **kwargs)
+        self.board_num = None
+        self.port = None
 
-    def __init__(self, *args, **kwargs):
-        # super().__init__(*args, **kwargs)
-        pass
+    # def __init__(self, *args, **kwargs):
+    #     # super().__init__(*args, **kwargs)
+    #     pass
 
     def on_activate(self):
         """ Initialization steps when module is called.
@@ -224,6 +228,43 @@ class MccDAQ(Base):
     def test_function(self):
         self.set_up_do_channel(0)  # configure bit 0 as output
         self.set_up_di_channel(2)  # configure bit 2 as input
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Lasercontrol Interface functions
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def apply_voltage(self, voltage, channel):
+        """ Writes a voltage to the specified channel.
+
+        :param: float voltage: voltage value to be applied
+        :param: str channel: analog output line such as /Dev1/AO0
+
+        :return: None
+        """
+        self.write_to_ao_channel(self.laser_ao_taskhandles[channel], voltage)
+
+    def get_dict(self):
+        """ Retrieves the channel name and the voltage range for each analog output for laser control from the
+        configuration file and associates it to the laser wavelength which is controlled by this channel.
+
+        Make sure that the config contains all the necessary elements.
+
+        :return: dict laser_dict
+        """
+        laser_dict = {}
+
+        for i, item in enumerate(
+                self._wavelengths):  # use any of the lists retrieved as config option, just to have an index variable
+            label = 'laser{}'.format(i + 1)  # create a label for the i's element in the list starting from 'laser1'
+
+            dic_entry = {'label': label,
+                         'wavelength': self._wavelengths[i],
+                         'channel': self._laser_write_ao_channels[i],
+                         'ao_voltage_range': self._ao_voltage_range}
+
+            laser_dict[dic_entry['label']] = dic_entry
+
+        return laser_dict
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Various functionality of DAQ for the Airy-scan microscope
