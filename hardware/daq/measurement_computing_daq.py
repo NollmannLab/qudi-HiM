@@ -56,6 +56,10 @@ class MccDAQ(Base, LasercontrolInterface):
     # ao channels for the fluidics
     rinsing_pump_channel = ConfigOption('rinsing_pump_channel', None, missing='warn')
     fluidics_pump_channel = ConfigOption('fluidics_pump_channel', None, missing='warn')
+    # doi channels for zen communication
+    in7_zen_channel = ConfigOption('IN7_ZEN', None, missing='warn')
+    out7_zen_channel = ConfigOption('OUT7_ZEN', None, missing='warn')
+    out8_zen_channel = ConfigOption('OUT8_ZEN', None, missing='warn')
 
     # parameters for the laser control
     _wavelengths = ConfigOption('wavelengths', None)
@@ -296,13 +300,21 @@ class MccDAQ(Base, LasercontrolInterface):
         else:
             self.log.warning('Voltage not in allowed range.')
 
-# Send trigger for ZEN experiment and wait for the trigger back when experiment starts ---------------------------------
-    def zen_starting_experiment_trigger(self):
-        pass
+# Check if trigger from ZEN is detected, indicating that experiment has started ----------------------------------------
+    def check_zen_start_experiment_trigger(self):
+        trigger_value = self.read_di_channel(self.out7_zen_channel)
+        return trigger_value
 
-# Wait for ZEN trigger -------------------------------------------------------------------------------------------------
-    def wait_zen_trigger(self):
-        pass
+# Check if trigger from ZEN is detected, indicating that acquisition block/task is done --------------------------------
+    def check_zen_task_trigger(self):
+        trigger_value = self.read_di_channel(self.out8_zen_channel)
+        return trigger_value
+
+# Send trigger to ZEN, launching task/block ----------------------------------------------------------------------------
+    def send_zen_task_trigger(self):
+        self.write_to_do_channel(self.in7_zen_channel, 1, 1)
+        sleep(0.1)
+        self.write_to_do_channel(self.in7_zen_channel, 1, 0)
 
 # Wait global exposure trigger from camera _____________________________________________________________________________
     def wait_global_exposure_start(self):

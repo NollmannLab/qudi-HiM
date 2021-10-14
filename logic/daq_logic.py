@@ -219,10 +219,35 @@ class DAQLogic(GenericLogic):
         self._daq.write_to_fluidics_pump_channel(voltage)
 
     def get_pressure(self):
-        """ Retrive the applied voltage of the peristaltic pump used for flowcontrol. It is stored under the name
+        """ Retrieve the applied voltage of the peristaltic pump used for flowcontrol. It is stored under the name
         _pressure although it is a voltage (for common user interface with system where a real readout of the
         pressure is possible).
 
         :return: float tension applied to the peristaltic pump
         """
         return self._pressure
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods specific to communication with the airyscan microscope
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def check_zen_start_experiment(self):
+        """ Synchronization between ZEN and qudi is required. When ZEN experiment is launched, a trigger is sent from
+        the trigger box to the DAQ, indicating that the microscope is ready to start imaging.
+        """
+        trigger_value = self._daq.check_zen_start_experiment_trigger()
+        return trigger_value
+
+    def launch_zen_task(self):
+        """ Synchronization between ZEN and qudi is required. Specific ZEN tasks (eg. autofocus or scan) require a
+        starting trigger to start.
+        """
+        self.send_zen_task_trigger()
+
+    def check_zen_task_done(self):
+        """ Synchronization between ZEN and qudi is required. When ZEN specific task (eg. autofocus or scan) from the
+        experiment designer is done, a trigger is sent from the trigger box to the DAQ, indicating that the microscope
+        is ready to move to the next task.
+        """
+        trigger_value = self._daq.check_zen_task_trigger()
+        return trigger_value
