@@ -35,7 +35,7 @@ import pandas as pd
 import os
 import time
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
+from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data, get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
@@ -66,7 +66,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_config_path = self.config['path_to_user_config']
         self.probe_counter = None
         self.user_param_dict = {}
-        self.lightsource_dict = {'405 nm': 'AO2', '477 nm': 'AO3', '546 nm': 'AO5', '640 nm': 'AO6', '750 nm': 'AO7'}
+        self.intensity_dict = {}
+        self.ao_channel_sequence = []
         self.logging = True
 
     def startTask(self):
@@ -83,6 +84,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # read all user parameters from config
         self.load_user_parameters()
+
+        # define the laser intensities as well as the sequence for the daq external trigger.
+        # Set : - all laser lines to OFF
+        #       - all the ao_channels to +5V
+        #       - the celesta laser source in external TTL mode
+        #       - the intensity of each laser line according to the task parameters
+        self.format_imaging_sequence()
+        self.ref['laser'].voltage_off()
+        # set the daq channels to +5V
+        # self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
 
         # indicate to the user the parameters he should use for zen configuration
         n_loop = len(self.probe_list) * len(self.roi_names)
@@ -172,6 +184,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
 
+        # keep in memory the position of the needle
+        needle_pos = self.probe_list[self.probe_counter-1][0]
+        rt_injection = 0
+
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
@@ -202,6 +218,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
+                    # for the Airyscan, the needle is connected to valve position 3. If this valve is called more than
+                    # once, the needle will move to the next position. The procedure was added to make the DAPI
+                    # injection easier.
+                    print('Valve position : {}'.format(valve_pos))
+                    if rt_injection == 0 and valve_pos == 3:
+                        rt_injection += 1
+                        needle_pos += 1
+                    elif rt_injection > 0 and valve_pos == 3:
+                        self.ref['pos'].start_move_to_target(needle_pos)
+                        rt_injection += 1
+                        needle_pos += 1
+                        self.ref['pos'].wait_for_idle()
+
                     # pressure regulation
                     # create lists containing pressure and volume data and initialize first value to 0
                     pressure = [0]
@@ -226,15 +255,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             ready = True
 
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(1)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points for flow data
                     self.append_flow_data(pressure, volume, flowrate)
                     time.sleep(1)
-
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
+                    complete_path = create_path_for_injection_data(self.directory,
+                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   'hybridization', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
@@ -275,7 +305,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # prepare lightsource
+            # make sure the celesta laser source is ready
             self.ref['laser'].lumencor_wakeup()
             # lumencor laser off  to add here
             self.ref['laser'].lumencor_set_ttl(True)
@@ -569,6 +599,40 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return ready
 
     # ------------------------------------------------------------------------------------------------------------------
+    # data for imaging cycle with Lumencor in external trigger mode
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the daq ttl/ao sequence for the
+        triggers
+        """
+
+    # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
+        laser_dict = self.ref['laser'].get_laser_dict()
+        intensity_dict = self.ref['laser'].init_intensity_dict()
+        # From [('488 nm', 3), ('561 nm', 3)] to [('laser2', 3), ('laser3', 3), (10,)]
+        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
+
+    # Load the daq dictionary for ttl ----------------------------------------------------------------------------------
+        daq_dict = self.ref['daq'].get_dict()
+        ao_channel_sequence = []
+
+    # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
+        for i in range(len(imaging_sequence)):
+            key = imaging_sequence[i][0]
+            intensity_dict[key] = imaging_sequence[i][1]
+            if key in daq_dict:
+                ao_channel_sequence.append(daq_dict[key]['channel'])
+            else:
+                self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
+                    laser_dict[key]['wavelength']))
+
+        print('The laser dict is {} and the daq sequence is {}'.format(intensity_dict, ao_channel_sequence))
+        self.intensity_dict = intensity_dict
+        self.ao_channel_sequence = ao_channel_sequence
+
+    # ------------------------------------------------------------------------------------------------------------------
     # data for injection tracking
     # ------------------------------------------------------------------------------------------------------------------
 
@@ -578,6 +642,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :param: list pressure_list
         :param: list volume_list
         :param: list flowrate_list
+
         :return: None
         """
         new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
@@ -588,8 +653,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         flowrate_list.append(new_flowrate)
 
 # to do:
-# lumencor celesta module needs to be adapted to fit the lasercontrol interface.
-# maybe it is not necessary to implement everything, but some functions should be made available from the lasercontrol logic
 
 # break conditions for while loops waiting for a trigger
 
