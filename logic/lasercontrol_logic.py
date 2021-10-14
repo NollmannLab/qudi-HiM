@@ -3,13 +3,11 @@
 Qudi-CBS
 
 A module to control the lasers via a DAQ (analog output and digital output line for triggering), via an FPGA
-or using the Lumencor celesta.
-
-The DAQ / FPGA are used to control the AOTF to select the laser wavelength.
+or using the Lumencor celesta. The DAQ / FPGA are used to control the AOTF to select the laser wavelength.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Wed Feb 10 2021
 -----------------------------------------------------------------------------------
@@ -42,7 +40,6 @@ import numpy as np
 # ======================================================================================================================
 # Logic class
 # ======================================================================================================================
-
 
 class LaserControlLogic(GenericLogic):
     """ Controls the DAQ analog output and allows to set a digital output line for triggering
