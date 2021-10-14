@@ -127,7 +127,7 @@ class Task(InterruptableTask):
                 self.ref['pos'].start_move_to_target(self.needle_pos)
                 self.rt_injection += 1
                 self.needle_pos += 1
-                sleep(15)
+                self.ref['pos'].wait_for_idle()
                 self.ref['valves'].set_valve_position('c', 2)
                 self.ref['valves'].wait_for_idle()
 

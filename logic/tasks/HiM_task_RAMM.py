@@ -189,9 +189,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             needle_pos = self.probe_list[self.probe_counter-1][0]
             rt_injection = 0
 
-            print("Probe counter : {}".format(self.probe_counter))
-            print("Probe list : {}".format(self.probe_list))
-
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
@@ -236,7 +233,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         self.ref['pos'].start_move_to_target(needle_pos)
                         rt_injection += 1
                         needle_pos += 1
-                        time.sleep(15)
+                        self.ref['pos'].wait_for_idle()
                         self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
                         self.ref['valves'].wait_for_idle()
 
@@ -270,7 +267,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'hybridization', step)
+                    complete_path = create_path_for_injection_data(self.directory,
+                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   'hybridization', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
