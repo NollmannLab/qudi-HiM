@@ -5,9 +5,9 @@ Qudi-CBS
 An extension to Qudi.
 
 This module contains the Hi-M Experiment for the Airyscan experimental setup using epifluorescence configuration.
-(For confocal configuration, use confocal_HiM_task_Airyscan.)
+(For confocal configuration, use HiM_task_Airyscan_confocal.)
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Thu Aug 26 2021
 -----------------------------------------------------------------------------------
@@ -81,24 +81,36 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
 
+        # read all user parameters from config
+        self.load_user_parameters()
+
+        # indicate to the user the parameters he should use for zen configuration
+        n_loop = len(self.probe_list) * len(self.roi_names)
+        self.log.warning('############ ZEN PARAMETERS ############')
+        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(n_loop))
+        self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
+        self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
+        self.log.warning('Select the autofocus block and hit "Start Experiment"')
+        self.log.warning('########################################')
+
+        # wait for the trigger indicating that ZEN experiment was launched
         self.zen_ready = self.wait_for_zen_ready()
 
         if not self.zen_ready:
-            self.log.warning('ZEN start trigger not received. Experiment can not be started.')
+            self.log.warning('ZEN start trigger not received after 1 minute. Experiment is aborted.')
             return
 
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
-            self.log.warning('No position 1 defined for injections. Experiment can not be started. Please define position 1!')
+            self.log.warning(
+                'No position 1 defined for injections. Experiment can not be started. Please define position 1!')
             return
 
-        self.log.info('started Task')
+        # Send message that initialization is complete and the experiment is starting
+        self.log.info('HiM experiment is starting ...')
 
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
-
-        # read all user parameters from config
-        self.load_user_parameters()
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
@@ -493,7 +505,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             with open(self.user_config_path, 'r') as stream:
                 self.user_param_dict = yaml.safe_load(stream)
 
-                self.exposure = self.user_param_dict['exposure']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
@@ -545,12 +556,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
         """
         ready = False
+        counter = 0
+
         while not ready:
-            time.sleep(0.1)  # check every 100 ms   # how long is the trigger send by ZEN ?
-            di_value = self.ref['daq'].read_di_channel('DI2', 1)  # to be implemented in mccdaq
-            if di_value > 2.5:  # positive logic for this channel ?
+            time.sleep(0.1)  # check every 100 ms (the trigger sent by ZEN is 500ms long)
+            counter += 1
+            start_trigger = self.ref['daq'].check_zen_start_experiment()
+            if start_trigger > 2.5:
                 ready = True
-            # add here a counter to break out of the loop and return false
+            if counter > 600:
+                break
         return ready
 
     # ------------------------------------------------------------------------------------------------------------------
