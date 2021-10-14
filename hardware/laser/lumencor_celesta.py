@@ -50,25 +50,20 @@ class LumencorCelesta(Base, LasercontrolInterface):
             - "520"
             - "546"
             - "638"
-            - "750"
+            - "749"
     """
 
     # config options
     _ip = ConfigOption('ip', missing='error')
     _wavelengths = ConfigOption('wavelengths', missing='error')
-    _laser_channels = ConfigOption('laser_channels', missing='error')
-    # _allowed_wavelengths = ConfigOption('allowed_wavelengths', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-        # self.laser_check = {}
         self.laser_lines = {}
 
     def on_activate(self):
         """ Initialization: test whether the celesta is connected
         """
-        # self.laser_check = dict(zip(self._wavelengths, self._allowed_wavelengths))
-        # self.laser_lines = dict(zip(self._wavelengths, np.linspace(0, 6, num=7, dtype=int)))
         try:
             message = self.lumencor_httpcommand(self._ip, 'GET VER')
             print('Lumencor source version {} was found'.format(message['message']))
@@ -80,6 +75,10 @@ class LumencorCelesta(Base, LasercontrolInterface):
         """
         self.zero_all()
         self.set_ttl(False)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Celesta status functions
+# ----------------------------------------------------------------------------------------------------------------------
 
     def status(self):
         """ Ask for the laser source status (0:OK - 6:Standby - 7:Warming up - 1/2/3/4/5:Errors)
@@ -103,6 +102,7 @@ class LumencorCelesta(Base, LasercontrolInterface):
             sleep(0.5)
             status = self.status()
         self.log.info('Celesta laser source is ready!')
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Lasercontrol Interface functions
 # ----------------------------------------------------------------------------------------------------------------------
@@ -145,7 +145,7 @@ class LumencorCelesta(Base, LasercontrolInterface):
 
             dic_entry = {'label': label,
                          'wavelength': self._wavelengths[i],
-                         'channel': self._laser_channels[i]}
+                         'channel': i}
 
             laser_dict[dic_entry['label']] = dic_entry
 
@@ -251,7 +251,6 @@ class LumencorCelesta(Base, LasercontrolInterface):
         http://lumencor.com/wp-content/uploads/sites/11/2019/01/57-10018.pdf
         """
         command_full = r'http://' + ip + '/service/?command=' + command.replace(' ', '%20')
-        print(command_full)
         with urllib.request.urlopen(command_full) as response:
             message = eval(response.read())  # the default is conveniently JSON so eval creates dictionary
             if message['message'][0] == 'E':
