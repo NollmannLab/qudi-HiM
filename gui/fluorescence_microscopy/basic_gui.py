@@ -127,22 +127,25 @@ class BasicGUI(GUIBase):
 
     Basic Imaging:
         module.Class: 'fluorescence_microscopy.basic_gui.BasicGUI'
-        default_path: 'E:\'
-        brightfield_control: False
+        default_path: 'E:\DATA'
+        brightfield_control: True
+        Setup: 'RAMM'
         connect:
             camera_logic: 'camera_logic'
             laser_logic: 'lasercontrol_logic'
             filterwheel_logic: 'filterwheel_logic'
+            brightfield_logic: 'brightfield_logic'
     """
     # define connectors to logic modules
     camera_logic = Connector(interface='CameraLogic')
     laser_logic = Connector(interface='LaserControlLogic')
     filterwheel_logic = Connector(interface='FilterwheelLogic')
-    brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)  
+    brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)
 
     # config options
     default_path = ConfigOption('default_path', missing='error')
     brightfield_control = ConfigOption('brightfield_control', False)
+    setup = ConfigOption('Setup', False)
 
     # signals
     # signals to camera logic
@@ -225,6 +228,14 @@ class BasicGUI(GUIBase):
         self._mw.rotate_image_cw_MenuAction.setChecked(False)
         self._mw.rotate_image_ccw_MenuAction.setChecked(False)
         self._mw.rot180_image_MenuAction.setChecked(False)
+
+        # adapt the windows according to the setup
+        if self.setup == "Airyscan":
+            self._mw.camera_DockWidget.hide()
+            self._mw.camera_status_DockWidget.hide()
+            self._mw.toolBar.close()
+        elif self.setup == "RAMM":
+            self._mw.camera_status_DockWidget.hide()
 
         # Menu bar actions
         # File menu
