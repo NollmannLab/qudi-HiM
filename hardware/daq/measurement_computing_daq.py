@@ -66,15 +66,6 @@ class MccDAQ(Base, LasercontrolInterface):
     _laser_write_ao_channels = ConfigOption('laser_ao_channels', None)
     _ao_voltage_range = ConfigOption('ao_voltage_range', default=(0, 5))
 
-    # channel_405nm = ConfigOption('405nm', None, missing='warn')
-    # channel_477nm = ConfigOption('477nm', None, missing='warn')
-    # channel_546nm = ConfigOption('546nm', None, missing='warn')
-    # channel_638nm = ConfigOption('638nm', None, missing='warn')
-    # channel_750nm = ConfigOption('750nm', None, missing='warn')
-    trigger_in7_zen = ConfigOption('IN7_ZEN', None, missing='warn')
-    trigger_out7_zen = ConfigOption('OUT7_ZEN', None, missing='warn')
-    counter_out8_zen = ConfigOption('OUT8_ZEN', None, missing='warn')
-
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.board_num = None

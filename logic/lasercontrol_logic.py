@@ -182,14 +182,7 @@ class LaserControlLogic(GenericLogic):
             for key in self._laser_dict:
                 self._controller.apply_voltage(self._intensity_dict[key], self._laser_dict[key]['channel'])
         elif self.controllertype == 'celesta':
-            intensity = []
-            laser_on = []
-            for key in self._laser_dict:
-                intensity.append(self._intensity_dict[key]*10)
-                if self._intensity_dict[key] == 0:
-                    laser_on.append(0)
-                else:
-                    laser_on.append(1)
+            intensity, laser_on = self.lumencor_read_intensity_dict(self.intensity_dict)
             self._controller.apply_voltage(intensity, laser_on)
         else:
             self.log.warning('your controller type is currently not covered')
@@ -216,12 +209,8 @@ class LaserControlLogic(GenericLogic):
             for key in self._laser_dict:
                 self._controller.apply_voltage(0.0, self._laser_dict[key]['channel'])
         elif self.controllertype == 'celesta':
-            n_laser_line = len(self._laser_dict)
-            intensity = np.zeros((n_laser_line,)).astype(int)
-            laser_on = np.zeros((n_laser_line,)).astype(int)
-            print(intensity)
-            print(laser_on)
-            self._controller.apply_voltage(intensity, laser_on)
+            intensity, laser_on = self.lumencor_read_intensity_dict(self.intensity_dict)
+            self._controller.apply_voltage(intensity, laser_on * 0)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -336,29 +325,48 @@ class LaserControlLogic(GenericLogic):
             pass
 
 # Lumencor celesta specific methods ------------------------------------------------------------------------------------
-#
-#     def lumencor_wakeup(self):
-#         """ Wake up the lumencor celesta source when it is in standby mode. This is needed in tasks where long
-#         pauses between imaging sequences might occur.
-#
-#         :return: None
-#         """
-#         if self.controllertype == 'lumencor':
-#             self._controller.wakeup()
-#         else:
-#             pass
-#
-#     def lumencor_set_ttl(self, ttl_state):
-#         """ Define whether the celesta source can be controlled through ttl control.
-#
-#         :param: bool ttl_state: True: source can be controlled by external trigger
-#
-#         :return: None
-#         """
-#         if self._controllertupe == 'lumencor:':
-#             self._controller.set_ttl(ttl_state)
-#         else:
-#             pass
+
+    def lumencor_wakeup(self):
+        """ Wake up the lumencor celesta source when it is in standby mode. This is needed in tasks where long
+        pauses between imaging sequences might occur.
+
+        :return: None
+        """
+        self._controller.wakeup()
+
+    def lumencor_set_laser_line_intensities(self, intensity_dict):
+        """ Read the intensity dictionary and translates it into a list of intensities fit for the celesta. Set the
+        emission state of all lines to OFF.
+
+        :param: dict intensity_dict
+        :return: list intensity - contains the intensity of each laser line
+        :return: list laser_on - contains the emission state of each laser line
+        """
+        intensity, laser_on = self.lumencor_read_intensity_dict(intensity_dict)
+        self._controller.apply_voltage(intensity, laser_on * 0)
+
+    @staticmethod
+    def lumencor_read_intensity_dict(intensity_dict):
+        """ Define the intensity of each laser lines of the celesta source. Set emission states of all laser lines to O.
+        """
+        intensity = []
+        laser_on = []
+        for key in intensity_dict:
+            intensity.append(intensity_dict[key] * 10)
+            if intensity_dict[key] == 0:
+                laser_on.append(0)
+            else:
+                laser_on.append(1)
+
+        return intensity, laser_on
+
+    def lumencor_set_ttl(self, ttl_state):
+        """ Define whether the celesta source can be controlled through external ttl control.
+
+        :param: bool ttl_state: True: source can be controlled by external trigger
+        :return: None
+        """
+        self._controller.set_ttl(ttl_state)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state

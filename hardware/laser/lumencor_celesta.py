@@ -118,33 +118,35 @@ class LumencorCelesta(Base, LasercontrolInterface):
         :return: None
         """
 
-        # check whether the laser source is in stand-by mode
+        # check whether the laser source is in stand-by mode. Launch the wake-up procedure if at least one line is
+        # switched ON (at least one item in laser_on is equal to 1)
         status = self.status()
-        if status == "A STAT 6":
+        if status == "A STAT 6" and (1 in laser_on):
             self.wakeup()
 
         # define the intensity for each line
         self.set_intensity_all_laser_lines(intensity)
 
-        # switch ON only the lines with an intensity > 0
+        # switch ON/OFF the laser lines (0=OFF ; 1=ON)
         self.set_state_all_laser_lines(laser_on)
 
     def get_dict(self):
         """ Retrieves the channel name and the voltage range for each analog output for laser control from the
         configuration file and associates it to the laser wavelength which is controlled by this channel.
 
-        Make sure that the config contains all the necessary elements.
+        Make sure that the config contains all the necessary elements. In the case of the Celesta laser sources, ALL the
+        available laser lines should be indicated, from the lowest to the highest wavelengths.
 
         :return: dict laser_dict
         """
         laser_dict = {}
 
-        for i, item in enumerate(
+        for i, wavelength in enumerate(
                 self._wavelengths):  # use any of the lists retrieved as config option, just to have an index variable
             label = 'laser{}'.format(i + 1)  # create a label for the i's element in the list starting from 'laser1'
 
             dic_entry = {'label': label,
-                         'wavelength': self._wavelengths[i],
+                         'wavelength': wavelength,
                          'channel': i}
 
             laser_dict[dic_entry['label']] = dic_entry
@@ -183,7 +185,7 @@ class LumencorCelesta(Base, LasercontrolInterface):
     def set_ttl(self, ttl_state):
         """ Define whether the celesta source can be controlled through ttl control.
 
-            ttl_state : boolean - indicate whether to allow external trigger control of the source
+            :param: bool ttl_state - indicate whether to allow external trigger control of the source
         """
         if ttl_state:
             self.lumencor_httpcommand(self._ip, 'SET TTLENABLE 1')
