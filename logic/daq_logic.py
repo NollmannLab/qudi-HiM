@@ -7,7 +7,7 @@ except the laser control which is handled by a dedicated module (lasercontrol_lo
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Wed March 24, 2021
 -----------------------------------------------------------------------------------
