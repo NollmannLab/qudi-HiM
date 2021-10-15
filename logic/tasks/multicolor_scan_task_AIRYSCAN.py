@@ -7,7 +7,7 @@ An extension to Qudi.
 This module contains a task to perform a multicolor scan on PALM setup.
 (Take at a given position a sequence of images in a stack of planes with different laserlines or intensities.)
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Wed Mar 17 2021
 -----------------------------------------------------------------------------------
@@ -30,9 +30,11 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import yaml
-from datetime import datetime
-import os
-from time import sleep
+# from datetime import datetime
+# import os
+# from time import sleep
+import numpy as np
+
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import get_entry_nested_dict
 
@@ -40,17 +42,15 @@ from logic.task_helper_functions import get_entry_nested_dict
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
     """ This task does an acquisition of a stack of images from different channels or using different intensities.
 
-    Config example pour copy-paste:
+    Config example:
 
-    MulticolorScanTask:
-        module: 'multicolor_scan_task_PALM'
-        needsmodules:
-            camera: 'camera_logic'
-            daq: 'lasercontrol_logic'
-            filter: 'filterwheel_logic'
-            focus: 'focus_logic'
-        config:
-            path_to_user_config: 'C:/Users/admin/qudi_files/qudi_task_config_files/multicolor_scan_task_PALM.yml'
+        MulticolorScanTask:
+            module: 'multicolor_scan_task_AIRYSCAN'
+            needsmodules:
+                daq : 'daq_logic'
+                laser : 'lasercontrol_logic'
+            config:
+                path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/multicolor_scan_task_AIRYSCAN.yml'
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -63,48 +63,50 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.err_count = None
         self.laser_allowed = False
         self.user_param_dict = {}
+        self.intensity_dict = {}
+        self.ao_channel_sequence = []
+        self.lumencor_channel_sequence = []
+        self.sample_name = None
+        self.num_z_planes = None
+        self.imaging_sequence = []
+        self.step_counter = None
+        self.num_laserlines = None
 
     def startTask(self):
         """ """
         self.log.info('started Task')
         self.err_count = 0  # initialize the error counter (counts number of missed triggers for debug)
 
-        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
-
-        # stop all interfering modes on GUIs and disable GUI actions
-        self.ref['camera'].stop_live_mode()
-        self.ref['camera'].disable_camera_actions()
-
-        self.ref['daq'].stop_laser_output()
-        self.ref['daq'].disable_laser_actions()
-
-        self.ref['filter'].disable_filter_actions()
-
-        self.ref['focus'].stop_autofocus()
-        self.ref['focus'].disable_focus_actions()
-
         # read all user parameters from config
         self.load_user_parameters()
 
+        # define the laser intensities as well as the sequence for the daq external trigger.
+        # Set : - all laser lines to OFF
+        #       - all the ao_channels to +5V
+        #       - the celesta laser source in external TTL mode
+        #       - the intensity of each laser line according to the task parameters
+        self.format_imaging_sequence()
+        self.ref['laser'].lumencor_wakeup()
+        self.ref['laser'].stop_laser_output()
+        self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
+        self.ref['daq'].initialize_ao_channels()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
+
         # control the config : laser allowed for given filter ?
-        self.laser_allowed = self.control_user_parameters()
-        
-        if not self.laser_allowed:
-            self.log.warning('Task aborted. Please specify a valid filter / laser combination')
-            return
+        # self.laser_allowed = self.control_user_parameters()
+        #
+        # if not self.laser_allowed:
+        #     self.log.warning('Task aborted. Please specify a valid filter / laser combination')
+        #     return
 
-        # preparation steps
-        # set the filter to the specified position (changing filter not allowed during task because this is too slow)
-        self.ref['filter'].set_position(self.filter_pos)
-        # wait until filter position set
-        pos = self.ref['filter'].get_position()
-        while not pos == self.filter_pos:
-            sleep(1)
-            pos = self.ref['filter'].get_position()
-
-        # prepare the camera
-        frames = len(self.imaging_sequence) * self.num_frames * self.num_z_planes  # self.num_frames = 1 typically, but keep as an option 
-        self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
+        # indicate to the user the parameters he should use for zen configuration
+        self.log.warning('############ ZEN PARAMETERS ############')
+        self.log.warning('This task is compatible with experiment ZEN/HiM_single_scan_Celesta')
+        self.log.warning('The number of planes for Z-Stack is {}'.format(self.num_z_planes))
+        self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
+        self.log.warning('Hit "Start Experiment"')
+        self.log.warning('########################################')
 
         # initialize the counter (corresponding to the number of planes already acquired)
         self.step_counter = 0
@@ -113,62 +115,43 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return bool: True if the task should continue running, False if it should finish.
         """
-        if not self.laser_allowed:
-            return False  # skip runTaskStep and directly go to cleanupTask
+        # if not self.laser_allowed:
+        #     return False  # skip runTaskStep and directly go to cleanupTask
 
         # --------------------------------------------------------------------------------------------------------------
-        # position the piezo
+        # imaging sequence
         # --------------------------------------------------------------------------------------------------------------
+
+        # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
+        for i in range(len(self.imaging_sequence)):
+
+            # daq waiting for global_exposure trigger from the camera --------------------------------------------------
+            bit_value = self.ref['daq'].check_acquisition()
+            counter = 0
+            while bit_value == 0:
+                counter += 1
+                bit_value = self.ref['daq'].check_acquisition()
+                if counter > 10000:
+                    self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                    return False
+
+            # switch the selected laser line ON ------------------------------------------------------------------------
+            # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
+            self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+
+            # daq waiting for global_exposure trigger from the camera to end -------------------------------------------
+            bit_value = self.ref['daq'].check_acquisition()
+            counter = 0
+            while bit_value == 1:
+                counter += 1
+                bit_value = self.ref['daq'].check_acquisition()
+                if counter > 10000:
+                    self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                    return False
+            # switch the selected laser line OFF -----------------------------------------------------------------------
+            self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
         self.step_counter += 1
-        print(f'plane number {self.step_counter}')
-
-        position = self.start_position + (self.step_counter - 1) * self.z_step
-        self.ref['focus'].go_to_position(position)
-        # print(f'target position: {position} um')
-        sleep(0.03)  # stabilization time
-        # cur_pos = self.ref['focus'].get_position()
-        # print(f'current position: {cur_pos} um')
-
-        # --------------------------------------------------------------------------------------------------------------
-        # imaging sequence (image data is spooled to disk)
-        # --------------------------------------------------------------------------------------------------------------
-        # outer loop over the number of frames per color
-        for j in range(self.num_frames):  # per default only one frame per plane per color but keep it as an option 
-
-            # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
-            i = 0
-            while i < len(self.imaging_sequence):
-                # reset the intensity dict to zero
-                self.ref['daq'].reset_intensity_dict()
-                # prepare the output value for the specified channel
-                self.ref['daq'].update_intensity_dict(self.imaging_sequence[i][0], self.imaging_sequence[i][1])
-                # waiting time for stability of the synchronization
-                sleep(0.05)
-            
-                # switch the laser on and send the trigger to the camera
-                self.ref['daq'].apply_voltage()
-                err = self.ref['daq'].send_trigger_and_control_ai()  
-            
-                # read fire signal of camera and switch off when the signal is low
-                ai_read = self.ref['daq'].read_trigger_ai_channel()
-                count = 0
-                while not ai_read <= 2.5:  # analog input varies between 0 and 5 V. use max/2 to check if signal is low
-                    sleep(0.001)  # read every ms
-                    ai_read = self.ref['daq'].read_trigger_ai_channel()
-                    count += 1  # can be used for control and debug
-                self.ref['daq'].voltage_off()
-                # self.log.debug(f'iterations of read analog in - while loop: {count}')
-            
-                # waiting time for stability
-                sleep(0.05)
-
-                # repeat the last step if the trigger was missed
-                if err < 0:
-                    self.err_count += 1  # control value to check how often a trigger was missed
-                    i = i  # then the last iteration will be repeated
-                else:
-                    i += 1  # increment to continue with the next image
-
         return self.step_counter < self.num_z_planes
 
     def pauseTask(self):
@@ -182,34 +165,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def cleanupTask(self):
         """ """
         self.log.info('cleanupTask called')
-
-        # reset piezo position to the initial one
-        self.ref['focus'].go_to_position(self.focal_plane_position)
-
-        # reset the camera to default state
-        self.ref['camera'].reset_camera_after_multichannel_imaging()
-        # self.ref['camera'].set_exposure(self.default_exposure)
-
-        self.ref['daq'].voltage_off()  # as security
-        self.ref['daq'].reset_intensity_dict()
-
-        # save metadata if task has not been aborted during acquisition
-        if self.step_counter == self.num_z_planes:
-            if self.file_format == 'fits':
-                metadata = self.get_fits_metadata()
-                self.ref['camera'].add_fits_header(self.complete_path, metadata)
-            else:  # save metadata in a txt file
-                metadata = self.get_metadata()
-                file_path = self.complete_path.replace('tif', 'txt', 1)
-                self.save_metadata_file(metadata, file_path)
-
-        # enable gui actions
-        self.ref['camera'].enable_camera_actions()
-        self.ref['daq'].enable_laser_actions()
-        self.ref['filter'].enable_filter_actions()
-        self.ref['focus'].enable_focus_actions()
-
-        self.log.debug(f'number of missed triggers: {self.err_count}')
+        self.ref['laser'].lumencor_set_ttl(False)
+        self.ref['laser'].voltage_off()
         self.log.info('cleanupTask finished')
 
     # ==================================================================================================================
@@ -242,185 +199,118 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             with open(self.user_config_path, 'r') as stream:
                 self.user_param_dict = yaml.safe_load(stream)
 
-                self.sample_name = self.user_param_dict['sample_name']
-                self.filter_pos = self.user_param_dict['filter_pos']
-                self.exposure = self.user_param_dict['exposure']
-                self.gain = self.user_param_dict['gain']
-                self.num_frames = self.user_param_dict['num_frames']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
-                self.save_path = self.user_param_dict['save_path']
-                self.imaging_sequence_raw = self.user_param_dict['imaging_sequence']
-                self.file_format = self.user_param_dict['file_format']
+                self.imaging_sequence = self.user_param_dict['imaging_sequence']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
             return
 
-        # establish further user parameters derived from the given ones:
-        # for the imaging sequence, we need to access the corresponding labels
-        laser_dict = self.ref['daq'].get_laser_dict()
-        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence_raw[i][0], 'label'),
-                             self.imaging_sequence_raw[i][1]) for i in range(len(self.imaging_sequence_raw))]
-        self.log.info(imaging_sequence)
-        self.imaging_sequence = imaging_sequence
-        # new format: self.imaging_sequence = [('laser2', 10), ('laser2', 20), ('laser3', 10)]
-
         self.num_laserlines = len(self.imaging_sequence)
 
-        self.complete_path = self.get_complete_path(self.save_path)
+    # def control_user_parameters(self):
+    #     """ This method checks if the laser lines that will be used are compatible with the chosen filter.
+    #     :return bool: lasers_allowed
+    #     """
+    #     # use the filter position to create the key # simpler than using get_entry_netsted_dict method
+    #     key = 'filter{}'.format(self.filter_pos)
+    #     bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']
+    # list of booleans, laser allowed such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
+    #     forbidden_lasers = []
+    #     for i, item in enumerate(bool_laserlist):
+    #         if not item:  # if the element in the list is False:
+    #             label = 'laser'+str(i+1)
+    #             forbidden_lasers.append(label)
+    #     lasers_allowed = True  # as initialization
+    #     for item in forbidden_lasers:
+    #         if item in [self.imaging_sequence[i][0] for i in range(len(self.imaging_sequence))]:
+    #             lasers_allowed = False
+    #             break  # stop if at least one forbidden laser is found
+    #     return lasers_allowed
 
-        self.start_position = self.calculate_start_position(self.centered_focal_plane)
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for imaging cycle with Lumencor
+    # ------------------------------------------------------------------------------------------------------------------
 
-    def control_user_parameters(self):
-        """ This method checks if the laser lines that will be used are compatible with the chosen filter.
-        :return bool: lasers_allowed
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the daq ttl/ao sequence for the
+        triggers. For controlling the laser source, two solutions are tested :
+        - directly by communicating with the Lumencor, in that case the intensity dictionary is used to predefine the
+        intensity of each laser line, and the list emission_state contains the succession of emission state for the
+        acquisition
+        - by using the Lumencor is external trigger mode. In that case, the intensity dictionary is used the same way
+        but the DAQ is controlling the succession of emission state
         """
-        # use the filter position to create the key # simpler than using get_entry_netsted_dict method
-        key = 'filter{}'.format(self.filter_pos)
-        bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']  # list of booleans, laser allowed ? such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
-        forbidden_lasers = []
-        for i, item in enumerate(bool_laserlist):
-            if not item:  # if the element in the list is False:
-                label = 'laser'+str(i+1)
-                forbidden_lasers.append(label)      
-        lasers_allowed = True  # as initialization
-        for item in forbidden_lasers:
-            if item in [self.imaging_sequence[i][0] for i in range(len(self.imaging_sequence))]:
-                lasers_allowed = False
-                break  # stop if at least one forbidden laser is found
-        return lasers_allowed       
-        
-    def calculate_start_position(self, centered_focal_plane):
-        """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
 
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
+    # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
+        laser_dict = self.ref['laser'].get_laser_dict()
+        intensity_dict = self.ref['laser'].init_intensity_dict()
+        # From [('488 nm', 3), ('561 nm', 3)] to [('laser2', 3), ('laser3', 3), (10,)]
+        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
 
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()  # lets assume that we are at focus (user has set focus or run autofocus)
-        self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
+    # Load the daq dictionary for ttl ----------------------------------------------------------------------------------
+        daq_dict = self.ref['daq']._daq.get_dict()
+        ao_channel_sequence = []
+        lumencor_channel_sequence = []
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
-            # odd number of planes:
+    # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
+        for i in range(len(imaging_sequence)):
+            key = imaging_sequence[i][0]
+            intensity_dict[key] = imaging_sequence[i][1]
+            if daq_dict[key]['channel']:
+                ao_channel_sequence.append(daq_dict[key]['channel'])
             else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
+                self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
+                    laser_dict[key]['wavelength']))
+
+            emission_state = np.zeros((len(laser_dict),), dtype=int)
+            emission_state[laser_dict[key]['channel']] = 1
+            lumencor_channel_sequence.append(emission_state.tolist())
+
+        self.intensity_dict = intensity_dict
+        self.ao_channel_sequence = ao_channel_sequence
+        self.lumencor_channel_sequence = lumencor_channel_sequence
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
 
-    def get_complete_path(self, path_stem):
-        """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
-        or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
-
-        :param: str path_stem such as E:/
-        :return: str complete path (see examples above)
-        """
-        cur_date = datetime.today().strftime('%Y_%m_%d')
-
-        path_stem_with_date = os.path.join(path_stem, cur_date)
-
-        # check if folder path_stem/cur_date exists, if not: create it
-        if not os.path.exists(path_stem_with_date):
-            try:
-                os.makedirs(path_stem_with_date)  # recursive creation of all directories on the path
-            except Exception as e:
-                self.log.error('Error {0}'.format(e))
-
-        # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
-        dir_list = [folder for folder in os.listdir(path_stem_with_date) if
-                    os.path.isdir(os.path.join(path_stem_with_date, folder))]
-        number_dirs = len(dir_list)
-
-        prefix = str(number_dirs + 1).zfill(3)
-        foldername = f'{prefix}_Scan_{self.sample_name}'
-
-        path = os.path.join(path_stem_with_date, foldername)
-
-        # create the path  # no need to check if it already exists due to incremental prefix
-        try:
-            os.makedirs(path)  # recursive creation of all directories on the path
-        except Exception as e:
-            self.log.error('Error {0}'.format(e))
-
-        file_name = f'scan_{prefix}.{self.file_format}'
-        complete_path = os.path.join(path, file_name)
-        return complete_path
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # metadata
-    # ------------------------------------------------------------------------------------------------------------------
-
-    def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text easy readable format.
-
-        :return: dict metadata
-        """
-        metadata = {}
-        metadata['Time'] = datetime.now().strftime(
-            '%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ??? # then add a variable to startTask
-        metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = self.exposure
-        metadata['Kinetic time (s)'] = self.ref['camera'].get_kinetic_time()
-        metadata['Gain'] = self.gain
-        metadata['Sensor temperature (deg C)'] = self.ref['camera'].get_temperature()
-        filterpos = self.ref['filter'].get_position()
-        filterdict = self.ref['filter'].get_filter_dict()
-        label = 'filter{}'.format(filterpos)
-        metadata['Filter'] = filterdict[label]['name']
-        metadata['Number laserlines'] = self.num_laserlines
-        imaging_sequence = self.imaging_sequence_raw
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i + 1}'] = imaging_sequence[i][0]
-            metadata[f'Laser intensity {i + 1} (%)'] = imaging_sequence[i][1]
-        metadata['Scan step length (um)'] = self.z_step
-        metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
-        # pixel size ???
-        return metadata
-
-    def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
-        """
-        metadata = {}
-        metadata['TIME'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['KINETIC'] = (self.ref['camera'].get_kinetic_time(), 'kinetic time (s)')
-        metadata['GAIN'] = (self.gain, 'gain')
-        metadata['TEMP'] = (self.ref['camera'].get_temperature(), 'sensor temperature (deg C)')
-        filterpos = self.ref['filter'].get_position()
-        filterdict = self.ref['filter'].get_filter_dict()
-        label = 'filter{}'.format(filterpos)
-        metadata['FILTER'] = (filterdict[label]['name'], 'filter')
-        metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
-        for i in range(self.num_laserlines):
-            metadata[f'LINE{i + 1}'] = (self.imaging_sequence_raw[i][0], f'laser line {i + 1}')
-            metadata[f'INTENS{i + 1}'] = (self.imaging_sequence_raw[i][1], f'laser intensity {i + 1}')
-        metadata['Z_STEP'] = (self.z_step, 'scan step length (um)')
-        metadata['Z_TOTAL'] = (self.z_step * self.num_z_planes, 'scan total length (um)')
-        # pixel size
-        return metadata
-
-    def save_metadata_file(self, metadata, path):
-        """ Save a txt file containing the metadata dictionary
-
-        :param dict metadata: dictionary containing the metadata
-        :param str path: pathname
-        """
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(metadata, outfile, default_flow_style=False)
-        self.log.info('Saved metadata to {}'.format(path))
+    # def get_complete_path(self, path_stem):
+    #     """ Create the complete path based on path_stem given as user parameter,
+    #     such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
+    #     or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
+    #
+    #     :param: str path_stem such as E:/
+    #     :return: str complete path (see examples above)
+    #     """
+    #     cur_date = datetime.today().strftime('%Y_%m_%d')
+    #
+    #     path_stem_with_date = os.path.join(path_stem, cur_date)
+    #
+    #     # check if folder path_stem/cur_date exists, if not: create it
+    #     if not os.path.exists(path_stem_with_date):
+    #         try:
+    #             os.makedirs(path_stem_with_date)  # recursive creation of all directories on the path
+    #         except Exception as e:
+    #             self.log.error('Error {0}'.format(e))
+    #
+    #     # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
+    #     dir_list = [folder for folder in os.listdir(path_stem_with_date) if
+    #                 os.path.isdir(os.path.join(path_stem_with_date, folder))]
+    #     number_dirs = len(dir_list)
+    #
+    #     prefix = str(number_dirs + 1).zfill(3)
+    #     foldername = f'{prefix}_Scan_{self.sample_name}'
+    #
+    #     path = os.path.join(path_stem_with_date, foldername)
+    #
+    #     # create the path  # no need to check if it already exists due to incremental prefix
+    #     try:
+    #         os.makedirs(path)  # recursive creation of all directories on the path
+    #     except Exception as e:
+    #         self.log.error('Error {0}'.format(e))
+    #
+    #     file_name = f'scan_{prefix}.{self.file_format}'
+    #     complete_path = os.path.join(path, file_name)
+    #     return complete_path

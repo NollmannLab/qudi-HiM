@@ -68,6 +68,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict = {}
         self.intensity_dict = {}
         self.ao_channel_sequence = []
+        self.lumencor_channel_sequence = []
         self.logging = True
 
     def startTask(self):
@@ -599,12 +600,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return ready
 
     # ------------------------------------------------------------------------------------------------------------------
-    # data for imaging cycle with Lumencor in external trigger mode
+    # data for imaging cycle with Lumencor
     # ------------------------------------------------------------------------------------------------------------------
 
     def format_imaging_sequence(self):
         """ Format the imaging_sequence dictionary for the celesta laser source and the daq ttl/ao sequence for the
-        triggers
+        triggers. For controlling the laser source, two solutions are tested :
+        - directly by communicating with the Lumencor, in that case the intensity dictionary is used to predefine the
+        intensity of each laser line, and the list emission_state contains the succession of emission state for the
+        acquisition
+        - by using the Lumencor is external trigger mode. In that case, the intensity dictionary is used the same way
+        but the DAQ is controlling the succession of emission state
         """
 
     # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
@@ -615,22 +621,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                              self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
 
     # Load the daq dictionary for ttl ----------------------------------------------------------------------------------
-        daq_dict = self.ref['daq'].get_dict()
+        daq_dict = self.ref['daq']._daq.get_dict()
         ao_channel_sequence = []
+        lumencor_channel_sequence = []
 
     # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
         for i in range(len(imaging_sequence)):
             key = imaging_sequence[i][0]
             intensity_dict[key] = imaging_sequence[i][1]
-            if key in daq_dict:
+            if daq_dict[key]['channel']:
                 ao_channel_sequence.append(daq_dict[key]['channel'])
             else:
                 self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
                     laser_dict[key]['wavelength']))
 
-        print('The laser dict is {} and the daq sequence is {}'.format(intensity_dict, ao_channel_sequence))
+            emission_state = np.zeros((len(laser_dict), ), dtype=int)
+            emission_state[laser_dict[key]['channel']] = 1
+            lumencor_channel_sequence.append(emission_state.tolist())
+
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
+        self.lumencor_channel_sequence = lumencor_channel_sequence
 
     # ------------------------------------------------------------------------------------------------------------------
     # data for injection tracking
