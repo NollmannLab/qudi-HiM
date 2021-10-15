@@ -60,6 +60,8 @@ class MccDAQ(Base, LasercontrolInterface):
     in7_zen_channel = ConfigOption('IN7_ZEN', None, missing='warn')
     out7_zen_channel = ConfigOption('OUT7_ZEN', None, missing='warn')
     out8_zen_channel = ConfigOption('OUT8_ZEN', None, missing='warn')
+    # doi channel for Hamamatus camera trigger
+    exposure_trigger_channel = ConfigOption('camera_global_exposure', None, missing='warn')
 
     # parameters for the laser control
     _wavelengths = ConfigOption('wavelengths', None)
@@ -96,6 +98,11 @@ class MccDAQ(Base, LasercontrolInterface):
 
         self.port = self.get_dio_port()
         print(f'port: {self.port}')
+
+        # Initiate the dio ports for the detections of trigger
+        self.set_up_di_channel(self.out7_zen_channel)
+        self.set_up_di_channel(self.out8_zen_channel)
+        self.set_up_di_channel(self.exposure_trigger_channel)
 
     def on_deactivate(self):
         """ Required deactivation steps.
@@ -148,11 +155,7 @@ class MccDAQ(Base, LasercontrolInterface):
             raise Exception('Error: The DAQ device does not support '
                             'analog output')
         ao_info = daq_dev_info.get_ao_info()
-        print(ao_info.supported_ranges)
         ao_range = ao_info.supported_ranges[0]
-        print(ao_range)
-
-        print('Outputting', voltage, 'Volts to channel', channel)
         # Send the value to the device (optional parameter omitted)
         ul.v_out(self.board_num, channel, ao_range, voltage)
 
@@ -308,31 +311,27 @@ class MccDAQ(Base, LasercontrolInterface):
         self.write_to_do_channel(self.in7_zen_channel, 1, 0)
 
 # Wait global exposure trigger from camera _____________________________________________________________________________
-    def wait_global_exposure_start(self):
-        pass
-
-# Wait global exposure trigger end -------------------------------------------------------------------------------------
-    def wait_global_exposure_end(self):
-        pass
+    def check_global_exposure(self):
+        trigger_value = self.read_di_channel(self.exposure_trigger_channel)
+        return trigger_value
 
 # Send trigger to laser source celesta ---------------------------------------------------------------------------------
-    def trigger_laser_line(self, channel):
-        pass
+    def init_trigger_laser_line(self):
+        for channel in self._laser_write_ao_channels:
+            if channel is not None:
+                self.write_to_ao_channel(channel, 5)
 
 
-if __name__ == '__main__':
-    mcc_daq = MccDAQ()
-    print(mcc_daq._wavelengths)
-    mcc_daq.on_activate()
+# if __name__ == '__main__':
+    # mcc_daq = MccDAQ()
+    # print(mcc_daq._wavelengths)
+    # mcc_daq.on_activate()
     # mcc_daq.write_to_ao_channel(0, 0)
     # mcc_daq.set_up_do_channel(2)
-
-    mcc_daq.write_to_do_channel(2, 0, 1)
-    sleep(1)
-    mcc_daq.write_to_do_channel(2, 0, 0)
-
-
-    mcc_daq.on_deactivate()
+    # mcc_daq.write_to_do_channel(2, 0, 1)
+    # sleep(1)
+    # mcc_daq.write_to_do_channel(2, 0, 0)
+    # mcc_daq.on_deactivate()
     # mcc_daq.config_first_detected_device(0)
     # mcc_daq.read_ai()
     # mcc_daq.read_di()

@@ -73,7 +73,7 @@ class LumencorCelesta(Base, LasercontrolInterface):
     def on_deactivate(self):
         """ Close serial port when deactivating the module.
         """
-        self.zero_all()
+        self.stop_all()
         self.set_ttl(False)
 
 # ----------------------------------------------------------------------------------------------------------------------

@@ -251,3 +251,15 @@ class DAQLogic(GenericLogic):
         """
         trigger_value = self._daq.check_zen_task_trigger()
         return trigger_value
+
+    def check_acquisition(self):
+        """ Check whether the camera is acquiring an image or not
+        """
+        trigger_value = self._daq.check_global_exposure()
+        return trigger_value
+
+    def initialize_ao_channels(self):
+        """ The ao channel used to control the lumencor laser source must all be set to +5V before starting an
+         acquisition
+         """
+        self._daq.init_trigger_laser_line()

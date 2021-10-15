@@ -182,7 +182,7 @@ class LaserControlLogic(GenericLogic):
             for key in self._laser_dict:
                 self._controller.apply_voltage(self._intensity_dict[key], self._laser_dict[key]['channel'])
         elif self.controllertype == 'celesta':
-            intensity, laser_on = self.lumencor_read_intensity_dict(self.intensity_dict)
+            intensity, laser_on = self.lumencor_read_intensity_dict(self._intensity_dict)
             self._controller.apply_voltage(intensity, laser_on)
         else:
             self.log.warning('your controller type is currently not covered')
@@ -196,7 +196,8 @@ class LaserControlLogic(GenericLogic):
 
         :return: None
         """
-        self._controller.apply_voltage(voltage, channel)
+        if self.controllertype == 'daq' or self.controllertype == 'fpga':
+            self._controller.apply_voltage(voltage, channel)
 
     def voltage_off(self):
         """ Switch all lasers off.
@@ -209,8 +210,8 @@ class LaserControlLogic(GenericLogic):
             for key in self._laser_dict:
                 self._controller.apply_voltage(0.0, self._laser_dict[key]['channel'])
         elif self.controllertype == 'celesta':
-            intensity, laser_on = self.lumencor_read_intensity_dict(self.intensity_dict)
-            self._controller.apply_voltage(intensity, laser_on * 0)
+            intensity, laser_on = self.lumencor_read_intensity_dict(self._intensity_dict)
+            self._controller.apply_voltage(intensity, [x * 0 for x in laser_on])
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -343,7 +344,12 @@ class LaserControlLogic(GenericLogic):
         :return: list laser_on - contains the emission state of each laser line
         """
         intensity, laser_on = self.lumencor_read_intensity_dict(intensity_dict)
-        self._controller.apply_voltage(intensity, laser_on * 0)
+        self._controller.apply_voltage(intensity, [x * 0 for x in laser_on])
+
+    def lumencor_set_laser_line_emission(self, laser_on):
+        """ Set the emission state of all the laser lines without changing the intensity values
+        """
+        self._controller.set_state_all_laser_lines(laser_on)
 
     @staticmethod
     def lumencor_read_intensity_dict(intensity_dict):
