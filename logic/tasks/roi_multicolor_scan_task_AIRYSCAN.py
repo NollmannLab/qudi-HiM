@@ -8,7 +8,7 @@ This module contains a task to perform a multicolor scan on RAMM setup iterating
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
 in each plane of the stack.)
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Wed March 30 2021
 -----------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ from time import sleep, time
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_helper_functions import save_z_positions_to_file, get_entry_nested_dict
 from logic.task_logging_functions import write_dict_to_file
 
 
@@ -71,32 +71,48 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.roi_counter = None
         self.directory = None
         self.user_param_dict = {}
+        self.sample_name = None
+        self.is_dapi = False
+        self.is_rna = False
+        self.num_z_planes = None
+        self.imaging_sequence = []
+        self.save_path = None
+        self.roi_list_path = None
+        self.roi_names = []
+        self.num_laserlines = None
+        self.intensity_dict = {}
+        self.ao_channel_sequence = []
+        self.lumencor_channel_sequence = []
 
     def startTask(self):
         """ """
         self.log.info('started Task')
 
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
-
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
 
-        self.ref['cam'].stop_live_mode()
-        self.ref['cam'].disable_camera_actions()
-
         self.ref['laser'].stop_laser_output()
-        self.ref['bf'].led_off()
         self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
-
-        self.ref['focus'].stop_autofocus()
-        self.ref['focus'].disable_focus_actions()
 
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
 
         # read all user parameters from config
         self.load_user_parameters()
+
+        # define the laser intensities as well as the sequence for the daq external trigger.
+        # Set : - all laser lines to OFF and wake the source up
+        #       - all the ao_channels to +5V
+        #       - the celesta laser source in external TTL mode
+        #       - the intensity of each laser line according to the task parameters
+        self.format_imaging_sequence()
+        self.ref['laser'].lumencor_wakeup()
+        self.ref['laser'].stop_laser_output()
+        self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
+        self.ref['daq'].initialize_ao_channels()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
@@ -107,17 +123,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
             write_dict_to_file(dapi_channel_info_path, imag_dict)
 
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
-
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-
-        # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
-        self.ref['laser'].start_task_session(bitfile)
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
+        # indicate to the user the parameters he should use for zen configuration
+        self.log.warning('############ ZEN PARAMETERS ############')
+        self.log.warning('This task is compatible with experiment ZEN/HiM_celesta_01-08-2021')
+        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)))
+        self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
+        self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
+        self.log.warning('Select the autofocus block and hit "Start Experiment"')
+        self.log.warning('########################################')
 
         # initialize a counter to iterate over the ROIs
         self.roi_counter = 0
@@ -307,60 +320,79 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.sample_name = self.user_param_dict['sample_name']
                 self.is_dapi = self.user_param_dict['dapi']
                 self.is_rna = self.user_param_dict['rna']
-                self.exposure = self.user_param_dict['exposure']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
-                self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
         # establish further user parameters derived from the given ones:
+
         # create a list of roi names
         self.ref['roi'].load_roi_list(self.roi_list_path)
         # get the list of the roi names
         self.roi_names = self.ref['roi'].roi_names
-
-        # convert the imaging_sequence given by user into format required by the bitfile
-        lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        # get the number of laser lines
         self.num_laserlines = len(self.imaging_sequence)
-        wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        wavelengths = [lightsource_dict[key] for key in wavelengths]
-        for i in range(self.num_laserlines, 5):
-            wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
-        self.wavelengths = wavelengths
 
-        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, 5):
-            self.intensities.append(0)
+        # # convert the imaging_sequence given by user into format required by the bitfile
+        # lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        # self.num_laserlines = len(self.imaging_sequence)
+        # wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
+        # wavelengths = [lightsource_dict[key] for key in wavelengths]
+        # for i in range(self.num_laserlines, 5):
+        #     wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
+        # self.wavelengths = wavelengths
 
-    def calculate_start_position(self, centered_focal_plane):
+        # self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
+        # for i in range(self.num_laserlines, 5):
+        #     self.intensities.append(0)
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for imaging cycle with Lumencor
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the daq ttl/ao sequence for the
+        triggers. For controlling the laser source, two solutions are tested :
+        - directly by communicating with the Lumencor, in that case the intensity dictionary is used to predefine the
+        intensity of each laser line, and the list emission_state contains the succession of emission state for the
+        acquisition
+        - by using the Lumencor is external trigger mode. In that case, the intensity dictionary is used the same way
+        but the DAQ is controlling the succession of emission state
         """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
 
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
+    # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
+        laser_dict = self.ref['laser'].get_laser_dict()
+        intensity_dict = self.ref['laser'].init_intensity_dict()
+        # From [('488 nm', 3), ('561 nm', 3)] to [('laser2', 3), ('laser3', 3), (10,)]
+        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
 
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()
+    # Load the daq dictionary for ttl ----------------------------------------------------------------------------------
+        daq_dict = self.ref['daq']._daq.get_dict()
+        ao_channel_sequence = []
+        lumencor_channel_sequence = []
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
-            # odd number of planes:
+    # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
+        for i in range(len(imaging_sequence)):
+            key = imaging_sequence[i][0]
+            intensity_dict[key] = imaging_sequence[i][1]
+            if daq_dict[key]['channel']:
+                ao_channel_sequence.append(daq_dict[key]['channel'])
             else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
+                self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
+                    laser_dict[key]['wavelength']))
 
+            emission_state = np.zeros((len(laser_dict),), dtype=int)
+            emission_state[laser_dict[key]['channel']] = 1
+            lumencor_channel_sequence.append(emission_state.tolist())
+
+        self.intensity_dict = intensity_dict
+        self.ao_channel_sequence = ao_channel_sequence
+        self.lumencor_channel_sequence = lumencor_channel_sequence
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
