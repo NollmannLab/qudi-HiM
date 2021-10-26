@@ -126,11 +126,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
         self.log.warning('This task is compatible with experiment ZEN/HiM_celesta_01-08-2021')
-        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)))
+        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)/2))
         self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
         self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
         self.log.warning('Select the autofocus block and hit "Start Experiment"')
         self.log.warning('########################################')
+
+        # wait for the trigger from ZEN indicating that the experiment is starting
+        trigger = self.ref['daq'].check_zen_start_experiment()
+        while trigger == 0:
+            sleep(.1)
+            trigger = self.ref['daq'].check_zen_start_experiment()
+
+        # save the acquisition parameters
+        metadata = self.get_metadata()
+        self.save_metadata_file(metadata, os.path.join(self.directory, "parameters.yml"))
 
         # initialize a counter to iterate over the ROIs
         self.roi_counter = 0
@@ -142,109 +152,152 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return bool: True if the task should continue running, False if it should finish.
         """
         # --------------------------------------------------------------------------------------------------------------
-        # move to ROI and focus
+        # move to the first ROI
         # --------------------------------------------------------------------------------------------------------------
-        # create the path for each roi
-        cur_save_path = self.get_complete_path(self.directory, self.roi_names[self.roi_counter])
+
+        # define the name of the file according to the roi number and cycle
+        scan_name = self.file_name(self.roi_names[self.roi_counter])
 
         # go to roi
         self.ref['roi'].set_active_roi(name=self.roi_names[self.roi_counter])
         self.ref['roi'].go_to_roi_xy()
         self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
         self.ref['roi'].stage_wait_for_idle()
-
-        # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
-        self.ref['focus'].do_piezo_position_correction()
-        busy = True
-        while busy:
-            sleep(0.5)
-            busy = self.ref['focus'].piezo_correction_running
-
-        # autofocus
-        self.ref['focus'].start_search_focus()
-        # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
-        ready = self.ref['focus']._stage_is_positioned
-        counter = 0
-        while not ready:
-            counter += 1
-            sleep(0.1)
-            ready = self.ref['focus']._stage_is_positioned
-            if counter > 500:
-                break
-
-        start_position = self.calculate_start_position(self.centered_focal_plane)
-
-        # --------------------------------------------------------------------------------------------------------------
-        # imaging sequence
-        # --------------------------------------------------------------------------------------------------------------
-        # prepare the daq: set the digital output to 0 before starting the task
-        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
-        # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
-        self.ref['cam'].start_acquisition()
-
-        # initialize arrays to save the target and current z positions
-        z_target_positions = []
-        z_actual_positions = []
-
-        print(f'{self.roi_names[self.roi_counter]}: performing z stack..')
-
-        for plane in tqdm(range(self.num_z_planes)):
-
-            # position the piezo
-            position = start_position + plane * self.z_step
-            self.ref['focus'].go_to_position(position)
-            # print(f'target position: {position} um')
-            sleep(0.03)
-            cur_pos = self.ref['focus'].get_position()
-            # print(f'current position: {cur_pos} um')
-            z_target_positions.append(position)
-            z_actual_positions.append(cur_pos)
-
-            # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([1], dtype=np.uint8))
-            sleep(0.005)
-            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
-            # wait for signal from FPGA to DAQ ('acquisition ready')
-            fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-            t0 = time()
-
-            while not fpga_ready:
-                sleep(0.001)
-                fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
-                t1 = time() - t0
-                if t1 > 1:  # for safety: timeout if no signal received within 1 s
-                    self.log.warning('Timeout occurred')
-                    break
-
-        self.ref['focus'].go_to_position(start_position)
-
-        # --------------------------------------------------------------------------------------------------------------
-        # data saving
-        # --------------------------------------------------------------------------------------------------------------
-        image_data = self.ref['cam'].get_acquired_data()
-
-        if self.file_format == 'fits':
-            metadata = self.get_fits_metadata()
-            self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
-        else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
-            metadata = self.get_metadata()
-            file_path = cur_save_path.replace('tif', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
-
-        # save the projection of the acquired stack if DAPI was checked (for experiment tracking option)
-        if self.is_dapi:
-            self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
-
-        # save file with z positions (same procedure for either file format)
-        file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
-        save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
-
         self.roi_counter += 1
+
+        # # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
+        # self.ref['focus'].do_piezo_position_correction()
+        # busy = True
+        # while busy:
+        #     sleep(0.5)
+        #     busy = self.ref['focus'].piezo_correction_running
+        #
+        # # autofocus
+        # self.ref['focus'].start_search_focus()
+        # # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
+        # ready = self.ref['focus']._stage_is_positioned
+        # counter = 0
+        # while not ready:
+        #     counter += 1
+        #     sleep(0.1)
+        #     ready = self.ref['focus']._stage_is_positioned
+        #     if counter > 500:
+        #         break
+        #
+        # start_position = self.calculate_start_position(self.centered_focal_plane)
+
+        # --------------------------------------------------------------------------------------------------------------
+        # autofocus (ZEN)
+        # --------------------------------------------------------------------------------------------------------------
+
+        # send trigger to ZEN to start the autofocus search
+        sleep(5)
+        self.ref['daq'].launch_zen_task()
+
+        # wait for ZEN trigger indicating the task is completed
+        trigger = self.ref['daq'].check_zen_task_done()
+        while trigger == 0:
+            sleep(.1)
+            trigger = self.ref['daq'].check_zen_task_done()
+
+        # --------------------------------------------------------------------------------------------------------------
+        # first imaging sequence
+        # --------------------------------------------------------------------------------------------------------------
+
+        # launch the acquisition task
+        sleep(5)
+        self.ref['daq'].launch_zen_task()
+
+        # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
+        for plane in range(self.num_z_planes):
+            for i in range(len(self.imaging_sequence)):
+
+                # daq waiting for global_exposure trigger from the camera ----------------------------------------------
+                bit_value = self.ref['daq'].check_acquisition()
+                counter = 0
+                while bit_value == 0:
+                    counter += 1
+                    bit_value = self.ref['daq'].check_acquisition()
+                    if counter > 10000:
+                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                        return False
+
+                # switch the selected laser line ON --------------------------------------------------------------------
+                # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
+                self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+
+                # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
+                bit_value = self.ref['daq'].check_acquisition()
+                counter = 0
+                while bit_value == 1:
+                    counter += 1
+                    bit_value = self.ref['daq'].check_acquisition()
+                    if counter > 10000:
+                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                        return False
+
+                # switch the selected laser line OFF -------------------------------------------------------------------
+                self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
+        # save the file name
+        self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
+
+        # --------------------------------------------------------------------------------------------------------------
+        # move to the second ROI
+        # --------------------------------------------------------------------------------------------------------------
+
+        # define the name of the file according to the roi number and cycle
+        scan_name = self.file_name(self.roi_names[self.roi_counter])
+
+        # go to roi
+        self.ref['roi'].set_active_roi(name=self.roi_names[self.roi_counter])
+        self.ref['roi'].go_to_roi_xy()
+        self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
+        self.ref['roi'].stage_wait_for_idle()
+        self.roi_counter += 1
+
+        # --------------------------------------------------------------------------------------------------------------
+        # second imaging sequence
+        # --------------------------------------------------------------------------------------------------------------
+
+        # launch the acquisition task
+        sleep(5)
+        self.ref['daq'].launch_zen_task()
+
+        # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
+        for plane in range(self.num_z_planes):
+            for i in range(len(self.imaging_sequence)):
+
+                # daq waiting for global_exposure trigger from the camera ----------------------------------------------
+                bit_value = self.ref['daq'].check_acquisition()
+                counter = 0
+                while bit_value == 0:
+                    counter += 1
+                    bit_value = self.ref['daq'].check_acquisition()
+                    if counter > 10000:
+                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                        return False
+
+                # switch the selected laser line ON --------------------------------------------------------------------
+                # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
+                self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+
+                # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
+                bit_value = self.ref['daq'].check_acquisition()
+                counter = 0
+                while bit_value == 1:
+                    counter += 1
+                    bit_value = self.ref['daq'].check_acquisition()
+                    if counter > 10000:
+                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
+                        return False
+
+                # switch the selected laser line OFF -------------------------------------------------------------------
+                self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
+        # save the file name
+        self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
+
         return self.roi_counter < len(self.roi_names)
 
     def pauseTask(self):
@@ -263,14 +316,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
         self.ref['roi'].go_to_roi_xy()
 
-        # reset the camera to default state
-        self.ref['cam'].reset_camera_after_multichannel_imaging()
-        self.ref['cam'].set_exposure(self.default_exposure)
-
         # close the fpga session
-        self.ref['laser'].end_task_session()
-        self.ref['laser'].restart_default_session()
-        self.log.info('restarted default session')
+        self.ref['laser'].lumencor_set_ttl(False)
+        self.ref['laser'].voltage_off()
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
@@ -279,11 +327,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # roi gui
         self.ref['roi'].enable_tracking_mode()
         self.ref['roi'].enable_roi_actions()
-        # basic imaging gui
-        self.ref['cam'].enable_camera_actions()
-        self.ref['laser'].enable_laser_actions()
-        # focus tools gui
-        self.ref['focus'].enable_focus_actions()
 
         self.log.info('cleanupTask finished')
 
@@ -393,6 +436,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
         self.lumencor_channel_sequence = lumencor_channel_sequence
+
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
@@ -445,38 +489,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return path
 
-    def get_complete_path(self, directory, roi_number):
-        """ Create the complete path name to the image data file.
+    def file_name(self, roi_number):
+        """ Define the complete name of the image data file.
 
-        :param: str directory: directory where the data shall be saved
         :param: str roi_number: string identifier of the current ROI for which a complete path shall be created
-
         :return: str complete_path: such as directory/ROI_001/scan_001_004_ROI.tif (experiment nb. 001, ROI nb. 004)
         """
-        if self.is_dapi:
-            path = os.path.join(directory, roi_number, 'DAPI')
-        elif self.is_rna:
-            path = os.path.join(directory, roi_number, 'RNA')
-        else:
-            path = os.path.join(directory, roi_number)
-
-        if not os.path.exists(path):
-            try:
-                os.makedirs(path)  # recursive creation of all directories on the path
-            except Exception as e:
-                self.log.error('Error {0}'.format(e))
 
         roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
 
         if self.is_dapi:
-            file_name = f'scan_{self.prefix}_DAPI_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_DAPI_{roi_number_inv}'
         elif self.is_rna:
-            file_name = f'scan_{self.prefix}_RNA_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_RNA_{roi_number_inv}'
         else:
-            file_name = f'scan_{self.prefix}_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_{roi_number_inv}'
 
-        complete_path = os.path.join(path, file_name)
-        return complete_path
+        return file_name
+
+    def save_file_name(self, file, movie_name):
+        with open(file, 'a+') as outfile:
+            outfile.write(movie_name)
+            outfile.write("\n")
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
@@ -489,50 +523,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         metadata = {}
         metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
-        metadata['Scan step length (um)'] = self.z_step
-        metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
+        metadata['Scan number of planes (um)'] = self.num_z_planes
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
 
-        # add translation stage position
+        # add translation stage positions
         metadata['x position'] = float(self.ref['roi'].stage_position[0])
         metadata['y position'] = float(self.ref['roi'].stage_position[1])
-
-        # add autofocus information :
-        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
-        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
-        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
-        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
-
-        return metadata
-
-    def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
-        """
-        metadata = {}
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['Z_STEP'] = (self.z_step, 'scan step length (um)')
-        metadata['Z_TOTAL'] = (self.z_step * self.num_z_planes, 'scan total length (um)')
-        metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
-        for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i][0], f'laser line {i+1}')
-            metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
-        metadata['X_POS'] = (self.ref['roi'].stage_position[0], 'x position')
-        metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
-        # metadata['ROI001'] = (self.ref['roi'].get_roi_position('ROI001'), 'ROI 001 position')
-        # pixel size
-
-        # add autofocus information :
-        metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
-        metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
-        metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
 
         return metadata
 
@@ -545,20 +544,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for acquisition tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)

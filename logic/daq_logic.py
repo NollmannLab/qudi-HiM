@@ -242,7 +242,7 @@ class DAQLogic(GenericLogic):
         """ Synchronization between ZEN and qudi is required. Specific ZEN tasks (eg. autofocus or scan) require a
         starting trigger to start.
         """
-        self.send_zen_task_trigger()
+        self._daq.send_zen_task_trigger()
 
     def check_zen_task_done(self):
         """ Synchronization between ZEN and qudi is required. When ZEN specific task (eg. autofocus or scan) from the
