@@ -369,8 +369,8 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_timelapse_settings(False)
 
             # additional visibility modifications
-            self._mw.dapi_CheckBox.setVisible(False)
-            self._mw.rna_CheckBox.setVisible(False)
+            self._mw.dapi_CheckBox.setVisible(True)
+            self._mw.rna_CheckBox.setVisible(True)
             self._mw.gain_Label.setVisible(False)
             self._mw.gain_SpinBox.setVisible(False)
             self._mw.get_gain_PushButton.setVisible(False)
