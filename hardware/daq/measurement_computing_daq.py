@@ -99,10 +99,11 @@ class MccDAQ(Base, LasercontrolInterface):
         self.port = self.get_dio_port()
         print(f'port: {self.port}')
 
-        # Initiate the dio ports for the detections of trigger
+        # Initiate the dio ports for zen
         self.set_up_di_channel(self.out7_zen_channel)
         self.set_up_di_channel(self.out8_zen_channel)
         self.set_up_di_channel(self.exposure_trigger_channel)
+        self.set_up_do_channel(self.in7_zen_channel)
 
     def on_deactivate(self):
         """ Required deactivation steps.
@@ -319,7 +320,7 @@ class MccDAQ(Base, LasercontrolInterface):
     def init_trigger_laser_line(self):
         for channel in self._laser_write_ao_channels:
             if channel is not None:
-                self.write_to_ao_channel(channel, 5)
+                self.write_to_ao_channel(5, channel)
 
 
 # if __name__ == '__main__':
