@@ -56,12 +56,6 @@ class MccDAQ(Base, LasercontrolInterface):
     # ao channels for the fluidics
     rinsing_pump_channel = ConfigOption('rinsing_pump_channel', None, missing='warn')
     fluidics_pump_channel = ConfigOption('fluidics_pump_channel', None, missing='warn')
-    # doi channels for zen communication
-    in7_zen_channel = ConfigOption('IN7_ZEN', None, missing='warn')
-    out7_zen_channel = ConfigOption('OUT7_ZEN', None, missing='warn')
-    out8_zen_channel = ConfigOption('OUT8_ZEN', None, missing='warn')
-    # doi channel for Hamamatus camera trigger
-    exposure_trigger_channel = ConfigOption('camera_global_exposure', None, missing='warn')
 
     # parameters for the laser control
     _wavelengths = ConfigOption('wavelengths', None)
@@ -72,10 +66,6 @@ class MccDAQ(Base, LasercontrolInterface):
         super().__init__(config=config, **kwargs)
         self.board_num = None
         self.port = None
-
-    # def __init__(self, *args, **kwargs):
-    #     # super().__init__(*args, **kwargs)
-    #     pass
 
     def on_activate(self):
         """ Initialization steps when module is called.
@@ -98,12 +88,6 @@ class MccDAQ(Base, LasercontrolInterface):
 
         self.port = self.get_dio_port()
         print(f'port: {self.port}')
-
-        # Initiate the dio ports for zen
-        self.set_up_di_channel(self.out7_zen_channel)
-        self.set_up_di_channel(self.out8_zen_channel)
-        self.set_up_di_channel(self.exposure_trigger_channel)
-        self.set_up_do_channel(self.in7_zen_channel)
 
     def on_deactivate(self):
         """ Required deactivation steps.
@@ -224,10 +208,6 @@ class MccDAQ(Base, LasercontrolInterface):
         bit_value = ul.d_bit_in(self.board_num, self.port.type, channel)
         return bit_value
 
-    def test_function(self):
-        self.set_up_do_channel(0)  # configure bit 0 as output
-        self.set_up_di_channel(2)  # configure bit 2 as input
-
 # ----------------------------------------------------------------------------------------------------------------------
 # Lasercontrol Interface functions
 # ----------------------------------------------------------------------------------------------------------------------
@@ -294,27 +274,6 @@ class MccDAQ(Base, LasercontrolInterface):
             self.write_to_ao_channel(voltage, self.fluidics_pump_channel)
         else:
             self.log.warning('Voltage not in allowed range.')
-
-# Check if trigger from ZEN is detected, indicating that experiment has started ----------------------------------------
-    def check_zen_start_experiment_trigger(self):
-        trigger_value = self.read_di_channel(self.out7_zen_channel)
-        return trigger_value
-
-# Check if trigger from ZEN is detected, indicating that acquisition block/task is done --------------------------------
-    def check_zen_task_trigger(self):
-        trigger_value = self.read_di_channel(self.out8_zen_channel)
-        return trigger_value
-
-# Send trigger to ZEN, launching task/block ----------------------------------------------------------------------------
-    def send_zen_task_trigger(self):
-        self.write_to_do_channel(self.in7_zen_channel, 1, 1)
-        sleep(0.1)
-        self.write_to_do_channel(self.in7_zen_channel, 1, 0)
-
-# Wait global exposure trigger from camera _____________________________________________________________________________
-    def check_global_exposure(self):
-        trigger_value = self.read_di_channel(self.exposure_trigger_channel)
-        return trigger_value
 
 # Send trigger to laser source celesta ---------------------------------------------------------------------------------
     def init_trigger_laser_line(self):
