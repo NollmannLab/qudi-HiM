@@ -83,6 +83,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensity_dict = {}
         self.ao_channel_sequence = []
         self.lumencor_channel_sequence = []
+        self.IN7_ZEN = self.config['IN7_ZEN']
+        self.OUT7_ZEN = self.config['OUT7_ZEN']
+        self.OUT8_ZEN = self.config['OUT8_ZEN']
+        self.camera_global_exposure = self.config['camera_global_exposure']
 
     def startTask(self):
         """ """
@@ -100,6 +104,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # read all user parameters from config
         self.load_user_parameters()
+
+        # create the daq channels
+        self.ref['daq'].initialize_digital_channel(self.OUT7_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.OUT8_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.camera_global_exposure, 'input')
+        self.ref['daq'].initialize_digital_channel(self.IN7_ZEN, 'output')
 
         # define the laser intensities as well as the sequence for the daq external trigger.
         # Set : - all laser lines to OFF and wake the source up
@@ -133,10 +143,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.warning('########################################')
 
         # wait for the trigger from ZEN indicating that the experiment is starting
-        trigger = self.ref['daq'].check_zen_start_experiment()
+        trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
         while trigger == 0:
             sleep(.1)
-            trigger = self.ref['daq'].check_zen_start_experiment()
+            trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
 
         # save the acquisition parameters
         metadata = self.get_metadata()
@@ -151,6 +161,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return bool: True if the task should continue running, False if it should finish.
         """
+
         # --------------------------------------------------------------------------------------------------------------
         # move to the first ROI
         # --------------------------------------------------------------------------------------------------------------
@@ -165,40 +176,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].stage_wait_for_idle()
         self.roi_counter += 1
 
-        # # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
-        # self.ref['focus'].do_piezo_position_correction()
-        # busy = True
-        # while busy:
-        #     sleep(0.5)
-        #     busy = self.ref['focus'].piezo_correction_running
-        #
-        # # autofocus
-        # self.ref['focus'].start_search_focus()
-        # # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
-        # ready = self.ref['focus']._stage_is_positioned
-        # counter = 0
-        # while not ready:
-        #     counter += 1
-        #     sleep(0.1)
-        #     ready = self.ref['focus']._stage_is_positioned
-        #     if counter > 500:
-        #         break
-        #
-        # start_position = self.calculate_start_position(self.centered_focal_plane)
-
         # --------------------------------------------------------------------------------------------------------------
         # autofocus (ZEN)
         # --------------------------------------------------------------------------------------------------------------
 
         # send trigger to ZEN to start the autofocus search
         sleep(5)
-        self.ref['daq'].launch_zen_task()
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+        sleep(0.1)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
         # wait for ZEN trigger indicating the task is completed
-        trigger = self.ref['daq'].check_zen_task_done()
+        trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
         while trigger == 0:
             sleep(.1)
-            trigger = self.ref['daq'].check_zen_task_done()
+            trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
         # --------------------------------------------------------------------------------------------------------------
         # first imaging sequence
@@ -206,18 +198,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # launch the acquisition task
         sleep(5)
-        self.ref['daq'].launch_zen_task()
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+        sleep(0.1)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
         # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for plane in range(self.num_z_planes):
             for i in range(len(self.imaging_sequence)):
 
                 # daq waiting for global_exposure trigger from the camera ----------------------------------------------
-                bit_value = self.ref['daq'].check_acquisition()
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                 counter = 0
                 while bit_value == 0:
                     counter += 1
-                    bit_value = self.ref['daq'].check_acquisition()
+                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                     if counter > 10000:
                         self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
                         return False
@@ -227,11 +221,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
-                bit_value = self.ref['daq'].check_acquisition()
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                 counter = 0
                 while bit_value == 1:
                     counter += 1
-                    bit_value = self.ref['daq'].check_acquisition()
+                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                     if counter > 10000:
                         self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
                         return False
@@ -262,18 +256,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # launch the acquisition task
         sleep(5)
-        self.ref['daq'].launch_zen_task()
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+        sleep(0.1)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
         # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for plane in range(self.num_z_planes):
             for i in range(len(self.imaging_sequence)):
 
                 # daq waiting for global_exposure trigger from the camera ----------------------------------------------
-                bit_value = self.ref['daq'].check_acquisition()
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                 counter = 0
                 while bit_value == 0:
                     counter += 1
-                    bit_value = self.ref['daq'].check_acquisition()
+                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                     if counter > 10000:
                         self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
                         return False
@@ -283,11 +279,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
-                bit_value = self.ref['daq'].check_acquisition()
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                 counter = 0
                 while bit_value == 1:
                     counter += 1
-                    bit_value = self.ref['daq'].check_acquisition()
+                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
                     if counter > 10000:
                         self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
                         return False
@@ -521,17 +517,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['Sample name'] = self.sample_name
-        metadata['Scan number of planes (um)'] = self.num_z_planes
-        metadata['Number laserlines'] = self.num_laserlines
+        metadata = {'Sample name': self.sample_name, 'Scan number of planes (um)': self.num_z_planes,
+                    'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
 
-        # add translation stage positions
-        metadata['x position'] = float(self.ref['roi'].stage_position[0])
-        metadata['y position'] = float(self.ref['roi'].stage_position[1])
+        for roi in self.roi_names:
+            pos = self.ref['roi'].get_roi_position(roi)
+            metadata[roi] = f'X = {pos[0]} - Y = {pos[1]}'
 
         return metadata
 
