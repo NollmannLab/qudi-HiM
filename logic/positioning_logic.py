@@ -441,8 +441,8 @@ class PositioningLogic(GenericLogic):
                 self.threadpool.start(worker)
 
             else:
-                self.moving = False
                 self._stage.wait_for_idle()
+                self.moving = False
                 new_pos = self.get_position()
                 # self.log.info(new_pos)
 
