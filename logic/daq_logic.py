@@ -231,32 +231,20 @@ class DAQLogic(GenericLogic):
 # Methods specific to communication with the airyscan microscope
 # ----------------------------------------------------------------------------------------------------------------------
 
-    def check_zen_start_experiment(self):
-        """ Synchronization between ZEN and qudi is required. When ZEN experiment is launched, a trigger is sent from
-        the trigger box to the DAQ, indicating that the microscope is ready to start imaging.
-        """
-        trigger_value = self._daq.check_zen_start_experiment_trigger()
-        return trigger_value
+    def initialize_digital_channel(self, channel, d_type):
+        """ Initialize the digitial port for the daq. This step is specific to the mcc daq used on the Airy scan
+        setup
 
-    def launch_zen_task(self):
-        """ Synchronization between ZEN and qudi is required. Specific ZEN tasks (eg. autofocus or scan) require a
-        starting trigger to start.
+        :param: float channel
+        :param: string type - define whether the selected port is used as an inout or output
         """
-        self._daq.send_zen_task_trigger()
 
-    def check_zen_task_done(self):
-        """ Synchronization between ZEN and qudi is required. When ZEN specific task (eg. autofocus or scan) from the
-        experiment designer is done, a trigger is sent from the trigger box to the DAQ, indicating that the microscope
-        is ready to move to the next task.
-        """
-        trigger_value = self._daq.check_zen_task_trigger()
-        return trigger_value
-
-    def check_acquisition(self):
-        """ Check whether the camera is acquiring an image or not
-        """
-        trigger_value = self._daq.check_global_exposure()
-        return trigger_value
+        if d_type is 'input':
+            self._daq.set_up_di_channel(channel)
+            # print(f'init channel {channel} as input')
+        else:
+            self._daq.set_up_do_channel(channel)
+            # print(f'init channel {channel} as output')
 
     def initialize_ao_channels(self):
         """ The ao channel used to control the lumencor laser source must all be set to +5V before starting an
