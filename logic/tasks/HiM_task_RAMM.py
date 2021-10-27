@@ -184,6 +184,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # position the needle in the probe
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
+            while self.ref['pos'].moving is True:
+                time.sleep(0.1)
 
             # keep in memory the position of the needle
             needle_pos = self.probe_list[self.probe_counter-1][0]
