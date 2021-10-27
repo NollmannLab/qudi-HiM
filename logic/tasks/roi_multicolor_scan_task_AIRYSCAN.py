@@ -33,11 +33,10 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 import numpy as np
 import os
 import yaml
-from time import sleep, time
+from time import sleep
 from datetime import datetime
-from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file, get_entry_nested_dict
+from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import write_dict_to_file
 
 
@@ -47,17 +46,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     Config example pour copy-paste:
 
-    ROIMulticolorScanTask:
-        module: 'roi_multicolor_scan_task_RAMM'
-        needsmodules:
-            laser: 'lasercontrol_logic'
-            bf: 'brightfield_logic'
-            cam: 'camera_logic'
-            daq: 'nidaq_logic'
-            focus: 'focus_logic'
-            roi: 'roi_logic'
-        config:
-            path_to_user_config: 'C:/Users/sCMOS-1/qudi_files/qudi_task_config_files/ROI_multicolor_scan_task_RAMM.yml'
+        ROIMulticolorScanTask:
+            module: 'roi_multicolor_scan_task_AIRYSCAN'
+            needsmodules:
+                laser: 'lasercontrol_logic'
+                daq: 'daq_logic'
+                roi: 'roi_logic'
+            config:
+                path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/ROI_multicolor_scan_task_AIRYSCAN.yml'
+                IN7_ZEN : 0
+                OUT7_ZEN : 1
+                OUT8_ZEN : 3
+                camera_global_exposure : 2
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -87,6 +87,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.OUT7_ZEN = self.config['OUT7_ZEN']
         self.OUT8_ZEN = self.config['OUT8_ZEN']
         self.camera_global_exposure = self.config['camera_global_exposure']
+        self.prefix = None
 
     def startTask(self):
         """ """
@@ -124,15 +125,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
 
-        # create a directory in which all the data will be saved
-        self.directory = self.create_directory(self.save_path)
-
-        # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
-        if self.is_dapi:
-            imag_dict = {'imaging_sequence': self.imaging_sequence}
-            dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
-            write_dict_to_file(dapi_channel_info_path, imag_dict)
-
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
         self.log.warning('This task is compatible with experiment ZEN/HiM_celesta_01-08-2021')
@@ -147,6 +139,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         while trigger == 0:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
+
+        # create a directory in which all the data will be saved
+        self.directory = self.create_directory(self.save_path)
+
+        # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
+        if self.is_dapi:
+            imag_dict = {'imaging_sequence': self.imaging_sequence}
+            dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
+            write_dict_to_file(dapi_channel_info_path, imag_dict)
 
         # save the acquisition parameters
         metadata = self.get_metadata()
@@ -202,33 +203,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         sleep(0.1)
         self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
-        # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for plane in range(self.num_z_planes):
             for i in range(len(self.imaging_sequence)):
 
                 # daq waiting for global_exposure trigger from the camera ----------------------------------------------
-                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                counter = 0
-                while bit_value == 0:
-                    counter += 1
-                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                    if counter > 10000:
-                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                        return False
+                error = self.wait_for_camera_trigger(1)
+                if error is True:
+                    return False
 
                 # switch the selected laser line ON --------------------------------------------------------------------
                 # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
                 self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
-                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                counter = 0
-                while bit_value == 1:
-                    counter += 1
-                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                    if counter > 10000:
-                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                        return False
+                error = self.wait_for_camera_trigger(0)
+                if error is True:
+                    return False
 
                 # switch the selected laser line OFF -------------------------------------------------------------------
                 self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
@@ -260,33 +250,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         sleep(0.1)
         self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
-        # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for plane in range(self.num_z_planes):
             for i in range(len(self.imaging_sequence)):
 
                 # daq waiting for global_exposure trigger from the camera ----------------------------------------------
-                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                counter = 0
-                while bit_value == 0:
-                    counter += 1
-                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                    if counter > 10000:
-                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                        return False
+                error = self.wait_for_camera_trigger(1)
+                if error is True:
+                    return False
 
                 # switch the selected laser line ON --------------------------------------------------------------------
                 # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
                 self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
-                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                counter = 0
-                while bit_value == 1:
-                    counter += 1
-                    bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
-                    if counter > 10000:
-                        self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                        return False
+                error = self.wait_for_camera_trigger(0)
+                if error is True:
+                    return False
 
                 # switch the selected laser line OFF -------------------------------------------------------------------
                 self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
@@ -312,7 +291,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
         self.ref['roi'].go_to_roi_xy()
 
-        # close the fpga session
+        # reset the lumencor state
         self.ref['laser'].lumencor_set_ttl(False)
         self.ref['laser'].voltage_off()
 
@@ -368,7 +347,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
         # establish further user parameters derived from the given ones:
-
         # create a list of roi names
         self.ref['roi'].load_roi_list(self.roi_list_path)
         # get the list of the roi names
@@ -376,18 +354,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # get the number of laser lines
         self.num_laserlines = len(self.imaging_sequence)
 
-        # # convert the imaging_sequence given by user into format required by the bitfile
-        # lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
-        # self.num_laserlines = len(self.imaging_sequence)
-        # wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        # wavelengths = [lightsource_dict[key] for key in wavelengths]
-        # for i in range(self.num_laserlines, 5):
-        #     wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
-        # self.wavelengths = wavelengths
+    # ------------------------------------------------------------------------------------------------------------------
+    # communication with ZEN
+    # ------------------------------------------------------------------------------------------------------------------
 
-        # self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        # for i in range(self.num_laserlines, 5):
-        #     self.intensities.append(0)
+    def wait_for_camera_trigger(self, value):
+        """ This method contains a loop to wait for the camera exposure starts or stops.
+
+        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        """
+        bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+        counter = 0
+        error = False
+
+        while bit_value != value:
+            counter += 1
+            bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+            if counter > 10000:
+                self.log.warning(
+                    'No trigger was detected during the past 60s... experiment is aborted')
+                error = True
+
+        return error
 
     # ------------------------------------------------------------------------------------------------------------------
     # data for imaging cycle with Lumencor
@@ -460,7 +448,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.log.error('Error {0}'.format(e))
 
         # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
-        dir_list = [folder for folder in os.listdir(path_stem_with_date) if os.path.isdir(os.path.join(path_stem_with_date, folder))]
+        dir_list = [folder for folder in os.listdir(path_stem_with_date) if
+                    os.path.isdir(os.path.join(path_stem_with_date, folder))]
         number_dirs = len(dir_list)
 
         prefix = str(number_dirs+1).zfill(3)
@@ -503,7 +492,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return file_name
 
-    def save_file_name(self, file, movie_name):
+    @staticmethod
+    def save_file_name(file, movie_name):
         with open(file, 'a+') as outfile:
             outfile.write(movie_name)
             outfile.write("\n")
