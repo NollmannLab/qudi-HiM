@@ -160,7 +160,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # wait for the trigger from ZEN indicating that the experiment is starting
         trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
-        while trigger == 0:
+        while trigger == 0 and not self.aborted:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
 
@@ -214,9 +214,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         if not self.aborted:
             now = time.time()
-            # info message
+            # info message indicating the probe
             self.probe_counter += 1
-            self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
+            probe_name = self.probe_list[self.probe_counter - 1][1]
+            self.log.info(f'Probe number {self.probe_counter}: {probe_name}')
 
             if self.logging:
                 self.status_dict['cycle_no'] = self.probe_counter
@@ -225,14 +226,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Started cycle {self.probe_counter}', 'info')
 
             # position the needle in the probe
-            self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
-            self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
+            needle_pos = self.probe_list[self.probe_counter - 1][0]
+            self.ref['pos'].start_move_to_target(needle_pos)
             while self.ref['pos'].moving is True:
                 sleep(0.1)
 
-        # keep in memory the position of the needle
-        needle_pos = self.probe_list[self.probe_counter-1][0]
-        rt_injection = 0
+            # disable again the move stage button
+            self.ref['pos'].disable_positioning_actions()
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
@@ -249,6 +249,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the hybridization sequence
+            rt_injection = 0
+
             for step in range(len(self.hybridization_list)):
                 if self.aborted:
                     break
@@ -273,9 +275,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         needle_pos += 1
                     elif rt_injection > 0 and valve_pos == 3:
                         self.ref['pos'].start_move_to_target(needle_pos)
+                        while self.ref['pos'].moving is True:
+                            sleep(0.1)
                         rt_injection += 1
                         needle_pos += 1
-                        self.ref['pos'].wait_for_idle()
+                        self.ref['pos'].disable_positioning_actions()
 
                     # pressure regulation
                     # create lists containing pressure and volume data and initialize first value to 0
@@ -308,7 +312,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     # save pressure and volume data to file
                     complete_path = create_path_for_injection_data(self.directory,
-                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   probe_name,
                                                                    'hybridization', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
@@ -360,7 +364,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # define the name of the file according to the roi number and cycle
                 roi = self.roi_names[roi_counter]
-                scan_name = self.file_name(roi)
+                scan_name = self.file_name(roi, probe_name)
 
                 # move to roi ------------------------------------------------------------------------------------------
                 self.ref['roi'].active_roi = None
@@ -385,7 +389,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # wait for ZEN trigger indicating the task is completed
                 trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
-                while trigger == 0:
+                while trigger == 0 and not self.aborted:
                     sleep(.1)
                     trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
@@ -428,7 +432,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # define the name of the file according to the roi number and cycle
                 roi = self.roi_names[roi_counter]
-                scan_name = self.file_name(roi)
+                scan_name = self.file_name(roi, probe_name)
 
                 # go to roi
                 self.ref['roi'].set_active_roi(name=roi)
@@ -534,7 +538,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     # save pressure and volume data to file
                     complete_path = create_path_for_injection_data(self.directory,
-                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   probe_name,
                                                                    'photobleaching', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
@@ -555,14 +559,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
-            # uncomment when peristaltic pump is reconfigured
             # rinse needle after photobleaching
-            # self.ref['valves'].set_valve_position('a', 3)  # Towards probe
-            # self.ref['valves'].wait_for_idle()
-            # self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
-            # self.ref['valves'].wait_for_idle()
-            # self.ref['flow'].start_rinsing(60)
-            # time.sleep(61)   # block the program flow until rinsing is finished
+            self.ref['valves'].set_valve_position('a', 3)  # Towards probe
+            self.ref['valves'].wait_for_idle()
+            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
+            self.ref['valves'].wait_for_idle()
+            self.ref['flow'].start_rinsing(60)
+            time.sleep(61)   # block the program flow until rinsing is finished
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -641,7 +644,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
-            exposure: 0.05  # in s
             num_z_planes: 50
             imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
@@ -706,7 +708,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         counter = 0
         error = False
 
-        while bit_value != value and error is False:
+        while bit_value != value and error is False and not self.aborted:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
             if counter > 10000:
@@ -826,7 +828,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return path
 
-    def file_name(self, roi_number):
+    def file_name(self, roi_number, probe_name):
         """ Define the complete name of the image data file.
 
         :param: str roi_number: string identifier of the current ROI for which a complete path shall be created
@@ -834,7 +836,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
 
         roi_number_inv = roi_number.strip('ROI_') + '_ROI'  # for compatibility with analysis format
-        file_name = f'scan_{self.prefix}_{roi_number_inv}'
+        file_name = f'scan_{self.prefix}_{probe_name}_{roi_number_inv}'
         return file_name
 
     @staticmethod
@@ -874,8 +876,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
 
-# to do:
-
-# when everything is tested: copy to a file confocal_HiM_task_Airyscan
-# only slight modifications are needed (no lumencor for example) but most of this code can be used as well
-# the experiment configurator should then be extended for the confocal_HiM_task_Airyscan (where less parameters are needed)
