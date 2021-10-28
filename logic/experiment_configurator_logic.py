@@ -301,8 +301,7 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Hi-M Airyscan Confocal':
                 if not filename:
                     filename = 'hi_m_task_AIRYSCAN_confocal.yml'
-                    keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
-                                       'injections_path', 'dapi_path']
+                    keys_to_extract = ['sample_name', 'save_path', 'roi_list_path', 'injections_path', 'dapi_path']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Photobleaching RAMM':
