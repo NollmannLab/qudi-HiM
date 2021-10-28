@@ -381,7 +381,8 @@ class FlowcontrolLogic(GenericLogic):
         new_pressure = float(self.pid(flowrate[0]))
         self.set_pressure(new_pressure, log_entry=False)
 
-# first tests with a simple version where the channels are not specified (we would need signal overloading in the worker thread... to be explored later)
+    # first tests with a simple version where the channels are not specified
+    # (we would need signal overloading in the worker thread... to be explored later)
     def start_pressure_regulation_loop(self, target_flowrate):
         """ Start a continuous mode to regulate the pressure to achieve the target_flowrate.
         :param: int target_flowrate
