@@ -442,7 +442,6 @@ class PositioningLogic(GenericLogic):
 
             else:
                 self._stage.wait_for_idle()
-                self.moving = False
                 new_pos = self.get_position()
                 # self.log.info(new_pos)
 
@@ -455,6 +454,8 @@ class PositioningLogic(GenericLogic):
                     self.go_to_target = False
                 else:
                     pass
+
+                self.moving = False
 
     def abort_movement(self):
         """ This method is called to abort a stage movement (either initiated by move_stage or move_to_target)
