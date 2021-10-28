@@ -687,6 +687,7 @@ class FluidicsGUI(GUIBase):
         self._mw.set_pressure_Action.setDisabled(True)
         self._mw.volume_measurement_Action.setDisabled(True)
         self._mw.rinsing_Action.setDisabled(True)
+        self._mw.start_flow_measurement_Action.setDisabled(True)
 
     @QtCore.Slot()
     def enable_flowcontrol_buttons(self):
@@ -694,6 +695,7 @@ class FluidicsGUI(GUIBase):
         self._mw.set_pressure_Action.setDisabled(False)
         self._mw.volume_measurement_Action.setDisabled(False)
         self._mw.rinsing_Action.setDisabled(False)
+        self._mw.start_flow_measurement_Action.setDisabled(False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Slots related to the valve control dockwidget
