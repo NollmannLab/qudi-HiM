@@ -189,6 +189,7 @@ class LumencorCelesta(Base, LasercontrolInterface):
         """
         if ttl_state:
             self.lumencor_httpcommand(self._ip, 'SET TTLENABLE 1')
+            self.lumencor_httpcommand(self._ip, 'SET TTLPOL POS')
         else:
             self.lumencor_httpcommand(self._ip, 'SET TTLENABLE 0')
 
