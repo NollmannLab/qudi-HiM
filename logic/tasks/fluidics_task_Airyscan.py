@@ -85,6 +85,8 @@ class Task(InterruptableTask):
                 return
             # position the needle in the probe
             self.ref['pos'].start_move_to_target(self.probe_list[0][0])
+            while self.ref['pos'].moving is True:
+                sleep(0.1)
 
         # set the valve default positions for injection
         self.ref['valves'].set_valve_position('b', 1)  # inject probe
@@ -126,8 +128,7 @@ class Task(InterruptableTask):
             self.ref['flow'].set_pressure(0.0)  # as initial value
             self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[self.step_counter]['flowrate'])
             # start counting the volume of buffer or probe
-            sampling_interval = 1  # in seconds
-            self.ref['flow'].start_volume_measurement(self.hybridization_list[self.step_counter]['volume'], sampling_interval)
+            self.ref['flow'].start_volume_measurement(self.hybridization_list[self.step_counter]['volume'])
 
             ready = self.ref['flow'].target_volume_reached
             while not ready:
