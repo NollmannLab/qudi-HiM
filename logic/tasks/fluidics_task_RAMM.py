@@ -58,7 +58,7 @@ class Task(InterruptableTask):
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter = None
         self.user_param_dict = {}
-        self.needle_pos = 0
+        self.needle_pos = None
         self.rt_injection = 0
 
     def startTask(self):
@@ -84,10 +84,8 @@ class Task(InterruptableTask):
                     'No position 1 defined for injections. Experiment can not be started. Please define position 1')
                 return
             # position the needle in the probe
-            self.ref['pos'].start_move_to_target(self.probe_list[0][0])
-
-            # keep in memory the position of the needle
             self.needle_pos = self.probe_list[0][0]
+            self.ref['pos'].start_move_to_target(self.needle_pos)
 
         # set the valve default positions for injection
         self.ref['valves'].set_valve_position('b', 2)  # inject probe
