@@ -171,7 +171,7 @@ class LaserControlLogic(GenericLogic):
         :return: None
         """
         self.enabled = True
-        print('laser dict : {}'.format(self._laser_dict))
+        # ('laser dict : {}'.format(self._laser_dict))
 
         if self.controllertype == 'daq':
             for key in self._laser_dict:
