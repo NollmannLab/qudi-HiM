@@ -28,11 +28,9 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import numpy as np
-from time import sleep
 from mcculw import ul
-from mcculw.enums import ULRange, DigitalIODirection, InterfaceType
-from mcculw.ul import ULError
+from mcculw.enums import DigitalIODirection, InterfaceType  # ULRange,
+# from mcculw.ul import ULError
 from mcculw.device_info import DaqDeviceInfo
 
 from core.module import Base
@@ -146,17 +144,17 @@ class MccDAQ(Base, LasercontrolInterface):
 
 # Analog input channels ------------------------------------------------------------------------------------------------
     # no ai channels for this daq
-    def read_ai_channel(self, channel):
-        """ Read a value from an analog input channel.
-
-        :param: int channel: identifier number of the requested channel
-
-        :return: float data: value read from the ai channel
-        """
-        daq_dev_info = DaqDeviceInfo(self.board_num)
-        if not daq_dev_info.supports_analog_input:
-            raise Exception('Error: The DAQ device does not support '
-                            'analog input')
+    # def read_ai_channel(self, channel):
+    #     """ Read a value from an analog input channel.
+    #
+    #     :param: int channel: identifier number of the requested channel
+    #
+    #     :return: float data: value read from the ai channel
+    #     """
+    #     daq_dev_info = DaqDeviceInfo(self.board_num)
+    #     if not daq_dev_info.supports_analog_input:
+    #         raise Exception('Error: The DAQ device does not support '
+    #                         'analog input')
 
 # Digital output channels ----------------------------------------------------------------------------------------------
     def set_up_do_channel(self, channel_number):
@@ -180,7 +178,7 @@ class MccDAQ(Base, LasercontrolInterface):
 
         :return: None
         """
-        print('Setting', self.port.type.name, channel, 'to', digital_write)
+        # print('Setting', self.port.type.name, channel, 'to', digital_write)
         # Output the value to the channel (bit)
         # ul.d_out(self.board_num, port.type, digital_write)
         ul.d_bit_out(self.board_num, self.port.type, channel, digital_write)
@@ -279,7 +277,7 @@ class MccDAQ(Base, LasercontrolInterface):
     def init_trigger_laser_line(self):
         for channel in self._laser_write_ao_channels:
             if channel is not None:
-                self.write_to_ao_channel(5, channel)
+                self.write_to_ao_channel(0, channel)
 
 
 # if __name__ == '__main__':
