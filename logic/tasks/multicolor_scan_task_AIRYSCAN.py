@@ -112,7 +112,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.warning('########################################')
 
         # initialize the counter (corresponding to the number of planes already acquired)
-        self.step_counter = 1
+        self.step_counter = 0
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
@@ -128,7 +128,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for i in range(len(self.imaging_sequence)):
 
-            # daq waiting for global_exposure trigger from the camera ----------------------------------------------
+            # daq waiting for global_exposure trigger from the camera --------------------------------------------------
             error = self.wait_for_camera_trigger(1)
             if error is True:
                 return False
@@ -137,7 +137,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
             self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
 
-            # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
+            # daq waiting for global_exposure trigger from the camera to end -------------------------------------------
             error = self.wait_for_camera_trigger(0)
             if error is True:
                 return False
