@@ -150,7 +150,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is compatible with experiment ZEN/HiM_celesta_01-08-2021')
+        self.log.warning('This task is compatible with experiment ZEN/HiM_celesta')
         self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(
             len(self.probe_list) * len(self.roi_names) / 2))
         self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
@@ -409,7 +409,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                         # switch the selected laser line ON ------------------------------------------------------------
                         # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
-                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
 
                         # daq waiting for global_exposure trigger from the camera to end -------------------------------
                         error = self.wait_for_camera_trigger(0)
@@ -417,7 +417,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             return False
 
                         # switch the selected laser line OFF -----------------------------------------------------------
-                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # save the file name
                 self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
@@ -457,7 +457,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                         # switch the selected laser line ON ------------------------------------------------------------
                         # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
-                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
 
                         # daq waiting for global_exposure trigger from the camera to end -------------------------------
                         error = self.wait_for_camera_trigger(0)
@@ -465,7 +465,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             return False
 
                         # switch the selected laser line OFF -----------------------------------------------------------
-                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # save the file name
                 self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
@@ -706,7 +706,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         counter = 0
         error = False
 
-        while bit_value != value:
+        while bit_value != value and error is False:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
             if counter > 10000:
