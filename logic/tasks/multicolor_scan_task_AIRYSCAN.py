@@ -71,6 +71,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.imaging_sequence = []
         self.step_counter = None
         self.num_laserlines = None
+        self.IN7_ZEN = self.config['IN7_ZEN']
+        self.OUT7_ZEN = self.config['OUT7_ZEN']
+        self.OUT8_ZEN = self.config['OUT8_ZEN']
+        self.camera_global_exposure = self.config['camera_global_exposure']
 
     def startTask(self):
         """ """
@@ -79,6 +83,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # read all user parameters from config
         self.load_user_parameters()
+
+        # create the daq channels
+        self.ref['daq'].initialize_digital_channel(self.OUT7_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.OUT8_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.camera_global_exposure, 'input')
+        self.ref['daq'].initialize_digital_channel(self.IN7_ZEN, 'output')
 
         # define the laser intensities as well as the sequence for the daq external trigger.
         # Set : - all laser lines to OFF
@@ -93,23 +103,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
 
-        # control the config : laser allowed for given filter ?
-        # self.laser_allowed = self.control_user_parameters()
-        #
-        # if not self.laser_allowed:
-        #     self.log.warning('Task aborted. Please specify a valid filter / laser combination')
-        #     return
-
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is compatible with experiment ZEN/HiM_single_scan_Celesta')
+        self.log.warning('This task is compatible with experiment ZEN/HiM_single_scan_celesta')
         self.log.warning('The number of planes for Z-Stack is {}'.format(self.num_z_planes))
         self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
         self.log.warning('Hit "Start Experiment"')
         self.log.warning('########################################')
 
         # initialize the counter (corresponding to the number of planes already acquired)
-        self.step_counter = 0
+        self.step_counter = 1
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
@@ -125,31 +128,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # use a while loop to catch the exception when a trigger is missed and just repeat the last (missed) image
         for i in range(len(self.imaging_sequence)):
 
-            # daq waiting for global_exposure trigger from the camera --------------------------------------------------
-            bit_value = self.ref['daq'].check_acquisition()
-            counter = 0
-            while bit_value == 0:
-                counter += 1
-                bit_value = self.ref['daq'].check_acquisition()
-                if counter > 10000:
-                    self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                    return False
+            # daq waiting for global_exposure trigger from the camera ----------------------------------------------
+            error = self.wait_for_camera_trigger(1)
+            if error is True:
+                return False
 
             # switch the selected laser line ON ------------------------------------------------------------------------
             # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
-            self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
-
-            # daq waiting for global_exposure trigger from the camera to end -------------------------------------------
-            bit_value = self.ref['daq'].check_acquisition()
-            counter = 0
-            while bit_value == 1:
-                counter += 1
-                bit_value = self.ref['daq'].check_acquisition()
-                if counter > 10000:
-                    self.log.warning('No trigger was detected during the past 60s... experiment is aborted')
-                    return False
-            # switch the selected laser line OFF -----------------------------------------------------------------------
             self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
+            # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
+            error = self.wait_for_camera_trigger(0)
+            if error is True:
+                return False
+
+            # switch the selected laser line OFF -----------------------------------------------------------------------
+            self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
         self.step_counter += 1
         return self.step_counter < self.num_z_planes
@@ -208,25 +202,29 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.num_laserlines = len(self.imaging_sequence)
 
-    # def control_user_parameters(self):
-    #     """ This method checks if the laser lines that will be used are compatible with the chosen filter.
-    #     :return bool: lasers_allowed
-    #     """
-    #     # use the filter position to create the key # simpler than using get_entry_netsted_dict method
-    #     key = 'filter{}'.format(self.filter_pos)
-    #     bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']
-    # list of booleans, laser allowed such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
-    #     forbidden_lasers = []
-    #     for i, item in enumerate(bool_laserlist):
-    #         if not item:  # if the element in the list is False:
-    #             label = 'laser'+str(i+1)
-    #             forbidden_lasers.append(label)
-    #     lasers_allowed = True  # as initialization
-    #     for item in forbidden_lasers:
-    #         if item in [self.imaging_sequence[i][0] for i in range(len(self.imaging_sequence))]:
-    #             lasers_allowed = False
-    #             break  # stop if at least one forbidden laser is found
-    #     return lasers_allowed
+    # ------------------------------------------------------------------------------------------------------------------
+    # communication with ZEN
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def wait_for_camera_trigger(self, value):
+        """ This method contains a loop to wait for the camera exposure starts or stops.
+
+        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        """
+        bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+        counter = 0
+        error = False
+
+        while bit_value != value and error is False:
+            counter += 1
+            bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1
+                                                        )
+            if counter > 10000:
+                self.log.warning(
+                    'No trigger was detected during the past 60s... experiment is aborted')
+                error = True
+
+        return error
 
     # ------------------------------------------------------------------------------------------------------------------
     # data for imaging cycle with Lumencor
@@ -271,46 +269,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
         self.lumencor_channel_sequence = lumencor_channel_sequence
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # file path handling
-    # ------------------------------------------------------------------------------------------------------------------
-
-    # def get_complete_path(self, path_stem):
-    #     """ Create the complete path based on path_stem given as user parameter,
-    #     such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
-    #     or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
-    #
-    #     :param: str path_stem such as E:/
-    #     :return: str complete path (see examples above)
-    #     """
-    #     cur_date = datetime.today().strftime('%Y_%m_%d')
-    #
-    #     path_stem_with_date = os.path.join(path_stem, cur_date)
-    #
-    #     # check if folder path_stem/cur_date exists, if not: create it
-    #     if not os.path.exists(path_stem_with_date):
-    #         try:
-    #             os.makedirs(path_stem_with_date)  # recursive creation of all directories on the path
-    #         except Exception as e:
-    #             self.log.error('Error {0}'.format(e))
-    #
-    #     # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
-    #     dir_list = [folder for folder in os.listdir(path_stem_with_date) if
-    #                 os.path.isdir(os.path.join(path_stem_with_date, folder))]
-    #     number_dirs = len(dir_list)
-    #
-    #     prefix = str(number_dirs + 1).zfill(3)
-    #     foldername = f'{prefix}_Scan_{self.sample_name}'
-    #
-    #     path = os.path.join(path_stem_with_date, foldername)
-    #
-    #     # create the path  # no need to check if it already exists due to incremental prefix
-    #     try:
-    #         os.makedirs(path)  # recursive creation of all directories on the path
-    #     except Exception as e:
-    #         self.log.error('Error {0}'.format(e))
-    #
-    #     file_name = f'scan_{prefix}.{self.file_format}'
-    #     complete_path = os.path.join(path, file_name)
-    #     return complete_path
