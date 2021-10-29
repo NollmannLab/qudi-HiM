@@ -215,7 +215,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         counter = 0
         error = False
 
-        while bit_value != value and error is False:
+        while bit_value != value and error is False and not self.aborted:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1
                                                         )
