@@ -96,12 +96,15 @@ class LumencorCelesta(Base, LasercontrolInterface):
         """ Wake up the celesta source when it is in standby mode and wait for the warmup procedure to be done
         """
         self.lumencor_httpcommand(self._ip, 'WAKEUP')
-        self.log.warning('Celesta is in stand-by mode. Launching warming-up procedure ... wait a few seconds')
+        sleep(.1)
         status = self.status()
-        while status == 'A STAT 7':
-            sleep(0.5)
-            status = self.status()
-        self.log.info('Celesta laser source is ready!')
+
+        if status == "A STAT 7":
+            self.log.warning('Celesta was in stand-by mode. Launching warming-up procedure ... wait a few seconds')
+            while status == 'A STAT 7':
+                sleep(0.5)
+                status = self.status()
+            self.log.info('Celesta laser source is ready!')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Lasercontrol Interface functions
