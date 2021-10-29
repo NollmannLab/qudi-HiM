@@ -512,7 +512,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure, volume and flowrate data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [self.ref['flow'].get_flowrate()]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])

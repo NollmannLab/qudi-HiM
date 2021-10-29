@@ -264,7 +264,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure and volume data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [self.ref['flow'].get_flowrate()]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
@@ -407,7 +407,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure, volume and flowrate data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [self.ref['flow'].get_flowrate()]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
@@ -597,9 +597,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
         new_total_volume = self.ref['flow'].total_volume
         new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(new_pressure)
-        volume_list.append(new_total_volume)
-        flowrate_list.append(new_flowrate)
+        pressure_list.append(round(new_pressure, 1))
+        volume_list.append(round(new_total_volume, 1))
+        flowrate_list.append(round(new_flowrate, 1))
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
