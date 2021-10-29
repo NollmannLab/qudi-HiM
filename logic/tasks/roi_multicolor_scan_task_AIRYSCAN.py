@@ -136,7 +136,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # wait for the trigger from ZEN indicating that the experiment is starting
         trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
-        while trigger == 0:
+        while trigger == 0 and not self.aborted:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
 
@@ -189,13 +189,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # wait for ZEN trigger indicating the task is completed
         trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
-        while trigger == 0:
+        while trigger == 0 and not self.aborted:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
         # --------------------------------------------------------------------------------------------------------------
         # first imaging sequence
         # --------------------------------------------------------------------------------------------------------------
+
+        # make sure the celesta laser source is ready
+        self.ref['laser'].lumencor_wakeup()
 
         # launch the acquisition task
         sleep(5)
@@ -367,7 +370,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         counter = 0
         error = False
 
-        while bit_value != value and error is False:
+        while bit_value != value and error is False and not self.aborted:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
             if counter > 10000:
