@@ -102,6 +102,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.buffer_dict = {}
         self.probe_list = []
         self.prefix = None
+        self.probe_dict = {}
 
     def startTask(self):
         """ """
@@ -194,11 +195,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # update the default_info file that is necessary to run the bokeh app
         if self.logging:
-            hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
-                                self.probe_list, last_roi_number, hybr_list, photobl_list)
+                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # initialize a counter to iterate over the number of probes to inject
@@ -285,7 +286,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure and volume data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [self.ref['flow'].get_flowrate()]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
@@ -353,14 +354,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # make sure the celesta laser source is ready
-            self.ref['laser'].lumencor_wakeup()
-
             # initialize roi counter and start the while loop over all the roi
             roi_counter = 0
             while roi_counter < len(self.roi_names):
                 if self.aborted:
                     break
+
+                # make sure the celesta laser source is ready
+                self.ref['laser'].lumencor_wakeup()
 
                 # define the name of the file according to the roi number and cycle
                 roi = self.roi_names[roi_counter]
@@ -682,7 +683,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             with open(self.injections_path, 'r') as stream:
                 documents = yaml.safe_load(stream)  # yaml.full_load when yaml package updated
                 buffer_dict = documents['buffer']
-                probe_dict = documents['probes']
+                self.probe_dict = documents['probes']
                 self.hybridization_list = documents['hybridization list']
                 self.photobleaching_list = documents['photobleaching list']
 
@@ -690,7 +691,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.buffer_dict = dict([(value, key) for key, value in buffer_dict.items()])
             # create a list out of probe_dict and order by ascending position
             # (for example: probes in pos 2, 5, 6, 9, 10 is ok but not 10, 2, 5, 6, 9)
-            self.probe_list = sorted(probe_dict.items())  # list of tuples, such as [(1, 'RT1'), (2, 'RT2')]
+            self.probe_list = sorted(self.probe_dict.items())  # list of tuples, such as [(1, 'RT1'), (2, 'RT2')]
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
@@ -778,9 +779,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
         new_total_volume = self.ref['flow'].total_volume
         new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(new_pressure)
-        volume_list.append(new_total_volume)
-        flowrate_list.append(new_flowrate)
+        pressure_list.append(round(new_pressure, 1))
+        volume_list.append(round(new_total_volume, 1))
+        flowrate_list.append(round(new_flowrate, 1))
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
