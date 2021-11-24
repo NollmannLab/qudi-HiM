@@ -36,8 +36,9 @@ from datetime import datetime
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_roi_start_times_to_file
 
+
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task iterates over all roi given in a file (typically a mosaique) and does an acquisition of a series of
+    """ This task iterates over all roi given in a file (typically a mosaic) and does an acquisition of a series of
     planes in z direction color by color. This is repeated num_iterations times, after a defined waiting time per
     iteration. The stack at an ROI for each color can have a different number of planes and distances in z direction.
 
@@ -68,6 +69,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
         self.autofocus_ok = False
+        self.default_exposure = None
+        self.num_frames = None
+        self.sample_name = None
+        self.exposure = None
+        self.centered_focal_plane = False
+        self.save_path = None
+        self.file_format = None
+        self.roi_list_path = None
+        self.num_iterations = None
+        self.time_step = None
+        self.imaging_sequence = None
+        self.roi_names = []
+        self.num_laserlines = None
+        self.prefix = None
 
     def startTask(self):
         """ """
@@ -108,11 +123,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
-        # self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
-        self.ref['laser'].run_multicolor_imaging_task_session(1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 1, self.exposure)  # in order to have a session running for access to autofocus
+        # self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
+        # self.num_laserlines, self.exposure)
+
+        # in order to have a session running for access to autofocus
+        self.ref['laser'].run_multicolor_imaging_task_session(1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 1, self.exposure)
 
         # prepare the camera
-        num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))  # get the total number of planes per cycle
+        # get the total number of planes per cycle
+        num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))
         self.num_frames = len(self.roi_names) * num_z_planes_total
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
@@ -157,7 +176,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # autofocus
             self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
             # ensure that focus is stable here
-            busy = self.ref['focus'].autofocus_enabled  # autofocus_enabled is True when autofocus is started and once it is stable is set to false
+            # autofocus_enabled is True when autofocus is started and once it is stable is set to false
+            busy = self.ref['focus'].autofocus_enabled
             counter = 0
             while busy:
                 counter += 1
@@ -173,7 +193,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             for i in range(self.num_laserlines):
                 num_z_planes = self.imaging_sequence[i]['num_z_planes']
                 z_step = self.imaging_sequence[i]['z_step']
-                start_position = self.calculate_start_position(self.centered_focal_plane, num_z_planes, z_step)
+                start_position, end_position = self.calculate_start_position(self.centered_focal_plane, num_z_planes,
+                                                                             z_step)
 
                 # autofocus could be moved here if setpoint for each laserline defined
 
@@ -181,17 +202,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 wavelengths = [0, 0, 0, 0]
                 wavelength = self.imaging_sequence[i]['lightsource']
                 wavelength = self.lightsource_dict[wavelength]
-                wavelengths.insert(0, wavelength)  # generate a list of length 5 having only a first entry different from zero
+                # generate a list of length 5 having only a first entry different from zero
+                wavelengths.insert(0, wavelength)
 
                 intensities = [0, 0, 0, 0]
                 intensity = self.imaging_sequence[i]['intensity']
                 intensities.insert(0, intensity)
 
                 self.ref['laser'].run_multicolor_imaging_task_session(num_z_planes, wavelengths, intensities, 1, self.exposure)
-                # parameters: num_z_planes, wavelengths: array of length 5 with only 1 entry != 0, intensities: array of length 5 with only 1 entry != 0, num_laserlines, exposure_time
+                # parameters: num_z_planes, wavelengths: array of length 5 with only 1 entry != 0, intensities: array of
+                # length 5 with only 1 entry != 0, num_laserlines, exposure_time
 
                 # prepare the daq: set the digital output to 0 before starting the task
-                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
+                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                    np.array([0], dtype=np.uint8))
 
                 print(f'{item}: Laserline {i}: performing z stack..')
 
@@ -205,9 +229,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # print(f'current position: {cur_pos} um')
 
                     # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([1], dtype=np.uint8))
+                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                        np.array([1], dtype=np.uint8))
                     time.sleep(0.005)
-                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
+                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                        np.array([0], dtype=np.uint8))
 
                     # wait for signal from FPGA to DAQ ('acquisition ready')
                     fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
@@ -222,7 +248,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             self.log.warning('Timeout occurred')
                             break
 
-                self.ref['focus'].go_to_position(start_position)
+                self.ref['focus'].go_to_position(end_position)
 
         # go back to first ROI
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -359,16 +385,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         current_pos = self.ref['focus'].get_position()
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
+        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the
+            # central plane or one of the central planes in case of an even number of planes
             # even number of planes:
             if num_z_planes % 2 == 0:
-                start_pos = current_pos - num_z_planes / 2 * z_step  # focal plane is the first one of the upper half of the number of planes
+                # focal plane is the first one of the upper half of the number of planes
+                start_pos = current_pos - num_z_planes / 2 * z_step
             # odd number of planes:
             else:
                 start_pos = current_pos - (num_z_planes - 1)/2 * z_step
-            return start_pos
+            return start_pos, current_pos
         else:
-            return current_pos  # the scan starts at the current position and moves up
+            return current_pos, current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -435,10 +463,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = self.exposure
-        metadata['Number laserlines'] = self.num_laserlines
+        metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
+                    'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['lightsource']
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i]['intensity']
@@ -451,10 +477,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
+        metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
+                    'CHANNELS': (self.num_laserlines, 'number laserlines')}
         for i in range(self.num_laserlines):
             metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['lightsource'], f'laser line {i+1}')
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i]['intensity'], f'laser intensity {i+1}')
