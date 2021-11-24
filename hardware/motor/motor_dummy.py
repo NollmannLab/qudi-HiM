@@ -116,8 +116,8 @@ class MotorDummy(Base, MotorInterface):
         axis0 = {'label': self._x_axis.label,
                  'unit': 'm',
                  'ramp': ['Sinus', 'Linear'],
-                 'pos_min': 0,
-                 'pos_max': 100,
+                 'pos_min': -1000,
+                 'pos_max': 1000,
                  'pos_step': 0.001,
                  'max_step': 1,   # added for compatibility with focus_logic
                  'vel_min': 0,
@@ -130,8 +130,8 @@ class MotorDummy(Base, MotorInterface):
         axis1 = {'label': self._y_axis.label,
                  'unit': 'm',
                  'ramp': ['Sinus', 'Linear'],
-                 'pos_min': 0,
-                 'pos_max': 100,
+                 'pos_min': -1000,
+                 'pos_max': 1000,
                  'pos_step': 0.001,
                  'max_step': 1,  # added for compatibility with focus_logic
                  'vel_min': 0,
@@ -144,8 +144,8 @@ class MotorDummy(Base, MotorInterface):
         axis2 = {'label': self._z_axis.label,
                  'unit': 'm',
                  'ramp': ['Sinus', 'Linear'],
-                 'pos_min': 0,
-                 'pos_max': 100,
+                 'pos_min': -1000,
+                 'pos_max': 1000,
                  'pos_step': 0.001,
                  'max_step': 1,  # added for compatibility with focus_logic
                  'vel_min': 0,
