@@ -1027,6 +1027,15 @@ class RoiLogic(GenericLogic):
 # Methods interacting with hardware
 # ----------------------------------------------------------------------------------------------------------------------
 
+    def set_stage_led_mode(self, mode):
+        """
+        Change the mode to control the bright field illumination (optional - depends on the ASI stage)
+
+        :param: str mode : defined the mode "Internal" or "Triggered"
+        :return: None
+        """
+        self._stage.led_mode(mode)
+
     def _move_stage(self, position):
         """
         Move the translation stage to position.

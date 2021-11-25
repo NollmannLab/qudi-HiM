@@ -62,7 +62,8 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
 
     _first_axis_label = ConfigOption("first_axis_label", "x", missing="warn")
     _second_axis_label = ConfigOption("second_axis_label", "y", missing="warn")
-    _third_axis_label = ConfigOption("third_axis_label", None)  # default case is intended for 2 axes stage, for 3 axes specify in config
+    # default case is intended for 2 axes stage, for 3 axes specify in config
+    _third_axis_label = ConfigOption("third_axis_label", None)
 
     _has_led = ConfigOption("LED connected", False, missing="warn")
 
@@ -74,6 +75,7 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self._led_mode = 'Internal'
 
     def on_activate(self):
         """ Initialization: opening serial port and setting internal attributes.
@@ -93,6 +95,10 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
             # if the z axis is available, define the default speed for this axis
             if len(axis_list) == 3:
                 self.set_velocity({'z': 1.9})
+
+            # if the stage is also controlling the bright-field, initiate the mode to "Internal"
+            if self._has_led:
+                self.led_mode('Internal')
 
         except Exception:
             self.log.error(f'ASI MS2000 automated stage not connected. Check if device is switched on.')
@@ -117,6 +123,7 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
 # Motor interface functions
 # ----------------------------------------------------------------------------------------------------------------------
 
+    @property
     def get_constraints(self):
         """ Retrieve the hardware constrains from the motor device.
         ASI Stage has no fixed pos_min and pos_max due to variable home position.
@@ -125,29 +132,16 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         """
         constraints = {}
 
-        axis0 = {}
-        axis0['label'] = self._first_axis_label
-        axis0['unit'] = '0.1 um'
-        axis0['vel_min'] = 0
-        axis0['vel_max'] = 7.5  # check in hardware manual
+        axis0 = {'label': self._first_axis_label, 'unit': '0.1 um', 'vel_min': 0, 'vel_max': 7.5}
 
-        axis1 = {}
-        axis1['label'] = self._second_axis_label
-        axis1['unit'] = '0.1 um'
-        axis1['vel_min'] = 0
-        axis1['vel_max'] = 7.5  # check in hardware manual
+        axis1 = {'label': self._second_axis_label, 'unit': '0.1 um', 'vel_min': 0, 'vel_max': 7.5}
 
         constraints[axis0['label']] = axis0
         constraints[axis1['label']] = axis1
 
         # handle 3 axes case:
         if self._third_axis_label:
-            axis2 = {}
-            axis2['label'] = self._third_axis_label
-            axis2['unit'] = '0.1 um'
-            axis2['vel_min'] = 0
-            axis2['vel_max'] = 1.9  # check in hardware manual
-
+            axis2 = {'label': self._third_axis_label, 'unit': '0.1 um', 'vel_min': 0, 'vel_max': 1.9}
             constraints[axis2['label']] = axis2
 
         return constraints
@@ -211,7 +205,8 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         """
         cmd = "\\r"
         self.write(cmd)
-        # self._serial_connection.flush() # tried this, also flushInput(), to enable command N+1. does not work.... to be improved
+        # self._serial_connection.flush() # tried this, also flushInput(), to enable command N+1. does not work....
+        # to be improved
         return True
 
     def get_pos(self, param_list=None):
@@ -228,9 +223,11 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         pos = {}
 
         if not param_list:  # get all axes
-            for axis_label in self.axis_list:  # this list is generated above to generalize more easily in case that more axes are added
+            # this list is generated above to generalize more easily in case that more axes are added
+            for axis_label in self.axis_list:
                 cmd = f"W {axis_label}\r"
-                pos[axis_label] = float(self.query(cmd)[3:]) / self._conversion_factor  # [3:] -> remove the leading 'A: '
+                # [3:] -> remove the leading 'A: '
+                pos[axis_label] = float(self.query(cmd)[3:]) / self._conversion_factor
 
         else:
             for item in param_list:
@@ -381,8 +378,27 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         return 0
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Brightfield interface functions
+# Bright-field interface functions
 # ----------------------------------------------------------------------------------------------------------------------
+
+    def led_mode(self, mode):
+        """ Defines the mode of the LED, depending on the type of experiment performed. The mode can either be
+        "internal" or "triggered".
+        :param: str mode
+        :return: none
+        """
+        if self._led_mode == 'Internal' and self._has_led:
+            self.led_control(0)
+
+        if mode == 'Internal' and self._has_led:
+            cmd = f"TTL X=0 Y=9 \r"
+            self.write(cmd)
+            self.led_control(0)
+        elif mode == 'Triggered' and self._has_led:
+            cmd = f"TTL X=10 Y=0 \r"
+            self.write(cmd)
+
+        self._led_mode = mode
 
     def led_control(self, intens):
         """ Set the intensity of the LED to the value intensity (in percent of max. intensity, 0-99%).
@@ -404,8 +420,8 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
     def query(self, command):
         """ Clears the input buffer and queries an utf-8 encoded command.
         
-        :param: string command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
-        
+        :param: string command: message to send to the serial port, typically in the format
+        'COMMANDSHORTCUT [AXIS=value]\r'
         :return: string answer: formatted and decoded response from serial port
         """
 
@@ -420,7 +436,8 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
     def write(self, command):
         """ Clears the input buffer and writes an utf-8 encoded command to the serial port .
         
-        :param string command: message to send to the serial port, typically in the format 'COMMANDSHORTCUT [AXIS=value]\r'
+        :param string command: message to send to the serial port, typically in the format
+        'COMMANDSHORTCUT [AXIS=value]\r'
         :return: None
         """
         n_attempt = 0
