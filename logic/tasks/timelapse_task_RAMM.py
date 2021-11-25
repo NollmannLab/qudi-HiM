@@ -111,6 +111,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.log.warning('Task aborted. Please initialize the autofocus before starting this task.')
             return
 
+        # set the ASI stage in trigger mode
+        self.ref['roi'].set_stage_led_mode('Triggered')
+
         # read all user parameters from config
         self.load_user_parameters()
 
@@ -161,6 +164,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
         roi_start_times = []
+        roi_start_z = []
 
         for item in self.roi_names:
             # measure the start time for the ROI
@@ -185,6 +189,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 busy = self.ref['focus'].autofocus_enabled
                 if counter > 50:  # maybe increase the counter ?
                     break
+
+            # Save the z position after the focus (for later optimization, in order to check that the tilt of the sample
+            # is reproducible)
+            current_z = self.ref['focus'].get_position()
+            roi_start_z.append(current_z)
 
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
@@ -275,6 +284,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         file_path = os.path.join(os.path.split(cur_save_path)[0], f'roi_start_times_step_{num}.yml')
         save_roi_start_times_to_file(roi_start_times, file_path)
 
+        # save the roi z start position
+        file_path = os.path.join(os.path.split(cur_save_path)[0], f'z_start_position_step_{num}.yml')
+        save_roi_start_times_to_file(roi_start_z, file_path)
+
         self.counter += 1
 
         # waiting time before going to next step
@@ -317,6 +330,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].enable_laser_actions()
         # focus tools gui
         self.ref['focus'].enable_focus_actions()
+        # set the ASI stage in internal mode
+        self.ref['roi'].set_stage_led_mode('Internal')
 
         self.log.info('cleanupTask finished')
 
