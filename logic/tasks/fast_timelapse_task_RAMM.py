@@ -89,6 +89,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
+        # set the ASI stage in trigger mode
+        self.ref['roi'].set_stage_led_mode('Triggered')
+
         # read all user parameters from config
         self.load_user_parameters()
 
@@ -99,7 +102,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].close_default_session()
 
         # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
 
@@ -245,6 +248,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].restart_default_session()
         self.log.info('restarted default session')
 
+        # set the ASI stage in internal mode
+        self.ref['roi'].set_stage_led_mode('Internal')
+
         # enable gui actions
         # roi gui
         self.ref['roi'].enable_tracking_mode()
@@ -312,7 +318,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # convert the imaging_sequence given by user into format required by the bitfile
         wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
-        wavelengths = [self.lightsource_dict[key] for key in wavelengths]
+        print(f'wavelength first : {wavelengths}')
+        for n, key in enumerate(wavelengths):
+            if key == 'Brightfield':
+                wavelengths[n] = 0
+            else:
+                wavelengths[n] = self.lightsource_dict[key]
+        # wavelengths = [self.lightsource_dict[key] for key in wavelengths]
+        print(f'wavelength second : {wavelengths}')
         for i in range(self.num_laserlines, 5):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths

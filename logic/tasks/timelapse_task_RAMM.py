@@ -112,7 +112,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             return
 
         # set the ASI stage in trigger mode
-        self.ref['roi'].set_stage_led_mode('Triggered')
+        # self.ref['roi'].set_stage_led_mode('Triggered')
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -124,7 +124,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].close_default_session()
 
         # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         # self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
         # self.num_laserlines, self.exposure)
@@ -208,17 +208,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # autofocus could be moved here if setpoint for each laserline defined
 
                 # define the parameters of the fpga session for the laserline:
-                wavelengths = [0, 0, 0, 0]
+
                 wavelength = self.imaging_sequence[i]['lightsource']
-                wavelength = self.lightsource_dict[wavelength]
-                # generate a list of length 5 having only a first entry different from zero
-                wavelengths.insert(0, wavelength)
+                if wavelength == 'Brightfield':
+                    wavelengths = [0, 0, 0, 0, 0]
+                    intensities = [0, 0, 0, 0, 0]
+                    intensity = self.imaging_sequence[i]['intensity']
+                    self.ref['roi'].set_stage_led_intensity(intensity)
+                else:
+                    wavelengths = [0, 0, 0, 0]
+                    intensities = [0, 0, 0, 0]
+                    wavelength = self.lightsource_dict[wavelength]
+                    # generate a list of length 5 having only a first entry different from zero
+                    wavelengths.insert(0, wavelength)
+                    intensity = self.imaging_sequence[i]['intensity']
+                    intensities.insert(0, intensity)
 
-                intensities = [0, 0, 0, 0]
-                intensity = self.imaging_sequence[i]['intensity']
-                intensities.insert(0, intensity)
-
-                self.ref['laser'].run_multicolor_imaging_task_session(num_z_planes, wavelengths, intensities, 1, self.exposure)
+                self.ref['laser'].run_multicolor_imaging_task_session(num_z_planes, wavelengths, intensities, 1,
+                                                                      self.exposure)
                 # parameters: num_z_planes, wavelengths: array of length 5 with only 1 entry != 0, intensities: array of
                 # length 5 with only 1 entry != 0, num_laserlines, exposure_time
 
@@ -226,7 +233,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                                     np.array([0], dtype=np.uint8))
 
-                print(f'{item}: Laserline {i}: performing z stack..')
+                # print(f'{item}: Laserline {i}: performing z stack..')
 
                 for plane in range(num_z_planes):
                     # position the piezo
@@ -258,6 +265,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             break
 
                 self.ref['focus'].go_to_position(end_position)
+                if wavelength == 'Brightfield':
+                    self.ref['roi'].set_stage_led_intensity(0)
 
         # go back to first ROI
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
