@@ -179,7 +179,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.raise_()
 
     def init_configuration_form(self):
-        """ Enter items into the comboboxes according to available elements on the setup. """
+        """ Enter items into the combo-boxes according to available elements on the setup. """
         self._mw.filterpos_ComboBox.addItems(self._exp_logic.filters)
         self._mw.laser_ComboBox.addItems(self._exp_logic.lasers)
         self._mw.fileformat_ComboBox.addItems(self._exp_logic.supported_fileformats)
@@ -538,6 +538,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.time_step_Label.setVisible(False)
             self._mw.time_step_SpinBox.setVisible(False)
 
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
+
         elif experiment == 'Timelapse RAMM':
             # change the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_ramm)
@@ -567,6 +570,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_path_Label.setVisible(False)
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
+
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
 
         elif experiment == 'Timelapse PALM':
             # change the listview model
