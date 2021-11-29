@@ -1036,6 +1036,15 @@ class RoiLogic(GenericLogic):
         """
         self._stage.led_mode(mode)
 
+    def set_stage_led_intensity(self, intensity):
+        """
+        Change the intensity of the ASI LED for brightfield imaging
+
+        :param: int intensity : value of intensity (between 0-100)
+        :return: None
+        """
+        self._stage.led_control(intensity)
+
     def _move_stage(self, position):
         """
         Move the translation stage to position.
