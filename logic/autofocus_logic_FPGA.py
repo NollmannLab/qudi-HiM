@@ -73,13 +73,15 @@ class AutofocusLogic(GenericLogic):
     _autofocus_iterations = 0
     _focus_offset = 0 # Set to zero until the calibration is performed
 
+    # autofocus parameters for stabilization
+    _num_points_fit = ConfigOption('num_points_fit', 10, missing='warn')
+    _stable_threshold = ConfigOption('stabilization_threshold', 1, missing='warn')
+
     # pid attributes
     _pid_frequency = 0.2  # in s, frequency for the autofocus PID update
     _P_gain = ConfigOption('proportional_gain', 0, missing='warn')
     _I_gain = ConfigOption('integration_gain', 0, missing='warn')
     _setpoint = None
-
-    _last_pid_output_values = np.zeros((10,))
 
     # signals
     sigOffsetDefined = QtCore.Signal()
@@ -90,6 +92,8 @@ class AutofocusLogic(GenericLogic):
         self._fpga = None
         self._stage = None
         self._camera = None
+        self._last_pid_output_values = []
+        self.X_stabilization = []
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -101,6 +105,10 @@ class AutofocusLogic(GenericLogic):
 
         # initialize the camera
         self._camera.set_exposure(self._exposure)
+
+        # initialize the pid array for stabilization
+        self._last_pid_output_values = np.zeros((self._num_points_fit,))
+        self.X_stabilization = np.linspace(0, self._num_points_fit - 1, num=self._num_points_fit)
 
     def on_deactivate(self):
         """ Required deactivation.
@@ -167,8 +175,9 @@ class AutofocusLogic(GenericLogic):
 
         if do_stabilization_check:
             self._autofocus_iterations += 1
-            self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
-            # self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:2], [pid_output]))
+            self._last_pid_output_values = np.concatenate(
+                (self._last_pid_output_values[1:self._num_points_fit], [pid_output]))
+            # self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
             return pid_output, self.check_stabilization()
         else:
             return pid_output
@@ -179,12 +188,12 @@ class AutofocusLogic(GenericLogic):
         self._autofocus_stable is updated by this function.
         :return: bool: is the autofocus stable ?
         """
-        if self._autofocus_iterations > 10: #2
-            p = Poly.fit(np.linspace(0, 9, num=10), self._last_pid_output_values, deg=1)
-            # p = Poly.fit(np.linspace(0, 1, num=2), self._last_pid_output_values, deg=1)
-            slope = (p(9) - p(0))/10
-            # slope = p(1) - p(0)
-            if np.absolute(slope) < 1:
+        if self._autofocus_iterations > self._num_points_fit:  # 10
+            # p = Poly.fit(np.linspace(0, 4, num=5), self._last_pid_output_values, deg=1)
+            # slope = (p(4) - p(0))/10
+            p = Poly.fit(self.X_stabilization, self._last_pid_output_values, deg=1)
+            slope = p(self._num_points_fit - 1) - p(0)
+            if np.absolute(slope) < self._stable_threshold:
                 self._autofocus_stable = True
             else:
                 self._autofocus_stable = False
