@@ -268,7 +268,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     while not fpga_ready:
                         time.sleep(0.001)
                         fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
                         t1 = time.time() - t0
                         if t1 > 1:  # for safety: timeout if no signal received within 1 s
                             self.log.warning('Timeout occurred')
