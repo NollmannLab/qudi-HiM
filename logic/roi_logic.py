@@ -1086,15 +1086,19 @@ class RoiLogic(GenericLogic):
         if self.tracking:
             self.stop_tracking()
         self.sigDisableTracking.emit()
+        sleep(0.5)
 
     def enable_tracking_mode(self):
         """ This method makes tracking mode again available from GUI, for example when a Task is finishing. """
         self.sigEnableTracking.emit()
+        sleep(0.5)
 
     def disable_roi_actions(self):
         """ This method provides a security to avoid all stage related actions from GUI, for example during Tasks. """
         self.sigDisableRoiActions.emit()
+        sleep(0.5)
 
     def enable_roi_actions(self):
         """ This method resets all ROI / stage related actions from GUI to callable state, for example after Tasks. """
         self.sigEnableRoiActions.emit()
+        sleep(0.5)

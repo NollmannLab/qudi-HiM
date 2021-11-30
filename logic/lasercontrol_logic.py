@@ -33,6 +33,7 @@ from core.connector import Connector
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 from core.configoption import ConfigOption
+from time import sleep
 
 import numpy as np
 
@@ -389,7 +390,9 @@ class LaserControlLogic(GenericLogic):
         """ This method provides a security to avoid all laser related actions from GUI,
         for example during Tasks. """
         self.sigDisableLaserActions.emit()
+        sleep(0.5)
 
     def enable_laser_actions(self):
         """ This method resets all laser related actions from GUI to callable state, for example after Tasks. """
         self.sigEnableLaserActions.emit()
+        sleep(0.5)

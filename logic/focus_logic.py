@@ -696,7 +696,9 @@ class FocusLogic(GenericLogic):
         """ This method provides a security to avoid all focus / autofocus related toolbar actions from GUI,
         for example during Tasks. """
         self.sigDisableFocusActions.emit()
+        sleep(0.5)
 
     def enable_focus_actions(self):
         """ This method resets all focus related toolbar actions on GUI to callable state, for example after Tasks. """
         self.sigEnableFocusActions.emit()
+        sleep(0.5)

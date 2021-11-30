@@ -34,6 +34,7 @@ import sys
 from datetime import datetime
 import re
 import numpy as np
+from time import sleep
 
 from qtpy import QtCore
 from qtpy import QtGui
@@ -1182,11 +1183,13 @@ class BasicGUI(GUIBase):
     def disable_filter_selection(self):
         """ Disables filter combobox (for example as safety during tasks). """
         self._mw.filter_ComboBox.setDisabled(True)
+        sleep(0.5)
 
     @QtCore.Slot()
     def enable_filter_selection(self):
         """ Enables filter combobox. """
         self._mw.filter_ComboBox.setDisabled(False)
+        sleep(0.5)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Close function: Stop all continuous actions.
