@@ -6,7 +6,7 @@ An extension to Qudi.
 
 This module contains the timelapse experiment for the RAMM setup.
 
-@author: F. Barho
+@authors: F. Barho, JB. Fiche
 
 Created on Thu June 17 2021
 -----------------------------------------------------------------------------------
@@ -86,8 +86,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def startTask(self):
         """ """
-        self.log.info('started Task')
-
+        self.log.info('Starting task')
         self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
 
         # stop all interfering modes on GUIs and disable GUI actions
@@ -111,35 +110,38 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.log.warning('Task aborted. Please initialize the autofocus before starting this task.')
             return
 
-        # set the ASI stage in trigger mode
-        # self.ref['roi'].set_stage_led_mode('Triggered')
-
         # read all user parameters from config
         self.load_user_parameters()
+
+        # calculate the total number of images to acquire for each cycle. If the number is above 300, the program is
+        # issuing a warning indicating that the number of images is high (since all the images are acquired in one
+        # single acquisition cycle)
+        num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))
+        self.num_frames = len(self.roi_names) * num_z_planes_total
+        if self.num_frames > 300:
+            self.log.warning('More than 300 images are saved for each cycle.')
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
-        # close default FPGA session
+        # close the default FPGA session and start the time-lapse session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-
-        # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
-        # self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
-        # self.num_laserlines, self.exposure)
 
         # in order to have a session running for access to autofocus
         self.ref['laser'].run_multicolor_imaging_task_session(1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 1, self.exposure)
 
         # prepare the camera
-        # get the total number of planes per cycle
-        num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))
-        self.num_frames = len(self.roi_names) * num_z_planes_total
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
         # set the active_roi to none to avoid having two active rois displayed
         self.ref['roi'].active_roi = None
+
+        # save the acquisition parameters
+        metadata = self.get_metadata()
+        file_path = os.path.join(self.directory, 'TL_parameters.yml')
+        self.save_metadata_file(metadata, file_path)
 
         # initialize a counter to iterate over the number of cycles to do
         self.counter = 0
@@ -148,13 +150,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-        if not self.autofocus_ok:
+        if not self.autofocus_ok or self.aborted:
             return False
 
         start_time = time.time()
 
         # create a save path for the current iteration
-        cur_save_path = self.get_complete_path(self.directory, self.counter+1)
+        # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # start camera acquisition
         self.ref['cam'].stop_acquisition()  # for safety
@@ -163,10 +165,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
+
         roi_start_times = []
-        roi_start_z = []
+        # roi_start_z = []
 
         for item in self.roi_names:
+
+            if self.aborted:
+                break
+
             # measure the start time for the ROI
             roi_start_time = time.time()
             roi_start_times.append(roi_start_time)
@@ -187,19 +194,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 counter += 1
                 time.sleep(0.1)
                 busy = self.ref['focus'].autofocus_enabled
-                if counter > 50:  # maybe increase the counter ?
+                if counter > 100:
                     break
 
             # Save the z position after the focus (for later optimization, in order to check that the tilt of the sample
             # is reproducible)
             current_z = self.ref['focus'].get_position()
-            roi_start_z.append(current_z)
+            # roi_start_z.append(current_z)
 
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
             # ----------------------------------------------------------------------------------------------------------
             # acquire a stack for each laserline at the current ROI
             for i in range(self.num_laserlines):
+
+                if self.aborted:
+                    break
+
                 num_z_planes = self.imaging_sequence[i]['num_z_planes']
                 z_step = self.imaging_sequence[i]['z_step']
                 start_position, end_position = self.calculate_start_position(self.centered_focal_plane, num_z_planes,
@@ -208,7 +219,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # autofocus could be moved here if setpoint for each laserline defined
 
                 # define the parameters of the fpga session for the laserline:
-
                 wavelength = self.imaging_sequence[i]['lightsource']
                 if wavelength == 'Brightfield':
                     wavelengths = [0, 0, 0, 0, 0]
@@ -278,14 +288,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         image_data = self.ref['cam'].get_acquired_data()
 
-        if self.file_format == 'fits':
-            metadata = self.get_fits_metadata()
-            self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
-        else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
-            metadata = self.get_metadata()
-            file_path = cur_save_path.replace('tif', 'yml', 1)
-            self.save_metadata_file(metadata, file_path)
+        # for the sake of simplicity, a single file is saved for each ROI & channel.
+        start_frame = 0
+        for roi in self.roi_names:
+            for channel in range(self.num_laserlines):
+                num_z_planes = self.imaging_sequence[channel]['num_z_planes']
+                end_frame = start_frame + num_z_planes
+                data = image_data[start_frame:end_frame]
+                cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel)
+
+                if self.file_format == 'fits':
+                    metadata = self.get_fits_metadata()
+                    self.ref['cam'].save_to_fits(cur_save_path, data, metadata)
+                else:  # use tiff as default format
+                    self.ref['cam'].save_to_tiff(num_z_planes, cur_save_path, data)
+
+                start_frame = end_frame
 
         # save roi start times to file
         roi_start_times = [item - start_time for item in roi_start_times]
@@ -294,9 +312,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         save_roi_start_times_to_file(roi_start_times, file_path)
 
         # save the roi z start position
-        file_path = os.path.join(os.path.split(cur_save_path)[0], f'z_start_position_step_{num}.yml')
-        save_roi_start_times_to_file(roi_start_z, file_path)
+        # file_path = os.path.join(os.path.split(cur_save_path)[0], f'z_start_position_step_{num}.yml')
+        # save_roi_start_times_to_file(roi_start_z, file_path)
 
+        # increment the counter
         self.counter += 1
 
         # waiting time before going to next step
@@ -339,8 +358,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].enable_laser_actions()
         # focus tools gui
         self.ref['focus'].enable_focus_actions()
-        # set the ASI stage in internal mode
-        self.ref['roi'].set_stage_led_mode('Internal')
 
         self.log.info('cleanupTask finished')
 
@@ -418,6 +435,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # odd number of planes:
             else:
                 start_pos = current_pos - (num_z_planes - 1)/2 * z_step
+
             return start_pos, current_pos
         else:
             return current_pos, current_pos  # the scan starts at the current position and moves up
@@ -466,7 +484,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return path
 
-    def get_complete_path(self, directory, counter):
+    def get_complete_path(self, directory, counter, roi, channel):
         """ Get the complete path to the data file, for the current iteration.
 
         :param: str directory: path to the data directory
@@ -474,7 +492,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: str complete_path
         """
-        file_name = f'timelapse_{self.prefix}_step_{str(counter).zfill(2)}.{self.file_format}'
+        file_name = f'TL_{self.prefix}_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{self.file_format}'
         complete_path = os.path.join(directory, file_name)
         return complete_path
 
