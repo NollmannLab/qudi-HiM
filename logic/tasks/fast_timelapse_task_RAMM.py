@@ -28,6 +28,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+
 import numpy as np
 import os
 import yaml
@@ -36,6 +37,104 @@ import asyncio
 from datetime import datetime
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_roi_start_times_to_file
+from qtpy import QtCore
+from PIL import Image
+
+data_saved = True  # Global variable to follow data registration for each cycle
+
+
+class WorkerSignals(QtCore.QObject):
+    """ Defines the signals available from a running worker thread. """
+    sigFinished = QtCore.Signal()
+
+
+class SaveDataWorker(QtCore.QRunnable):
+    """ Worker thread to monitor the autofocus signal (QPD or camera) and adjust the piezo position when autofocus in ON.
+    The worker handles only the waiting time between signal readout. """
+    def __init__(self, data, roi_names, num_laserlines, num_z_planes, directory, counter, file_format):
+        super(SaveDataWorker, self).__init__()
+        self.signals = WorkerSignals()
+        self.data = data
+        self.roi_names = roi_names
+        self.num_laserlines = num_laserlines
+        self.num_z_planes = num_z_planes
+        self.directory = directory
+        self.counter = counter
+        self.file_format = file_format
+
+    @QtCore.Slot()
+    def run(self):
+        """ """
+        start_frame = 0
+        for roi in self.roi_names:
+            end_frame = start_frame + self.num_z_planes * self.num_laserlines
+            roi_data = self.data[start_frame:end_frame]
+            for channel in range(self.num_laserlines):
+                data = roi_data[channel:len(roi_data):self.num_laserlines]
+                cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel)
+
+                if self.file_format == 'tif':
+                    self.save_to_tiff(self.num_z_planes, cur_save_path, data)
+                    start_frame = end_frame
+
+        global data_saved
+        data_saved = True
+
+    def get_complete_path(self, directory, counter, roi, channel):
+
+        file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{self.file_format}'
+        directory_path = os.path.join(directory, 'channel_'+str(channel))
+
+        # check if folder exists, if not: create it
+        if not os.path.exists(directory_path):
+            try:
+                os.makedirs(directory_path)  # recursive creation of all directories on the path
+            except Exception as e:
+                self.log.error('Error {0}'.format(e))
+
+        complete_path = os.path.join(directory_path, file_name)
+        return complete_path
+
+    def save_to_tiff(self, n_frames, path, data):
+        # type conversion to int16
+        data = data.astype('int16')
+        # 2D data case (no stack)
+        if n_frames == 1:
+            try:
+                self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
+                print('Saved data to file {}'.format(path))
+            except Exception:
+                print('Data not saved')
+            return None
+
+        # 3D data case (note: z stack is the first dimension)
+        else:
+            try:
+                size = (data.shape[2], data.shape[1])
+                self.save_u16_to_tiff_stack(n_frames, data, size, path)
+            except Exception:
+                print('Data not saved')
+            return None
+
+    @staticmethod
+    def save_u16_to_tiff(u16int, size, tiff_filename):
+        # write 16-bit TIFF image
+        # PIL interprets mode 'I;16' as "uint16, little-endian"
+        img_out = Image.new('I;16', size)
+        outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
+        img_out.frombytes(outpil)
+        img_out.save(tiff_filename)
+
+    @staticmethod
+    def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
+        imlist = []  # this will be a list of pillow Image objects
+        for i in range(n_frames):
+            img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
+            outpil = u16int[i].astype(
+                u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
+            img_out.frombytes(outpil)  # create pillow object from bytes
+            imlist.append(img_out)  # create the list of pillow image objects
+        imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -86,6 +185,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.prefix = None
         self.wavelengths = []
         self.num_laserlines = None
+        self.saved = True
+        self.threadpool = QtCore.QThreadPool()
 
     def startTask(self):
         """ """
@@ -121,7 +222,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # close the default session and start the FTL session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         print(f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
@@ -142,7 +243,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.saving_time = []
         self.scan_time = []
 
-
     def runTaskStep(self):
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
@@ -154,7 +254,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         start_time = time.time()
 
         # create a save path for the current iteration
-        cur_save_path = self.get_complete_path(self.directory, self.counter+1)
+        # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # start camera acquisition
         self.ref['cam'].stop_acquisition()  # for safety
@@ -166,7 +266,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
         roi_start_times = []
-        # roi_start_z = []
+        roi_start_z = []
 
         for item in self.roi_names:
 
@@ -201,8 +301,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # Save the z position after the focus (for later optimization, in order to check that the tilt of the sample
             # is reproducible)
-            # current_z = self.ref['focus'].get_position()
-            # roi_start_z.append(current_z)
+            current_z = self.ref['focus'].get_position()
+            roi_start_z.append(current_z)
 
             start_position = self.calculate_start_position(self.centered_focal_plane)
 
@@ -260,11 +360,36 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         saving_start_time = time.time()
 
+        # check whether the previous data were saved. A global variable was used instead of signal/slot. The latter
+        # solution was not reproducible
+        global data_saved
+        count = 0
+        while not data_saved:
+            time.sleep(0.1)
+            count += 1
+            if count > 100:
+                self.log.warning('Error ... data were not saved')
+                break
+
+        if data_saved:
+            self.log.info('Data were properly saved')
+
+        # get the data from the camera buffer and launch the worker to start data management in parallel
         image_data = self.ref['cam'].get_acquired_data()
+        data_saved = False
+        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
+                                self.counter, self.file_format)
+        self.threadpool.start(worker)
+
+        ## Previous version - test np.save compared to saving data in tif or fits. Did not improve the saving time
+        ## -------------------------------------------------------------------------------------------------------
 
         # np.save(cur_save_path, image_data)
 
-        # # for the sake of simplicity, a single file is saved for each ROI & channel.
+        ## Previous version - a single file was attributed depending of ROI & laser channel
+        ## --------------------------------------------------------------------------------
+
+        # for the sake of simplicity, a single file is saved for each ROI & channel.
         # start_frame = 0
         # for roi in self.roi_names:
         #     for channel in range(self.num_laserlines):
@@ -280,21 +405,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         #
         #         start_frame = end_frame
 
-        if self.file_format == 'fits':
-            metadata = self.get_fits_metadata()
-            self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
-        else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+        ## Previous version - all data were saved in a single file
+        ## -------------------------------------------------------
+
+        # if self.file_format == 'fits':
+        #     metadata = self.get_fits_metadata()
+        #     self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
+        # else:  # use tiff as default format
+        #     self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
 
         # save roi start times to file
         roi_start_times = [item - start_time for item in roi_start_times]
         num = str(self.counter+1).zfill(2)
-        file_path = os.path.join(os.path.split(cur_save_path)[0], f'roi_start_times_step_{num}.yml')
+        file_path = os.path.join(self.directory, f'roi_start_times_step_{num}.yml')
         save_roi_start_times_to_file(roi_start_times, file_path)
 
         # save the roi z start position
-        # file_path = os.path.join(os.path.split(cur_save_path)[0], f'z_start_position_step_{num}.yml')
-        # save_roi_start_times_to_file(roi_start_z, file_path)
+        file_path = os.path.join(self.directory, f'z_start_position_step_{num}.yml')
+        save_roi_start_times_to_file(roi_start_z, file_path)
 
         self.saving_time.append(time.time() - saving_start_time)
 
