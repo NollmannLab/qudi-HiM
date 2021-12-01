@@ -175,7 +175,7 @@ class Nifpga(Base, LasercontrolInterface):
         n_attempt = 0
 
         while self.counter.read() == count_t0 and n_attempt < 100:
-            sleep(0.01)
+            sleep(0.005)
             n_attempt += 1
 
         if n_attempt == 100:
