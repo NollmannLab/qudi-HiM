@@ -251,6 +251,68 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if not self.autofocus_ok or self.aborted:
             return False
 
+        # --------------------------------------------------------------------------------------------------------------
+        # calibration of the sample tilt
+        # --------------------------------------------------------------------------------------------------------------
+
+        n_cycle = 4
+        roi_z_positions = np.zeros((n_cycle, len(self.roi_names)))
+
+        for n in range(n_cycle):
+
+            roi_start_z = []
+
+            for item in self.roi_names:
+
+                if self.aborted:
+                    break
+
+                # go to roi
+                self.ref['roi'].set_active_roi(name=item)
+                self.ref['roi'].go_to_roi_xy()
+                self.ref['roi'].stage_wait_for_idle()
+
+                # autofocus
+                autofocus_start_time = time.time()
+                self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+
+                # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
+                # stable is set to false)
+                busy = self.ref['focus'].autofocus_enabled
+                counter = 0
+                while busy:
+                    counter += 1
+                    time.sleep(0.05)
+                    busy = self.ref['focus'].autofocus_enabled
+                    if counter > 500:  # maybe increase the counter ?
+                        break
+
+                # Save the z position after the focus
+                current_z = self.ref['focus'].get_position()
+                roi_start_z.append(current_z)
+
+            roi_z_positions[n, :] = np.array(roi_start_z)
+
+            # go back to first ROI
+            self.ref['roi'].set_active_roi(name=self.roi_names[0])
+            self.ref['roi'].go_to_roi_xy()
+
+        # calculate the variation of axial displacement between two successive rois
+        dz = np.zeros((n_cycle, len(self.roi_names)-1))
+        for n in range(len(self.roi_names) - 1):
+            dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
+
+        # calculate the median displacement
+        dz = np.median(dz, axis=0)
+
+        print(roi_z_positions)
+        print(dz)
+        time.sleep(5)
+
+        # --------------------------------------------------------------------------------------------------------------
+        # start time-lapse acquisition
+        # --------------------------------------------------------------------------------------------------------------
+
         start_time = time.time()
 
         # create a save path for the current iteration
@@ -292,9 +354,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             counter = 0
             while busy:
                 counter += 1
-                time.sleep(0.5)
+                time.sleep(0.05)
                 busy = self.ref['focus'].autofocus_enabled
-                if counter > 50:  # maybe increase the counter ?
+                if counter > 500:  # maybe increase the counter ?
                     break
 
             self.autofocus_stabilization_time.append(time.time() - autofocus_start_time)
@@ -678,6 +740,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # tilt calibration
+    # ------------------------------------------------------------------------------------------------------------------
+
+
 
 # async def save_data(path, array):
 #     np.save(path, array)
