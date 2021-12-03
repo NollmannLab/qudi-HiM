@@ -40,20 +40,23 @@ from logic.task_helper_functions import save_roi_start_times_to_file
 from qtpy import QtCore
 from PIL import Image
 
-data_saved = True  # Global variable to follow data registration for each cycle
-
-
-class WorkerSignals(QtCore.QObject):
-    """ Defines the signals available from a running worker thread. """
-    sigFinished = QtCore.Signal()
+data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication did not work)
 
 
 class SaveDataWorker(QtCore.QRunnable):
-    """ Worker thread to monitor the autofocus signal (QPD or camera) and adjust the piezo position when autofocus in ON.
-    The worker handles only the waiting time between signal readout. """
+    """ Worker thread to parallelize data registration and acquisition.
+
+    :param: array data = array containing all the images acquired by the camera and saved on the buffer
+    :param: array roi_names = contains the name of all the rois
+    :param: int num_laserlines = number of channel
+    :param: int num_z_planes = number of images acquired for each stack
+    :param: str directory = path to the folder where the data will be saved
+    :param: int counter = indicate how many time-lapse cycles have been performed
+    :param: str file_format = indicate the format used to save the data. For the moment, default is tif.
+    """
+
     def __init__(self, data, roi_names, num_laserlines, num_z_planes, directory, counter, file_format):
         super(SaveDataWorker, self).__init__()
-        self.signals = WorkerSignals()
         self.data = data
         self.roi_names = roi_names
         self.num_laserlines = num_laserlines
@@ -64,7 +67,12 @@ class SaveDataWorker(QtCore.QRunnable):
 
     @QtCore.Slot()
     def run(self):
-        """ """
+        """ For each roi and channel a single tif file is created. For the moment, fits format is not handle.
+        """
+
+        # deinterleave the array data according to the number of rois and channels. In order to plan for further
+        # analysis, all images associated to the same acquisition channel are saved in the same folder.
+
         start_frame = 0
         for roi in self.roi_names:
             end_frame = start_frame + self.num_z_planes * self.num_laserlines
@@ -77,10 +85,20 @@ class SaveDataWorker(QtCore.QRunnable):
                     self.save_to_tiff(self.num_z_planes, cur_save_path, data)
                     start_frame = end_frame
 
+        # when all the images are saved, the global variable data_saved is set to True
         global data_saved
         data_saved = True
 
     def get_complete_path(self, directory, counter, roi, channel):
+        """ Compile the complete saving path for each stack of images, according to the roi and acquisition channel.
+
+    :param: int roi = indicate the number of the roi
+    :param: int channel = number associated to the selected channel
+    :param: str directory = path to the folder where the data will be saved
+    :param: int counter = indicate how many time-lapse cycles have been performed
+
+    :return: str complete_path = complete path indicating the folder and the name of the file
+        """
 
         file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{self.file_format}'
         directory_path = os.path.join(directory, 'channel_'+str(channel))
@@ -96,6 +114,14 @@ class SaveDataWorker(QtCore.QRunnable):
         return complete_path
 
     def save_to_tiff(self, n_frames, path, data):
+        """ Save the image data to a tiff file. Creates the PIL.Image object and saves it to tiff.
+
+        :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
+        :param: str path: complete path where the object is saved to (including the suffix .tif)
+        :param: data: np.array
+
+        :return: None
+        """
         # type conversion to int16
         data = data.astype('int16')
         # 2D data case (no stack)
@@ -118,6 +144,8 @@ class SaveDataWorker(QtCore.QRunnable):
 
     @staticmethod
     def save_u16_to_tiff(u16int, size, tiff_filename):
+        """ Copied from logic/camera_logic2.py
+        """
         # write 16-bit TIFF image
         # PIL interprets mode 'I;16' as "uint16, little-endian"
         img_out = Image.new('I;16', size)
@@ -127,6 +155,8 @@ class SaveDataWorker(QtCore.QRunnable):
 
     @staticmethod
     def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
+        """ Copied from logic/camera_logic2.py
+        """
         imlist = []  # this will be a list of pillow Image objects
         for i in range(n_frames):
             img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
@@ -161,6 +191,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.threadpool = QtCore.QThreadPool()
+
         self.directory = None
         self.counter = None
         self.user_param_dict = {}
@@ -185,8 +218,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.prefix = None
         self.wavelengths = []
         self.num_laserlines = None
-        self.saved = True
-        self.threadpool = QtCore.QThreadPool()
+        self.dz = []
 
     def startTask(self):
         """ """
@@ -222,7 +254,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # close the default session and start the FTL session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         print(f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
@@ -234,6 +266,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # set the active_roi to none to avoid having two active rois displayed
         self.ref['roi'].active_roi = None
+
+        # launch the calibration procedure to measure the tilt of the sample
+        self.dz = self.measure_sample_tilt(4)
 
         # initialize a counter to iterate over the number of cycles to do
         self.counter = 0
@@ -252,26 +287,42 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             return False
 
         # --------------------------------------------------------------------------------------------------------------
-        # calibration of the sample tilt
+        # start time-lapse acquisition
         # --------------------------------------------------------------------------------------------------------------
+        start_time = time.time()
 
-        n_cycle = 5
-        roi_z_positions = np.zeros((n_cycle, len(self.roi_names)))
+        # create a save path for the current iteration
+        # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
-        for n in range(n_cycle):
+        # start camera acquisition
+        self.ref['cam'].stop_acquisition()  # for safety
+        self.ref['cam'].start_acquisition()
 
-            roi_start_z = []
+        self.cam_prep_time.append(time.time()-start_time)
 
-            for item in self.roi_names:
+        # --------------------------------------------------------------------------------------------------------------
+        # move to ROI and focus (using autofocus and stop when stable)
+        # --------------------------------------------------------------------------------------------------------------
+        roi_start_times = []
 
-                if self.aborted:
-                    break
+        for n, item in enumerate(self.roi_names):
 
-                # go to roi
-                self.ref['roi'].set_active_roi(name=item)
-                self.ref['roi'].go_to_roi_xy()
-                self.ref['roi'].stage_wait_for_idle()
+            if self.aborted:
+                break
 
+            # measure the start time for the ROI
+            roi_start_time = time.time()
+            roi_start_times.append(roi_start_time)
+
+            # go to roi
+            self.ref['roi'].set_active_roi(name=item)
+            self.ref['roi'].go_to_roi_xy()
+            self.ref['roi'].stage_wait_for_idle()
+
+            # perform the autofocus routine only for the first ROI. For the other ones, simply move the objective
+            # according to the axial shift measured during the calibration
+
+            if n == 0:
                 # autofocus
                 autofocus_start_time = time.time()
                 self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
@@ -287,165 +338,89 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     if counter > 500:  # maybe increase the counter ?
                         break
 
-                # Save the z position after the focus
+                self.autofocus_stabilization_time.append(time.time() - autofocus_start_time)
+
+            else:
+                dz = self.dz[n-1]
                 current_z = self.ref['focus'].get_position()
-                roi_start_z.append(current_z)
+                self.ref['focus'].go_to_position(current_z + dz)
 
-            roi_z_positions[n, :] = np.array(roi_start_z)
+            start_position = self.calculate_start_position(self.centered_focal_plane)
 
-            # save the roi z start position
-            file_path = os.path.join(self.directory, f'z_start_position_step_{n}.yml')
-            save_roi_start_times_to_file(roi_start_z, file_path)
+            # ----------------------------------------------------------------------------------------------------------
+            # imaging sequence
+            # ----------------------------------------------------------------------------------------------------------
+            # prepare the daq: set the digital output to 0 before starting the task
 
-            # go back to first ROI
-            self.ref['roi'].set_active_roi(name=self.roi_names[0])
-            self.ref['roi'].go_to_roi_xy()
+            imaging_start_time = time.time()
 
-        # # calculate the variation of axial displacement between two successive rois
-        # dz = np.zeros((n_cycle, len(self.roi_names)-1))
-        # for n in range(len(self.roi_names) - 1):
-        #     dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
-        #
-        # # calculate the median displacement
-        # dz = np.median(dz, axis=0)
-        #
-        # print(roi_z_positions)
-        # print(dz)
-        # time.sleep(5)
+            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                np.array([0], dtype=np.uint8))
+
+            for plane in range(self.num_z_planes):
+
+                if self.aborted:
+                    break
+
+                # position the piezo
+                position = start_position + plane * self.z_step
+                self.ref['focus'].go_to_position(position)
+                time.sleep(0.03)
+
+                # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
+                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                    np.array([1], dtype=np.uint8))
+                time.sleep(0.005)
+                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                    np.array([0], dtype=np.uint8))
+
+                # wait for signal from FPGA to DAQ ('acquisition ready')
+                fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
+                t0 = time.time()
+
+                while not fpga_ready:
+                    time.sleep(0.001)
+                    fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
+
+                    t1 = time.time() - t0
+                    if t1 > 1:  # for safety: timeout if no signal received within 1 s
+                        self.log.warning('Timeout occurred')
+                        break
+            self.scan_time.append(time.time() - imaging_start_time)
+
+            self.ref['focus'].go_to_position(start_position)
+            # print(f'time after imaging {item}: {time.time() - start_time}')
+
+        # go back to first ROI
+        self.ref['roi'].set_active_roi(name=self.roi_names[0])
+        self.ref['roi'].go_to_roi_xy()
 
         # --------------------------------------------------------------------------------------------------------------
-        # start time-lapse acquisition
+        # data saving
         # --------------------------------------------------------------------------------------------------------------
 
-        start_time = time.time()
+        saving_start_time = time.time()
 
-        # create a save path for the current iteration
-        # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
+        # check whether the previous data were saved. A global variable was used instead of signal/slot. The latter
+        # solution was not reproducible
+        global data_saved
+        count = 0
+        while not data_saved:
+            time.sleep(0.1)
+            count += 1
+            if count > 100:
+                self.log.warning('Error ... data were not saved')
+                break
 
-        # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
-        self.ref['cam'].start_acquisition()
+        if data_saved:
+            self.log.info('Data were properly saved')
 
-        self.cam_prep_time.append(time.time()-start_time)
-
-        # --------------------------------------------------------------------------------------------------------------
-        # move to ROI and focus (using autofocus and stop when stable)
-        # --------------------------------------------------------------------------------------------------------------
-        # roi_start_times = []
-        # roi_start_z = []
-        #
-        # for item in self.roi_names:
-        #
-        #     if self.aborted:
-        #         break
-        #
-        #     # measure the start time for the ROI
-        #     roi_start_time = time.time()
-        #     roi_start_times.append(roi_start_time)
-        #
-        #     # go to roi
-        #     self.ref['roi'].set_active_roi(name=item)
-        #     self.ref['roi'].go_to_roi_xy()
-        #     self.ref['roi'].stage_wait_for_idle()
-        #
-        #     # autofocus
-        #     autofocus_start_time = time.time()
-        #     self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
-        #
-        #     # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
-        #     # stable is set to false)
-        #     busy = self.ref['focus'].autofocus_enabled
-        #     counter = 0
-        #     while busy:
-        #         counter += 1
-        #         time.sleep(0.05)
-        #         busy = self.ref['focus'].autofocus_enabled
-        #         if counter > 500:  # maybe increase the counter ?
-        #             break
-        #
-        #     self.autofocus_stabilization_time.append(time.time() - autofocus_start_time)
-        #
-        #     # Save the z position after the focus (for later optimization, in order to check that the tilt of the sample
-        #     # is reproducible)
-        #     current_z = self.ref['focus'].get_position()
-        #     roi_start_z.append(current_z)
-        #
-        #     start_position = self.calculate_start_position(self.centered_focal_plane)
-        #
-        #     # ----------------------------------------------------------------------------------------------------------
-        #     # imaging sequence
-        #     # ----------------------------------------------------------------------------------------------------------
-        #     # prepare the daq: set the digital output to 0 before starting the task
-        #
-        #     imaging_start_time = time.time()
-        #
-        #     self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-        #                                         np.array([0], dtype=np.uint8))
-        #
-        #     for plane in range(self.num_z_planes):
-        #
-        #         if self.aborted:
-        #             break
-        #
-        #         # position the piezo
-        #         position = start_position + plane * self.z_step
-        #         self.ref['focus'].go_to_position(position)
-        #         time.sleep(0.03)
-        #
-        #         # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-        #         self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-        #                                             np.array([1], dtype=np.uint8))
-        #         time.sleep(0.005)
-        #         self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-        #                                             np.array([0], dtype=np.uint8))
-        #
-        #         # wait for signal from FPGA to DAQ ('acquisition ready')
-        #         fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-        #         t0 = time.time()
-        #
-        #         while not fpga_ready:
-        #             time.sleep(0.001)
-        #             fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-        #
-        #             t1 = time.time() - t0
-        #             if t1 > 1:  # for safety: timeout if no signal received within 1 s
-        #                 self.log.warning('Timeout occurred')
-        #                 break
-        #     self.scan_time.append(time.time() - imaging_start_time)
-        #
-        #     self.ref['focus'].go_to_position(start_position)
-        #     # print(f'time after imaging {item}: {time.time() - start_time}')
-        #
-        # # go back to first ROI
-        # self.ref['roi'].set_active_roi(name=self.roi_names[0])
-        # self.ref['roi'].go_to_roi_xy()
-        #
-        # # --------------------------------------------------------------------------------------------------------------
-        # # data saving
-        # # --------------------------------------------------------------------------------------------------------------
-        #
-        # saving_start_time = time.time()
-        #
-        # # check whether the previous data were saved. A global variable was used instead of signal/slot. The latter
-        # # solution was not reproducible
-        # global data_saved
-        # count = 0
-        # while not data_saved:
-        #     time.sleep(0.1)
-        #     count += 1
-        #     if count > 100:
-        #         self.log.warning('Error ... data were not saved')
-        #         break
-        #
-        # if data_saved:
-        #     self.log.info('Data were properly saved')
-        #
-        # # get the data from the camera buffer and launch the worker to start data management in parallel
-        # image_data = self.ref['cam'].get_acquired_data()
-        # data_saved = False
-        # worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
-        #                         self.counter, self.file_format)
-        # self.threadpool.start(worker)
+        # get the data from the camera buffer and launch the worker to start data management in parallel
+        image_data = self.ref['cam'].get_acquired_data()
+        data_saved = False
+        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
+                                self.counter, self.file_format)
+        self.threadpool.start(worker)
 
         ## Previous version - test np.save compared to saving data in tif or fits. Did not improve the saving time
         ## -------------------------------------------------------------------------------------------------------
@@ -481,16 +456,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         #     self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
 
         # save roi start times to file
-        # roi_start_times = [item - start_time for item in roi_start_times]
+        roi_start_times = [item - start_time for item in roi_start_times]
         num = str(self.counter+1).zfill(2)
-        # file_path = os.path.join(self.directory, f'roi_start_times_step_{num}.yml')
-        # save_roi_start_times_to_file(roi_start_times, file_path)
+        file_path = os.path.join(self.directory, f'roi_start_times_step_{num}.yml')
+        save_roi_start_times_to_file(roi_start_times, file_path)
 
-        # save the roi z start position
-        file_path = os.path.join(self.directory, f'z_start_position_step_{num}.yml')
-        save_roi_start_times_to_file(roi_start_z, file_path)
-
-        # self.saving_time.append(time.time() - saving_start_time)
+        self.saving_time.append(time.time() - saving_start_time)
 
         # increment cycle counter
         self.counter += 1
@@ -749,6 +720,68 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # tilt calibration
     # ------------------------------------------------------------------------------------------------------------------
 
+    def measure_sample_tilt(self, n_cycle):
+
+        roi_z_positions = np.zeros((n_cycle, len(self.roi_names)))
+
+        # for each roi, the autofocus positioning is performed. The process is repeated n_cycle times, in order to get
+        # a good average position.
+        for n in range(n_cycle):
+
+            roi_start_z = []
+            for item in self.roi_names:
+
+                if self.aborted:
+                    break
+
+                # go to roi
+                self.ref['roi'].set_active_roi(name=item)
+                self.ref['roi'].go_to_roi_xy()
+                self.ref['roi'].stage_wait_for_idle()
+
+                # autofocus
+                self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+
+                # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
+                # stable is set to false)
+                busy = self.ref['focus'].autofocus_enabled
+                counter = 0
+                while busy:
+                    counter += 1
+                    time.sleep(0.05)
+                    busy = self.ref['focus'].autofocus_enabled
+                    if counter > 500:
+                        break
+
+                # Save the z position after the focus
+                current_z = self.ref['focus'].get_position()
+                roi_start_z.append(current_z)
+
+            roi_z_positions[n, :] = np.array(roi_start_z)
+
+            # save the roi z start position
+            file_path = os.path.join(self.directory, f'z_start_position_step_{n}.yml')
+            save_roi_start_times_to_file(roi_start_z, file_path)
+
+            # go back to first ROI
+            self.ref['roi'].set_active_roi(name=self.roi_names[0])
+            self.ref['roi'].go_to_roi_xy()
+
+            # correct for the piezo position if it gets too close to the limits
+            self.ref['focus'].do_piezo_position_correction()
+
+        # calculate the variation of axial displacement between two successive rois
+        dz = np.zeros((n_cycle, len(self.roi_names)-1))
+        for n in range(len(self.roi_names) - 1):
+            dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
+
+        # calculate the median displacement
+        dz = np.median(dz, axis=0)
+
+        print(roi_z_positions)
+        print(dz)
+
+        return dz
 
 
 # async def save_data(path, array):
