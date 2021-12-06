@@ -248,13 +248,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # control that autofocus has been calibrated and a setpoint is defined
         self.autofocus_ok = self.ref['focus']._calibrated and self.ref['focus']._setpoint_defined
+        if not self.autofocus_ok:
+            return
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
         # close the default session and start the FTL session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         print(f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
@@ -268,7 +270,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].active_roi = None
 
         # launch the calibration procedure to measure the tilt of the sample
-        self.dz = self.measure_sample_tilt(4)
+
+        ## Need to change it. It cannot be a single function, else it will be able to abort the calibration if needed.
+        ## Write it as a for loop and add an abort check.
+        ## Add the possibility to load a calibration file.
+        ## Save the calibration plot at the end.
+
+        self.dz = self.measure_sample_tilt(2)
 
         # initialize a counter to iterate over the number of cycles to do
         self.counter = 0
@@ -283,7 +291,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return: bool: True if the task should continue running, False if it should finish.
         """
 
-        if not self.autofocus_ok or self.aborted:
+        if self.aborted:
             return False
 
         # --------------------------------------------------------------------------------------------------------------
@@ -345,7 +353,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 current_z = self.ref['focus'].get_position()
                 self.ref['focus'].go_to_position(current_z + dz)
 
-            start_position = self.calculate_start_position(self.centered_focal_plane)
+            start_position, end_position = self.calculate_start_position(self.centered_focal_plane, self.num_z_planes,
+                                                                         self.z_step)
 
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
@@ -388,7 +397,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         break
             self.scan_time.append(time.time() - imaging_start_time)
 
-            self.ref['focus'].go_to_position(start_position)
+            self.ref['focus'].go_to_position(end_position)
             # print(f'time after imaging {item}: {time.time() - start_time}')
 
         # go back to first ROI
@@ -589,7 +598,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         for i in range(self.num_laserlines, 5):
             self.intensities.append(0)
 
-    def calculate_start_position(self, centered_focal_plane):
+    def calculate_start_position(self, centered_focal_plane, num_z_planes, z_step):
         """
         This method calculates the piezo position at which the z stack will start. It can either start in the
         current plane or calculate an offset so that the current plane will be centered inside the stack.
@@ -599,21 +608,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: float piezo start position
         """
-        current_pos = self.ref['focus'].get_position()  # for tests until we have the autofocus
-        # #self.ref['piezo'].get_position()  # lets assume that we are at focus (user has set focus or run autofocus)
+        current_pos = self.ref['focus'].get_position()
 
-        # if the centered_focal_plane option is ticked, the scan should start below the current position so that the
-        # focal plane will be the central plane or one of the central planes in case of an even number of planes
-        if centered_focal_plane:
+        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the
+            # central plane or one of the central planes in case of an even number of planes
             # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
+            if num_z_planes % 2 == 0:
+                # focal plane is the first one of the upper half of the number of planes
+                start_pos = current_pos - num_z_planes / 2 * z_step
             # odd number of planes:
             else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
+                start_pos = current_pos - (num_z_planes - 1)/2 * z_step
+
+            return start_pos, current_pos
         else:
-            return current_pos  # the scan starts at the current position and moves up
+            return current_pos, current_pos  # the scan starts at the current position and moves upp
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -777,9 +786,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # calculate the median displacement
         dz = np.median(dz, axis=0)
-
-        print(roi_z_positions)
-        print(dz)
+        print(f'dz = {dz}')
 
         return dz
 
