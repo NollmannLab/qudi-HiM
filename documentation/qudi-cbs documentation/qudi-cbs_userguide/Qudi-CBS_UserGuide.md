@@ -62,6 +62,7 @@ Available on:
 
 - PALM
 - RAMM
+- Airy-scan (*only for the laser control*)
 
 Required devices:
 
@@ -72,11 +73,11 @@ Required devices:
 
 The following table gives an overview of the connected devices. 
 
-| Setup | Camera                        | Laser controller                       | Filterwheel                                                  | White light source controller |
-| ----- | ----------------------------- | -------------------------------------- | ------------------------------------------------------------ | ----------------------------- |
-| PALM  | Andor iXon Ultra emCCD camera | National Instruments DAQ m series 6259 | Thorlabs 6 position filterwheel / <br />Thorlabs 6 position fast filterwheel | -                             |
-| RAMM  | Hamamatsu Flash sCMOS camera  | National Instruments FPGA              | Quad band filter <br />(placeholder implementation)          | ASI Motor stage 2000          |
-
+| Setup    | Camera                        | Laser controller                       | Filterwheel                                                  | White light source controller |
+| -----    | ----------------------------- | -------------------------------------- | ------------------------------------------------------------ | ----------------------------- |
+| PALM     | Andor iXon Ultra emCCD camera | National Instruments DAQ m series 6259 | Thorlabs 6 position filterwheel / <br />Thorlabs 6 position fast filterwheel | -                             |
+| RAMM     | Hamamatsu Flash sCMOS camera  | National Instruments FPGA              | Quad band filter <br />(placeholder implementation)          | ASI Motor stage 2000          |
+| Airyscan | Camera controlled by ZEN      | Celesta Lumencor                       | Not yet installed | Controlled by ZEN |
 
 
 The following actions are available the Basic Imaging module:
@@ -533,15 +534,17 @@ The following table lists all available experiments by their names in the Taskru
 | PhotobleachingTask                      | RAMM     | Photobleaching RAMM                        | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\photobleaching_task_RAMM.yml |
 | TimelapseTask                           | RAMM     | Timelapse RAMM                             | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\timelapse_task_RAMM.yml |
 | FastTimelapseTask                       | RAMM     | Fast timelapse RAMM                        | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\fast_timelapse_task_RAMM.yml |
-| --------------------------------------- |          |                                            |                                                              |
+| ----------------------------            |          |                                            |                                                              |
 | Multicolor Scan Task Dummy              | -        |                                            |                                                              |
 | Hi-M Task Dummy                         | -        |                                            |                                                              |
 | Timelapse Task Dummy                    | -        |                                            |                                                              |
 | Fast Timelapse Task Dummy               | -        |                                            |                                                              |
-| --------------------------------------- |          |                                            |                                                              |
+| ----------------------------            |          |                                            |                                                              |
+| MulticolorScanTask                      | Airyscan | Multicolor scan AIRYSCAN                   | C:/Users/MFM/qudi_files/qudi_task_config_files/multicolor_scan_task_AIRYSCAN.yml |
+| ROIMulticolorScanTask                   | Airyscan | ROI multicolor scan AIRYSCAN               | C:/Users/MFM/qudi_files/qudi_task_config_files/roi_multicolor_scan_task_AIRYSCAN.yml |
 | Fluidics Task Airyscan                  | Airyscan | Fluidics Airyscan                          | C:/Users/MFM/qudi_files/qudi_task_config_files/fluidics_task_AIRYSCAN.yml |
 | Hi-M Task Airyscan                      | Airyscan | Hi-M Airyscan                              | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
-| Mock Hi-M Task Airyscan                 | Airyscan | Hi-M Airyscan                              | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
+| Hi-M Task Airyscan for confocal         | Airyscan | Hi-M Airyscan Confocal                     | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
 
 
 

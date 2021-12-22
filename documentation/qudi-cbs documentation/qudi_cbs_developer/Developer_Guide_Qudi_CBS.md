@@ -116,6 +116,14 @@ Qudi-CBS installation:
 
 - Create the conda environment from file:
   `conda env create -f qudi-cbs-conda-env-win10-64bit-qt5.yml`
+  
+Note :  the previous yml file will install the original version of qudi. For qudi-cbs more packages were installed and several environment were created, depending on the applications & hardwares used on each instrument. In the qudi_cbs_develloper the environment yml files were added for each setup:
+  
+ Setup     | Last modification | File name                    |
+| -----    | ------------------| --------------------------   |
+| RAMM     | 22-12-2021        | environment_qudi_RAMM.yml    |
+| PALM     | 02-09-2021        | environment_qudi_PALM.yml    |
+| Airyscan | 24-06-2021        | environment_qudi_AIRYSCAN.yml|
 
 - Verify the creation of the environment:
   `conda env list`
