@@ -6,7 +6,7 @@ This module contains the logic to control a microscope camera.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho & JB. Fiche for later modifications
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -27,9 +27,10 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import numpy as np
-from time import sleep
+from time import sleep, time
 import os
-from PIL import Image
+from tifffile import TiffWriter
+# from PIL import Image
 from astropy.io import fits
 import yaml
 
@@ -87,7 +88,8 @@ class SaveProgressWorker(QtCore.QRunnable):
     def run(self):
         """ """
         sleep(self.time_constant)
-        self.signals.sigStepFinished.emit(self.filenamestem, self.fileformat, self.n_frames, self.is_display, self.metadata, self.emit_signal)
+        self.signals.sigStepFinished.emit(self.filenamestem, self.fileformat, self.n_frames, self.is_display,
+                                          self.metadata, self.emit_signal)
 
 
 class SpoolProgressWorker(QtCore.QRunnable):
@@ -110,7 +112,8 @@ class SpoolProgressWorker(QtCore.QRunnable):
     def run(self):
         """ """
         sleep(self.time_constant)
-        self.signals.sigSpoolingStepFinished.emit(self.filenamestem, self.path, self.fileformat, self.is_display, self.metadata)
+        self.signals.sigSpoolingStepFinished.emit(self.filenamestem, self.path, self.fileformat, self.is_display,
+                                                  self.metadata)
 
 
 # ======================================================================================================================
@@ -169,8 +172,7 @@ class CameraLogic(GenericLogic):
     _kinetic_time = None
 
     _hardware = None
-
-    fileformat_list = ['tif', 'fits']
+    fileformat_list = ['tif', 'fits', 'npy']
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -529,7 +531,8 @@ class CameraLogic(GenericLogic):
         :param: str fileformat (including the dot, such as '.tif', '.fits')
         :param: int n_frames: number of frames to be saved
         :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff fileformat, or in the header if fits format)
+        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+                                fileformat, or in the header if fits format)
         :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
@@ -549,7 +552,8 @@ class CameraLogic(GenericLogic):
             self.log.warning('Video acquisition did not start')
 
         # start a worker thread that will monitor the status of the saving
-        worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal)
+        worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
+                                    emit_signal)
         worker.signals.sigStepFinished.connect(self.save_video_loop)
         self.threadpool.start(worker)
 
@@ -561,7 +565,8 @@ class CameraLogic(GenericLogic):
         :param: str fileformat (including the dot, such as '.tif', '.fits')
         :param: int n_frames: number of frames to be saved
         :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff fileformat, or in the header if fits format)
+        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+                                fileformat, or in the header if fits format)
         :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
@@ -579,7 +584,8 @@ class CameraLogic(GenericLogic):
                 self.sigUpdateDisplay.emit()
 
             # restart a worker if acquisition still ongoing
-            worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal)
+            worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
+                                        emit_signal)
             worker.signals.sigStepFinished.connect(self.save_video_loop)
             self.threadpool.start(worker)
 
@@ -594,7 +600,8 @@ class CameraLogic(GenericLogic):
         :param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
         :param: str fileformat (including the dot, such as '.tif', '.fits')
         :param: int n_frames: number of frames to be saved
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff fileformat, or in the header if fits format)
+        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+                                fileformat, or in the header if fits format)
         :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
@@ -604,8 +611,10 @@ class CameraLogic(GenericLogic):
         self._hardware.wait_until_finished()  # this is important especially if display is disabled
         self.sigSaving.emit()  # for info message on statusbar of GUI
 
-        image_data = self._hardware.get_acquired_data()  # first get the data before resetting the acquisition mode of the camera
-        self._hardware.finish_movie_acquisition()  # reset the attributes and the default acquisition mode
+        # first get the data before resetting the acquisition mode of the camera
+        image_data = self._hardware.get_acquired_data()
+        # reset the attributes and the default acquisition mode
+        self._hardware.finish_movie_acquisition()
         self.saving = False
 
         # restart live in case it was activated
@@ -619,12 +628,15 @@ class CameraLogic(GenericLogic):
         if fileformat == '.tif':
             self.save_to_tiff(n_frames, complete_path, image_data)
             self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
-
         elif fileformat == '.fits':
             fits_metadata = self.convert_to_fits_metadata(metadata)
             self.save_to_fits(complete_path, image_data, fits_metadata)
+        elif fileformat == '.npy':
+            self.save_to_npy(complete_path, image_data)
+            self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
         else:
             self.log.info(f'Your fileformat {fileformat} is currently not covered')
+
         if emit_signal:
             self.sigVideoSavingFinished.emit()
         else:  # needed to clean up the info on statusbar when gui is opened without calling video_saving_finished
@@ -850,67 +862,80 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        # type conversion to int16
-        data = data.astype('int16')
-        # 2D data case (no stack)
-        if n_frames == 1:
-            try:
-                self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
-                self.log.info('Saved data to file {}'.format(path))
-            except Exception:
-                self.log.warning('Data not saved')
-            return None
+        t0 = time()
+        try:
+            with TiffWriter(path) as tif:
+                tif.save(data.astype(np.uint16))
+            self.log.info('Saved data to file {}'.format(path))
+        except Exception as e:
+            self.log.warning(f'Data not saved: {e}')
 
-        # 3D data case (note: z stack is the first dimension)
-        else:
-            try:
-                size = (data.shape[2], data.shape[1])
-                self.save_u16_to_tiff_stack(n_frames, data, size, path)
-                self.log.info('Saved data to file {}'.format(path))
-            except Exception:
-                self.log.warning('Data not saved')
-            return None
+        t1 = time()
+        print(f'Saving time : {t1-t0}s')
 
-    @staticmethod
-    def save_u16_to_tiff(u16int, size, tiff_filename):
-        """ Helper function for saving as tiff.
-        Function found at https://blog.itsayellow.com/technical/saving-16-bit-tiff-images-with-pillow-in-python/#
-        'Since Pillow has poor support for 16-bit TIFF, we make our own save function to properly save a 16-bit TIFF.'
+        # type conversion to uint16 - this is a good practice since the process can be significantly slower when working
+        # with float.
+        # data = data.astype(np.uint16)
+        #
+        # # 2D data case (no stack)
+        # if n_frames == 1:
+        #     try:
+        #         self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
+        #         self.log.info('Saved data to file {}'.format(path))
+        #     except Exception:
+        #         self.log.warning('Data not saved')
+        #     return None
+        #
+        # # 3D data case (note: z stack is the first dimension)
+        # else:
+        #     try:
+        #         size = (data.shape[2], data.shape[1])
+        #         self.save_u16_to_tiff_stack(n_frames, data, size, path)
+        #         self.log.info('Saved data to file {}'.format(path))
+        #     except Exception:
+        #         self.log.warning('Data not saved')
+        #     return None
 
-        Modified version for numpy array only.
-
-        :param u16int: np.array with dtype int16 to be saved as tiff. Make sure that the data is in int16 format !
-                        otherwise the conversion to bytes will not give the right result
-        :param float tuple size: size of the data
-        :param str tiff_filename: including the suffix '.tif'
-
-        :return: None
-        """
-        # write 16-bit TIFF image
-        # PIL interprets mode 'I;16' as "uint16, little-endian"
-        img_out = Image.new('I;16', size)
-        outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
-        img_out.frombytes(outpil)
-        img_out.save(tiff_filename)
-
-    @staticmethod
-    def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
-        """ Helper function that handles saving of 3D image data to 16 bit tiff stacks.
-        :param int n_frames: number of frames to be saved (1st dimension of the image data)
-        :param u16int: 3D np.array with dtype int16 to be saved as tiff
-        :param int tuple size: size of an individual image in the stack (x pixel, y pixel)
-        :param str tiff_filename: complete path to the file, including the suffix .tif
-
-        :return: None
-        """
-        imlist = []  # this will be a list of pillow Image objects
-        for i in range(n_frames):
-            img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
-            outpil = u16int[i].astype(
-                u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
-            img_out.frombytes(outpil)  # create pillow object from bytes
-            imlist.append(img_out)  # create the list of pillow image objects
-        imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
+    # @staticmethod
+    # def save_u16_to_tiff(u16int, size, tiff_filename):
+    #     """ Helper function for saving as tiff.
+    #     Function found at https://blog.itsayellow.com/technical/saving-16-bit-tiff-images-with-pillow-in-python/#
+    #     'Since Pillow has poor support for 16-bit TIFF, we make our own save function to properly save a 16-bit TIFF.'
+    #
+    #     Modified version for numpy array only.
+    #
+    #     :param u16int: np.array with dtype int16 to be saved as tiff. Make sure that the data is in int16 format !
+    #                     otherwise the conversion to bytes will not give the right result
+    #     :param float tuple size: size of the data
+    #     :param str tiff_filename: including the suffix '.tif'
+    #
+    #     :return: None
+    #     """
+    #     # write 16-bit TIFF image
+    #     # PIL interprets mode 'I;16' as "uint16, little-endian"
+    #     img_out = Image.new('I;16', size)
+    #     outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
+    #     img_out.frombytes(outpil)
+    #     img_out.save(tiff_filename)
+    #
+    # @staticmethod
+    # def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
+    #     """ Helper function that handles saving of 3D image data to 16 bit tiff stacks.
+    #     :param int n_frames: number of frames to be saved (1st dimension of the image data)
+    #     :param u16int: 3D np.array with dtype int16 to be saved as tiff
+    #     :param int tuple size: size of an individual image in the stack (x pixel, y pixel)
+    #     :param str tiff_filename: complete path to the file, including the suffix .tif
+    #
+    #     :return: None
+    #     """
+    #     imlist = []  # this will be a list of pillow Image objects
+    #     for i in range(n_frames):
+    #         img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
+    #         outpil = u16int[i].astype(
+    #             u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
+    #         img_out.frombytes(outpil)  # create pillow object from bytes
+    #         imlist.append(img_out)  # create the list of pillow image objects
+    #     imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
 
     def save_metadata_txt_file(self, filenamestem, datatype, metadata):
         """"Save a txt file containing the metadata.
@@ -924,7 +949,8 @@ class CameraLogic(GenericLogic):
         complete_path = self.create_generic_filename(filenamestem, datatype, 'parameters', '.txt', addfile=True)
         with open(complete_path, 'w') as file:
             # file.write(str(metadata))  # for standard txt file
-            yaml.dump(metadata, file, default_flow_style=False)  # yaml file. can use suffix .txt. change if .yaml preferred.
+            # yaml file. can use suffix .txt. change if .yaml preferred.
+            yaml.dump(metadata, file, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(complete_path))
 
     def save_to_fits(self, path, data, metadata):
@@ -939,6 +965,7 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
+        t0 = time()
         data = data.astype(np.int16)  # data conversion because 16 bit image shall be saved
         hdu = fits.PrimaryHDU(data)  # PrimaryHDU object encapsulates the data
         hdul = fits.HDUList([hdu])
@@ -952,6 +979,9 @@ class CameraLogic(GenericLogic):
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
+
+        t1 = time()
+        print(f'Saving time : {t1-t0}s')
 
     @staticmethod
     def add_fits_header(path, dictionary):
@@ -987,6 +1017,26 @@ class CameraLogic(GenericLogic):
                 fits_metadata[fits_key] = fits_value
 
         return fits_metadata
+
+    def save_to_npy(self, path, data):
+        """ Save the image data to a npy file. The images are reformated to uint16, in order to optimize the saving
+        time.
+
+        :param: str path: complete path where the object is saved to (including the suffix .tif)
+        :param: data: np.array
+
+        :return: None
+        """
+        t0 = time()
+        
+        try:
+            np.save(path, data.astype(np.uint16))
+            self.log.info('Saved data to file {}'.format(path))
+        except Exception as e:
+            self.log.warning(f'Data not saved: {e}')
+
+        t1 = time()
+        print(f'Saving time : {t1-t0}s')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
