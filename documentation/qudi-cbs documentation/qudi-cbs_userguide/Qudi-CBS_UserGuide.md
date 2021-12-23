@@ -62,6 +62,7 @@ Available on:
 
 - PALM
 - RAMM
+- Airy-scan (*only for the laser control*)
 
 Required devices:
 
@@ -72,11 +73,11 @@ Required devices:
 
 The following table gives an overview of the connected devices. 
 
-| Setup | Camera                        | Laser controller                       | Filterwheel                                                  | White light source controller |
-| ----- | ----------------------------- | -------------------------------------- | ------------------------------------------------------------ | ----------------------------- |
-| PALM  | Andor iXon Ultra emCCD camera | National Instruments DAQ m series 6259 | Thorlabs 6 position filterwheel / <br />Thorlabs 6 position fast filterwheel | -                             |
-| RAMM  | Hamamatsu Flash sCMOS camera  | National Instruments FPGA              | Quad band filter <br />(placeholder implementation)          | ASI Motor stage 2000          |
-
+| Setup    | Camera                        | Laser controller                       | Filterwheel                                                  | White light source controller |
+| -----    | ----------------------------- | -------------------------------------- | ------------------------------------------------------------ | ----------------------------- |
+| PALM     | Andor iXon Ultra emCCD camera | National Instruments DAQ m series 6259 | Thorlabs 6 position filterwheel / <br />Thorlabs 6 position fast filterwheel | -                             |
+| RAMM     | Hamamatsu Flash sCMOS camera  | National Instruments FPGA              | Quad band filter <br />(placeholder implementation)          | ASI Motor stage 2000          |
+| Airyscan | Camera controlled by ZEN      | Celesta Lumencor                       | Not yet installed | Controlled by ZEN |
 
 
 The following actions are available the Basic Imaging module:
@@ -185,7 +186,7 @@ The following actions are available:
 #### Settings menu:
 
 - PID settings: Open a dialog to modify the parameters for the proportional-integral-differential (PID) stabilization of the focus position. 
-
+- Offset settings : Open a dialog box to indicate previous values for the offset and the autofocus setpoint. This option is only available for the RAMM and should be used only as a **rescuing option for the autofocus parameters after a crash**.
 #### Manual focus toolbar:
 
 - *Reinitialize*: Move the piezo stage gradually to the initial position defined in the setup specific configuration file. The movement can be monitored by the displayed z position in the manual focus dockwidget or in the timetrace, if activated. 
@@ -414,8 +415,14 @@ The injection dockwidget contains the tools to define the hybridization and phot
 ![](imgs/injections_gui.png)
 
 
-
-
+<u>**Important for the RAMM**</u> : 
+- Regarding the probes positions numbers, there is no need to start at 1 and/or keep incrementing in ascending order by step of 1. You can indicate the probes positions in the order you want (2,5,11,3, etc.) 
+- For the Hybridization manager, you can call **Probes** several times. For the first call, the needle will be at the position indicated in the probe list. Then, for each new call, the needle will move to the next position on the tray. For example, a Fiducial tube is in position #1 and a DAPI tube in position #2. An example of hybridization injection could then be :
+  - Probe,1500ul,150ul/min = the needle is in position #1 and injection of fiducial
+  - Injection of wb
+  - Probe,1500ul,150ul/min = the needle move to position #2 and injection of DAPI
+  - Injection of ssc
+  - Injection of ib
 
 ### Experiment Configurator GUI
 
@@ -527,15 +534,17 @@ The following table lists all available experiments by their names in the Taskru
 | PhotobleachingTask                      | RAMM     | Photobleaching RAMM                        | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\photobleaching_task_RAMM.yml |
 | TimelapseTask                           | RAMM     | Timelapse RAMM                             | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\timelapse_task_RAMM.yml |
 | FastTimelapseTask                       | RAMM     | Fast timelapse RAMM                        | C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\fast_timelapse_task_RAMM.yml |
-| --------------------------------------- |          |                                            |                                                              |
+| ----------------------------            |          |                                            |                                                              |
 | Multicolor Scan Task Dummy              | -        |                                            |                                                              |
 | Hi-M Task Dummy                         | -        |                                            |                                                              |
 | Timelapse Task Dummy                    | -        |                                            |                                                              |
 | Fast Timelapse Task Dummy               | -        |                                            |                                                              |
-| --------------------------------------- |          |                                            |                                                              |
+| ----------------------------            |          |                                            |                                                              |
+| MulticolorScanTask                      | Airyscan | Multicolor scan AIRYSCAN                   | C:/Users/MFM/qudi_files/qudi_task_config_files/multicolor_scan_task_AIRYSCAN.yml |
+| ROIMulticolorScanTask                   | Airyscan | ROI multicolor scan AIRYSCAN               | C:/Users/MFM/qudi_files/qudi_task_config_files/roi_multicolor_scan_task_AIRYSCAN.yml |
 | Fluidics Task Airyscan                  | Airyscan | Fluidics Airyscan                          | C:/Users/MFM/qudi_files/qudi_task_config_files/fluidics_task_AIRYSCAN.yml |
 | Hi-M Task Airyscan                      | Airyscan | Hi-M Airyscan                              | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
-| Mock Hi-M Task Airyscan                 | Airyscan | Hi-M Airyscan                              | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
+| Hi-M Task Airyscan for confocal         | Airyscan | Hi-M Airyscan Confocal                     | C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml |
 
 
 
@@ -663,6 +672,13 @@ It is now needed to open the shutter of the 785 nm laser.
 - Select the ROIMulticolorScanTask and start it by clicking on the start button in the toolbar.  
 
 You can monitor the position the stage is currently at, using the ROI selector GUI (without using the tracking mode). The logger in the Qudi manager GUI will inform you when data has been acquired and saved. 
+
+If you want to follow the experiment progress with Bokeh, make sure to manually update the permissions of the folder where the data are saved. To so so :
+- click right on the folder and go to properties
+- NFS attributes
+- check Group/W and Other/W
+- apply
+
 
 ### Step 2: RT hybridization cycles 
 

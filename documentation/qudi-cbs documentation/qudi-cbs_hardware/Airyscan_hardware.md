@@ -22,12 +22,12 @@
 
 ## DAQ: 
 
-| **Model and SN**     | Measurement Computing DAQ |
+| **Model and SN**     | Measurement Computing DAQ - USB 3104 |
 | -------------------- | ------------------------- |
-| **Drivers location** |                           |
-| **Software**         |                           |
-| **Python**           |                           |
-| **Resources**        |                           |
+| **Drivers location** | See website                          |
+| **Software**         | InstaCal - https://www.mccdaq.com/usb-data-acquisition/USB-3100-Series.aspx                          |
+| **Python**           | mcculw package : https://pypi.org/project/mcculw/ or https://anaconda.org/conda-forge/mcculw - this package is not installed by default in qudi                          |
+| **Resources**        | Documentation can be found on the measurement computing website : https://www.mccdaq.com/usb-data-acquisition/USB-3100-Series.aspx                          |
 
 
 
@@ -43,7 +43,7 @@
 
 ## Physik Instrumente 3 axis translation stage:
 
-| **Model and SN**     | PI Controler C-863 Mercury (SN# , SN# ) and C-867 ??????     |
+| **Model and SN**     | PI Controler C-863 Mercury 1-axis translation stage (Z:SN#0185500777 , R:SN#0105500972 ) and C-867 for the rotation stage (SN#111005330)     |
 | -------------------- | ------------------------------------------------------------ |
 | **Drivers location** | The drivers compatible with windows 10 can be found here : https://www.pifrance.fr/fr/produits/logiciels-dedies-au-positionnement/ |
 | **Software**         | PI MikroMove - part of PI software suite (https://www.pifrance.fr/fr/produits/logiciels-dedies-au-positionnement/) |
@@ -60,3 +60,12 @@
 | **Python**           | Pyserial<br />Note: Pyserial is imported in a module using 'import serial'.<br />Pyserial is not contained in the original qudi environment. To add it, activate the environment and run conda install pyserial or create the qudi environment based on a yml file containing its current state. <br />In case methods from the pyserial namespace are not available, make sure that pyserial has higher priority than the serial package (contained in the qudi environment), both imported by 'import serial'. |
 | **Resources**        | User's Manual paper version or pdf                           |
 
+
+## Lumencor laser source
+
+| **Model and SN**     | Lumencor celesta (SN#18824)                            |
+| -------------------- | ------------------------------------------------------------ |
+| **Drivers location** | Ethernet communication - an adapter from RJ45 to USB3.0 is used                  |
+| **Software**         | Web interface (see website) |                                                         |
+| **Python**           | urllib : https://anaconda.org/anaconda/urllib3
+| **Resources**        | User's Manual paper version or on website https://lumencor.com/products/celesta-light-engine                           |

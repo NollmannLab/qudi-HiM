@@ -96,6 +96,8 @@ Example 2: Connectors of the 'toolbox' Basic Imaging GUI module. An example of a
 
 ## Installation 
 
+Below are descriptions on how to install qudi-cbs on windows and linux. More information can be found [on the original qudi web-page](https://ulm-iqo.github.io/qudi-generated-docs/html-docs/installation.html). Note that pyCharm was used for Python development but any other application could be used. The qudi-cbs repository was originally cloned from the qudi github repository, it contains all the original hardware/logic & GUI. 
+
 ### Windows installation
 
 Prerequisites: 
@@ -108,27 +110,51 @@ Prerequisites:
 Qudi-CBS installation:
 
 - Clone the github repository: https://github.com/NollmannLab/qudi-cbs using either the git client or git bash:
-  `git clone https://github.com/NollmannLab/qudi-cbs.git`
+
+  ```bash
+  git clone https://github.com/NollmannLab/qudi-cbs.git
+  ```
+
+- Select the latest stable release or the development branch :
+
+  ```bash
+  git checkout development
+  git pull
+  ```
+
+Note, the latest stable release was saved as **Release_v113**. 
 
 - Open an anaconda prompt and navigate to qudi-cbs/tools: 
 
-  `cd qudi-cbs/tools`
+  ```bash
+  cd qudi-cbs/tools
+  ```
 
 - Create the conda environment from file:
-  `conda env create -f qudi-cbs-conda-env-win10-64bit-qt5.yml`
+
+  ```bash
+  conda env create -f YOUR_ENVIRONMENT
+  ```
+
+Note :  the previous .yml file will install the original version of qudi environment. On a system connected to hardware, some hardware specific Python package may need to be added (such as PIPython, Fluigent-SDK, nifpga, maybe reinstall pyserial in case of conflicts with serial module, etc.). For more details, see the detailed hardware description files. For qudi-cbs several environment were created, depending on the applications & hardwares used on each instrument. In the qudi_cbs_develloper folder, the environment .yml files were added for each setup:
+
+|       Setup       | Last modification |                File name                |       OS       |
+| :---------------: | :---------------: | :-------------------------------------: | :------------: |
+| Original Qudi_cbs |         \         | qudi-cbs-conda-env-win10-64bit-qt5.yml  |   Windows 10   |
+|       RAMM        |    22-12-2021     |   environment_qudi-CBS_win10_RAMM.yml   |   Windows 10   |
+|       PALM        |    02-09-2021     |   environment_qudi-CBS_win10_PALM.yml   | Windows 10 & 7 |
+|     Airyscan      |    24-06-2021     | environment_qudi-CBS_win10_AIRYSCAN.yml |   Windows 10   |
 
 - Verify the creation of the environment:
-  `conda env list`
 
-  The qudi environment should now be listed there.
+  ```bash
+  conda env list
+  ```
 
-  On a system connected to hardware, some hardware specific Python package may need to be added (such as PIPython, Fluigent-SDK, nifpga, maybe reinstall pyserial in case of conflicts with serial module, ..). See the detailed hardware description files. This step can be done later when configuring the system.
+  The qudi environment should now be listed there. 
 
-  The anaconda prompt can now be closed. 
-  In case PyCharm will be used, remember to configure the project interpreter to use the new conda environment qudi.
+- The anaconda prompt can now be closed. In case PyCharm will be used, remember to configure the project interpreter to use the new conda environment qudi.
 
-  Although the conda environment is the one for windows 10, it was also tested on windows 7 and worked correctly.
-  
 - Create a desktop shortcut to start Qudi-CBS:
 
   - Right click on the desktop and select new -> shortcut
@@ -149,18 +175,6 @@ Qudi-CBS installation:
 
 
 
-Further information on how to install Qudi on Linux and Windows can be found here (as well as a detailed description on how to create the desktop shortcut for windows): 
-
-https://ulm-iqo.github.io/qudi-generated-docs/html-docs/installation.html
-
-(For Windows installation, note that TortoiseGIT is optional, and PyCharm only needs to be installed for development (but any other Python editor can also be used). Anaconda3 is strongly recommended.)
-
-
-
-On first start, qudi will open using a default configuration file. In the manager GUI, click Menu -> Load configuration and then choose config_dummy.cfg in the folder custom_config. 
-
-
-
 ### Linux installation
 
 Prerequisites: 
@@ -172,24 +186,40 @@ Prerequisites:
 
 Qudi-CBS installation:
 
-- Clone the github repository: https://github.com/fbarho/qudi-cbs using either the git client or a terminal.
-  `git clone https://github.com/NollmannLab/qudi-cbs.git`
-
+- Clone the github repository: https://github.com/NollmannLab/qudi-cbs using either the git client or a terminal.
+  
+  ```bash
+  git clone https://github.com/NollmannLab/qudi-cbs.git
+  ```
+  
 - In the terminal, navigate to qudi-cbs/tools: 
 
-  `cd qudi-cbs/tools`
+  ```bash
+  cd qudi-cbs/tools
+  ```
 
 - Create the conda environment from file:
-  `conda env create -f qudi-cbs-conda-env-linx64-qt5.yml`  
+  
+  ```bash
+  conda env create -f YOUR_ENVIRONMENT
+  ```
+
+Two environment are availables for Linux.
+
+|              Setup              | Last modification |             File name             |   OS   |
+| :-----------------------------: | :---------------: | :-------------------------------: | :----: |
+|          Original QUDI          |         \         | qudi-cbs-conda-env-linx64-qt5.yml |   \    |
+| Qudi_CBS with dummy instruments |    21-12-2021     |  environment_qudi-CBS_Linux.yml   | POP OS |
+
+
 
 - Verify the creation of the environment:
-  `conda env list`
 
-  The qudi environment should now be listed there.
+  ```bash
+  conda env list
+  ```
 
-  On a system connected to hardware, some hardware specific Python package may need to be added (such as PIPython, ..). See the detailed hardware description files. This step can be done later when configuring the system.
-
-  In case PyCharm will be used for development, remember to configure the project interpreter to use the new conda environment qudi.
+  The qudi environment should now be listed there. 
 
 
 
@@ -201,13 +231,15 @@ On **Linux**: Activate the conda environment, navigate to the folder Qudi-CBS an
 
 In a terminal, run:
 
-`conda activate qudi`
+```bash
+conda activate qudi
+cd REPOSITORIES_WHERE_QUDI_CBS_WAS_CLONED
+python start.py
+```
 
-`cd qudi-cbs`
-
-`python start.py`
 
 
+On first start, qudi_cbs will open using a default configuration file. In the manager GUI, click Menu -> Load configuration and then choose config_dummy.cfg in the folder custom_config. 
 
 
 
@@ -217,62 +249,64 @@ The original version of Qudi contains many modules for any of the categories GUI
 
 
 
-| GUI modules                 | Logic modules                 | Interface modules          | Hardware modules                  |
-| --------------------------- | ----------------------------- | -------------------------- | --------------------------------- |
-| Basic Imaging GUI           | camera_logic2                 | brightfield_interface      | camera_dummy**<br />              |
-| Focus Tools GUI             | filterwheel_logic             | camera_interface**         | hamamatsu_camera                  |
-| ROI Selector GUI            | lasercontrol_logic            | filterwheel_interface      | thorlabs_camera*<br />            |
-| Fluidics Control GUI        | brightfield_logic             | lasercontrol_interface     | andor_camera**                    |
-| Injections Configurator GUI | focus_logic<br />             | microfluidics_interface    | dummy_filter_wheel                |
-| Experiment Configurator GUI | autofocus_logic_camera        | motor_interface*           | dummy_no_filter                   |
-| Taskrunner GUI*             | autofocus_logic_fpga<br />    | valve_positioner_interface | thorlabs_motorized_filter_wheel** |
-|                             | roi_logic                     |                            | thorlabs_fast_filter_wheel        |
-|                             | valve_logic                   |                            | dummy_daq                         |
-|                             | flowcontrol_logic             |                            | national_instruments_daq          |
-|                             | daq_logic                     |                            | mcc_daq                           |
-|                             | positioning_logic             |                            | brightfield_dummy                 |
-|                             | injections_logic              |                            | motor_dummy*                      |
-|                             | experiment_configurator_logic |                            | mcl_nanodrive<br />               |
-|                             | taskrunner*                   |                            | pifoc<br />                       |
-|                             |                               |                            | motor_asi_ms2000                  |
-|                             |                               |                            | pi_3axis_stage<br />              |
-|                             |                               |                            | valve_dummy                       |
-|                             |                               |                            | hamilton_valve<br />              |
-|                             |                               |                            | flowboard_dummy                   |
-|                             |                               |                            | fluigent_flowboard<br />          |
-|                             |                               |                            | ni_fpga                           |
-|                             |                               |                            | lumencor_celesta                  |
-|                             |                               |                            |                                   |
-|                             |                               |                            |                                   |
+|         GUI modules         |         Logic modules         |     Interface modules      |        Hardware modules         |
+| :-------------------------: | :---------------------------: | :------------------------: | :-----------------------------: |
+|      Basic Imaging GUI      |         camera_logic2         |   brightfield_interface    |          camera_dummy           |
+|       Focus Tools GUI       |       filterwheel_logic       |      camera_interface      |        hamamatsu_camera         |
+|      ROI Selector GUI       |      lasercontrol_logic       |   filterwheel_interface    |         thorlabs_camera         |
+|    Fluidics Control GUI     |       brightfield_logic       |   lasercontrol_interface   |          andor_camera           |
+| Injections Configurator GUI |          focus_logic          |  microfluidics_interface   |       dummy_filter_wheel        |
+| Experiment Configurator GUI |    autofocus_logic_camera     |      motor_interface       |         dummy_no_filter         |
+|       Taskrunner GUI*       |     autofocus_logic_fpga      | valve_positioner_interface | thorlabs_motorized_filter_wheel |
+|                             |           roi_logic           |                            |   thorlabs_fast_filter_wheel    |
+|                             |          valve_logic          |                            |            dummy_daq            |
+|                             |       flowcontrol_logic       |                            |    national_instruments_daq     |
+|                             |           daq_logic           |                            |             mcc_daq             |
+|                             |       positioning_logic       |                            |        brightfield_dummy        |
+|                             |       injections_logic        |                            |           motor_dummy           |
+|                             | experiment_configurator_logic |                            |          mcl_nanodrive          |
+|                             |          taskrunner           |                            |              pifoc              |
+|                             |                               |                            |        motor_asi_ms2000         |
+|                             |                               |                            |         pi_3axis_stage          |
+|                             |                               |                            |           valve_dummy           |
+|                             |                               |                            |         hamilton_valve          |
+|                             |                               |                            |         flowboard_dummy         |
+|                             |                               |                            |       fluigent_flowboard        |
+|                             |                               |                            |             ni_fpga             |
+|                             |                               |                            |        lumencor_celesta         |
+|                             |                               |                            |                                 |
+|                             |                               |                            |                                 |
 
 
 
 The following table gives an overview of all tasks written for Qudi-CBS. A task is a special type of logic module that allows to run an experiment that involves the precise interaction of many devices. 
 
-| Task name                              | Setup    | Verified ?                                                   |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| Multicolor Imaging Task PALM           | PALM     | **OK**                                                       |
-| Muticolor Scan Task PALM               | PALM     | **OK**                                                       |
-| ROI Multicolor Scan Task PALM          | PALM     | **OK** -> but problem with z position file saving to be solved (data format retrieved from hardware) |
-| Timelapse Task PALM                    | PALM     | **OK** not yet with control if laser - filter combinations ok |
-| -------------------------------------- |          |                                                              |
-| Multicolor Scan Task RAMM              | RAMM     | **OK**                                                       |
-| ROI Multicolor Scan Task RAMM          | RAMM     | **OK**                                                       |
-| Fluidics Task RAMM                     | RAMM     | **OK**                                                       |
-| Hi-M Task RAMM                         | RAMM     | **OK**                                                       |
-| Photobleaching Task RAMM               | RAMM     | **OK**                                                       |
-| Timelapse Task RAMM                    | RAMM     | **OK**                                                       |
-| Fast Timelapse Task RAMM               | RAMM     | **OK** in current version but needs optimization to speed things up. metadata when using tif ? |
-| -------------------------------------- |          |                                                              |
-| Multicolor Scan Task Dummy             | -        | **OK**                                                       |
-| Hi-M Task Dummy                        | -        | **OK**                                                       |
-| Timelapse Task Dummy                   | -        | **OK**  (simulation as for RAMM Timelapse task)              |
-| Fast Timelapse Task Dummy              | -        | **OK** <br /> (metadata when using tif?)<br />When testing, reduce waiting time after movement for motor dummy because piezo movement would be simulated much too slow |
-| -------------------------------------- |          |                                                              |
-| Fluidics Task Airyscan                 | Airyscan | **OK**                                                       |
-| Hi-M Task Airyscan                     | Airyscan | **prepared** (see to do list in module)                      |
-| Confocal Hi-M Task Airyscan            | Airyscan | to create                                                    |
-| Mock Hi-M Task Airyscan                | Airyscan | **OK** (needs new tests on experimental setup)               |
+|             Task name             |  Setup   |                          Verified ?                          |
+| :-------------------------------: | :------: | :----------------------------------------------------------: |
+|   Multicolor Imaging Task PALM    |   PALM   |                            **OK**                            |
+|     Muticolor Scan Task PALM      |   PALM   |                            **OK**                            |
+|   ROI Multicolor Scan Task PALM   |   PALM   | **OK** -> but problem with z position file saving to be solved (data format retrieved from hardware) |
+|        Timelapse Task PALM        |   PALM   | **OK** not yet with control if laser - filter combinations ok |
+|  -------------------------------  |          |                                                              |
+|     Multicolor Scan Task RAMM     |   RAMM   |                            **OK**                            |
+|   ROI Multicolor Scan Task RAMM   |   RAMM   |                            **OK**                            |
+|        Fluidics Task RAMM         |   RAMM   |                            **OK**                            |
+|          Hi-M Task RAMM           |   RAMM   |                            **OK**                            |
+|     Photobleaching Task RAMM      |   RAMM   |                            **OK**                            |
+|        Timelapse Task RAMM        |   RAMM   |                            **OK**                            |
+|     Fast Timelapse Task RAMM      |   RAMM   |                            **OK**                            |
+|  -------------------------------  |          |                                                              |
+|    Multicolor Scan Task Dummy     |    -     |                            **OK**                            |
+|          Hi-M Task Dummy          |    -     |                            **OK**                            |
+|       Timelapse Task Dummy        |    -     |       **OK**  (simulation as for RAMM Timelapse task)        |
+|     Fast Timelapse Task Dummy     |    -     | **OK** (metadata when using tif?). When testing, reduce waiting time after movement for motor dummy because piezo movement would be simulated much too slow |
+|  -------------------------------  |          |                                                              |
+|   Multicolor Scan Task AIRYSCAN   | Airyscan |                            **OK**                            |
+| ROI Multicolor Scan Task AIRYSCAN | Airyscan |                            **OK**                            |
+|      Fluidics Task Airyscan       | Airyscan |                            **OK**                            |
+|        Hi-M Task Airyscan         | Airyscan |                            **OK**                            |
+|    Hi-M Task Airyscan Confocal    | Airyscan |                            **OK**                            |
+|      Mock Hi-M Task Airyscan      | Airyscan |                            **OK**                            |
 
 
 

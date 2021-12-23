@@ -6,7 +6,7 @@ qudi-CBS is built using the framework provided by [Qudi](https://github.com/Ulm-
 
 ## Documentation
 - [User's guide](https://github.com/NollmannLab/qudi-cbs/blob/master/documentation/qudi-cbs%20documentation/qudi-cbs_userguide/Qudi-CBS_UserGuide.md)
-- [Developer's guide](https://github.com/NollmannLab/qudi-cbs/blob/master/documentation/qudi-cbs%20documentation/qudi_cbs_developer/Developer_Guide_Qudi_CBS.md)
+- [Developer's guide](https://github.com/NollmannLab/qudi-cbs/blob/master/documentation/qudi-cbs%20documentation/qudi_cbs_developer)
 - [Hardware guides](https://github.com/NollmannLab/qudi-cbs/tree/master/documentation/qudi-cbs%20documentation/qudi-cbs_hardware)
 
 Do not expect help, debugging efforts or other support.
