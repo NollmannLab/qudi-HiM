@@ -27,7 +27,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import numpy as np
-from time import sleep, time
+from time import sleep  #, time
 import os
 from tifffile import TiffWriter
 # from PIL import Image
@@ -862,7 +862,7 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        t0 = time()
+        # t0 = time()
         try:
             with TiffWriter(path) as tif:
                 tif.save(data.astype(np.uint16))
@@ -870,8 +870,8 @@ class CameraLogic(GenericLogic):
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
 
-        t1 = time()
-        print(f'Saving time : {t1-t0}s')
+        # t1 = time()
+        # print(f'Saving time : {t1-t0}s')
 
         # type conversion to uint16 - this is a good practice since the process can be significantly slower when working
         # with float.
@@ -965,7 +965,7 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        t0 = time()
+        # t0 = time()
         data = data.astype(np.int16)  # data conversion because 16 bit image shall be saved
         hdu = fits.PrimaryHDU(data)  # PrimaryHDU object encapsulates the data
         hdul = fits.HDUList([hdu])
@@ -979,9 +979,9 @@ class CameraLogic(GenericLogic):
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
-
-        t1 = time()
-        print(f'Saving time : {t1-t0}s')
+        #
+        # t1 = time()
+        # print(f'Saving time : {t1-t0}s')
 
     @staticmethod
     def add_fits_header(path, dictionary):
@@ -1027,16 +1027,16 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        t0 = time()
-        
+        # t0 = time()
+        #
         try:
             np.save(path, data.astype(np.uint16))
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
-
-        t1 = time()
-        print(f'Saving time : {t1-t0}s')
+        #
+        # t1 = time()
+        # print(f'Saving time : {t1-t0}s')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
