@@ -38,7 +38,8 @@ from datetime import datetime
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_roi_start_times_to_file
 from qtpy import QtCore
-from PIL import Image
+# from PIL import Image
+from tifffile import TiffWriter
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication did not work)
 
@@ -113,8 +114,9 @@ class SaveDataWorker(QtCore.QRunnable):
         complete_path = os.path.join(directory_path, file_name)
         return complete_path
 
-    def save_to_tiff(self, n_frames, path, data):
-        """ Save the image data to a tiff file. Creates the PIL.Image object and saves it to tiff.
+    @staticmethod
+    def save_to_tiff(n_frames, path, data):
+        """ Save the image data to a tiff file.
 
         :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
         :param: str path: complete path where the object is saved to (including the suffix .tif)
@@ -122,49 +124,56 @@ class SaveDataWorker(QtCore.QRunnable):
 
         :return: None
         """
-        # type conversion to int16
-        data = data.astype('int16')
-        # 2D data case (no stack)
-        if n_frames == 1:
-            try:
-                self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
-                print('Saved data to file {}'.format(path))
-            except Exception:
-                print('Data not saved')
-            return None
 
-        # 3D data case (note: z stack is the first dimension)
-        else:
-            try:
-                size = (data.shape[2], data.shape[1])
-                self.save_u16_to_tiff_stack(n_frames, data, size, path)
-            except Exception:
-                print('Data not saved')
-            return None
+        try:
+            with TiffWriter(path) as tif:
+                tif.save(data.astype(np.uint16))
+        except Exception as e:
+            print(f'Error while saving file : {e}')
 
-    @staticmethod
-    def save_u16_to_tiff(u16int, size, tiff_filename):
-        """ Copied from logic/camera_logic2.py
-        """
-        # write 16-bit TIFF image
-        # PIL interprets mode 'I;16' as "uint16, little-endian"
-        img_out = Image.new('I;16', size)
-        outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
-        img_out.frombytes(outpil)
-        img_out.save(tiff_filename)
+        # # type conversion to int16
+        # data = data.astype('int16')
+        # # 2D data case (no stack)
+        # if n_frames == 1:
+        #     try:
+        #         self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
+        #         print('Saved data to file {}'.format(path))
+        #     except Exception:
+        #         print('Data not saved')
+        #     return None
+        #
+        # # 3D data case (note: z stack is the first dimension)
+        # else:
+        #     try:
+        #         size = (data.shape[2], data.shape[1])
+        #         self.save_u16_to_tiff_stack(n_frames, data, size, path)
+        #     except Exception:
+        #         print('Data not saved')
+        #     return None
 
-    @staticmethod
-    def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
-        """ Copied from logic/camera_logic2.py
-        """
-        imlist = []  # this will be a list of pillow Image objects
-        for i in range(n_frames):
-            img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
-            outpil = u16int[i].astype(
-                u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
-            img_out.frombytes(outpil)  # create pillow object from bytes
-            imlist.append(img_out)  # create the list of pillow image objects
-        imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
+    # @staticmethod
+    # def save_u16_to_tiff(u16int, size, tiff_filename):
+    #     """ Copied from logic/camera_logic2.py
+    #     """
+    #     # write 16-bit TIFF image
+    #     # PIL interprets mode 'I;16' as "uint16, little-endian"
+    #     img_out = Image.new('I;16', size)
+    #     outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
+    #     img_out.frombytes(outpil)
+    #     img_out.save(tiff_filename)
+    #
+    # @staticmethod
+    # def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
+    #     """ Copied from logic/camera_logic2.py
+    #     """
+    #     imlist = []  # this will be a list of pillow Image objects
+    #     for i in range(n_frames):
+    #         img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
+    #         outpil = u16int[i].astype(
+    #             u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
+    #         img_out.frombytes(outpil)  # create pillow object from bytes
+    #         imlist.append(img_out)  # create the list of pillow image objects
+    #     imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !

@@ -126,7 +126,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # close the default FPGA session and start the time-lapse session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
 
         # in order to have a session running for access to autofocus
@@ -299,6 +299,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.file_format == 'fits':
                     metadata = self.get_fits_metadata()
                     self.ref['cam'].save_to_fits(cur_save_path, data, metadata)
+                if self.file_format == 'npy':
+                    self.ref['cam'].save_to_fits(cur_save_path, data)
                 else:  # use tiff as default format
                     self.ref['cam'].save_to_tiff(num_z_planes, cur_save_path, data)
 
