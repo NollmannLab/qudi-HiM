@@ -235,7 +235,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         self.ref['pos'].start_move_to_target(needle_pos)
                         rt_injection += 1
                         needle_pos += 1
-                        self.ref['pos'].wait_for_idle()
+                        while self.ref['pos'].moving is True:
+                            time.sleep(0.1)
                         self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
                         self.ref['valves'].wait_for_idle()
 
@@ -412,6 +413,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.file_format == 'fits':
                     metadata = self.get_fits_metadata()
                     self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
+                elif self.file_format == 'npy':
+                    self.ref['cam'].save_to_npy(cur_save_path, image_data)
+                    metadata = self.get_metadata()
+                    file_path = cur_save_path.replace('npy', 'yaml', 1)
+                    self.save_metadata_file(metadata, file_path)
                 else:  # use tiff as default format
                     self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
                     metadata = self.get_metadata()
