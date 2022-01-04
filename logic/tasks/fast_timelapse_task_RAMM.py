@@ -56,11 +56,12 @@ class SaveDataWorker(QtCore.QRunnable):
     :param: str file_format = indicate the format used to save the data. For the moment, default is tif.
     """
 
-    def __init__(self, data, roi_names, num_laserlines, directory, counter, file_format):
+    def __init__(self, data, roi_names, num_laserlines, num_z_planes, directory, counter, file_format):
         super(SaveDataWorker, self).__init__()
         self.data = data
         self.roi_names = roi_names
         self.num_laserlines = num_laserlines
+        self.num_z_planes = num_z_planes
         self.directory = directory
         self.counter = counter
         self.file_format = file_format
@@ -409,7 +410,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # get the data from the camera buffer and launch the worker to start data management in parallel of acquisition
         image_data = self.ref['cam'].get_acquired_data()
         data_saved = False
-        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.directory,
+        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
                                 self.counter, self.file_format)
         self.threadpool.start(worker)
 
