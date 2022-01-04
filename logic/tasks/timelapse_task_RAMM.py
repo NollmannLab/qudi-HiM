@@ -296,11 +296,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 data = image_data[start_frame:end_frame]
                 cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel)
 
+                print(f'file format : {self.file_format}')
+
                 if self.file_format == 'fits':
                     metadata = self.get_fits_metadata()
                     self.ref['cam'].save_to_fits(cur_save_path, data, metadata)
                 if self.file_format == 'npy':
-                    self.ref['cam'].save_to_fits(cur_save_path, data)
+                    self.ref['cam'].save_to_npy(cur_save_path, data)
                 else:  # use tiff as default format
                     self.ref['cam'].save_to_tiff(num_z_planes, cur_save_path, data)
 

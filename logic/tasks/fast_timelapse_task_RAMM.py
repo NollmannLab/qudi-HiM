@@ -56,12 +56,11 @@ class SaveDataWorker(QtCore.QRunnable):
     :param: str file_format = indicate the format used to save the data. For the moment, default is tif.
     """
 
-    def __init__(self, data, roi_names, num_laserlines, num_z_planes, directory, counter, file_format):
+    def __init__(self, data, roi_names, num_laserlines, directory, counter, file_format):
         super(SaveDataWorker, self).__init__()
         self.data = data
         self.roi_names = roi_names
         self.num_laserlines = num_laserlines
-        self.num_z_planes = num_z_planes
         self.directory = directory
         self.counter = counter
         self.file_format = file_format
@@ -80,17 +79,21 @@ class SaveDataWorker(QtCore.QRunnable):
             roi_data = self.data[start_frame:end_frame]
             for channel in range(self.num_laserlines):
                 data = roi_data[channel:len(roi_data):self.num_laserlines]
-                cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel)
+                cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel, self.file_format)
 
                 if self.file_format == 'tif':
-                    self.save_to_tiff(self.num_z_planes, cur_save_path, data)
+                    self.save_to_tiff(cur_save_path, data)
+                    start_frame = end_frame
+                else:
+                    self.save_to_npy(cur_save_path, data)
                     start_frame = end_frame
 
         # when all the images are saved, the global variable data_saved is set to True
         global data_saved
         data_saved = True
 
-    def get_complete_path(self, directory, counter, roi, channel):
+    @staticmethod
+    def get_complete_path(directory, counter, roi, channel, file_format):
         """ Compile the complete saving path for each stack of images, according to the roi and acquisition channel.
 
     :param: int roi = indicate the number of the roi
@@ -101,7 +104,7 @@ class SaveDataWorker(QtCore.QRunnable):
     :return: str complete_path = complete path indicating the folder and the name of the file
         """
 
-        file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{self.file_format}'
+        file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{file_format}'
         directory_path = os.path.join(directory, 'channel_'+str(channel))
 
         # check if folder exists, if not: create it
@@ -109,13 +112,13 @@ class SaveDataWorker(QtCore.QRunnable):
             try:
                 os.makedirs(directory_path)  # recursive creation of all directories on the path
             except Exception as e:
-                self.log.error('Error {0}'.format(e))
+                print(f'Error : {e}')
 
         complete_path = os.path.join(directory_path, file_name)
         return complete_path
 
     @staticmethod
-    def save_to_tiff(n_frames, path, data):
+    def save_to_tiff(path, data):
         """ Save the image data to a tiff file.
 
         :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
@@ -124,56 +127,26 @@ class SaveDataWorker(QtCore.QRunnable):
 
         :return: None
         """
-
         try:
             with TiffWriter(path) as tif:
                 tif.save(data.astype(np.uint16))
         except Exception as e:
             print(f'Error while saving file : {e}')
 
-        # # type conversion to int16
-        # data = data.astype('int16')
-        # # 2D data case (no stack)
-        # if n_frames == 1:
-        #     try:
-        #         self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
-        #         print('Saved data to file {}'.format(path))
-        #     except Exception:
-        #         print('Data not saved')
-        #     return None
-        #
-        # # 3D data case (note: z stack is the first dimension)
-        # else:
-        #     try:
-        #         size = (data.shape[2], data.shape[1])
-        #         self.save_u16_to_tiff_stack(n_frames, data, size, path)
-        #     except Exception:
-        #         print('Data not saved')
-        #     return None
+    @staticmethod
+    def save_to_npy(path, data):
+        """ Save the image data to a npy file. The images are reformated to uint16, in order to optimize the saving
+        time.
 
-    # @staticmethod
-    # def save_u16_to_tiff(u16int, size, tiff_filename):
-    #     """ Copied from logic/camera_logic2.py
-    #     """
-    #     # write 16-bit TIFF image
-    #     # PIL interprets mode 'I;16' as "uint16, little-endian"
-    #     img_out = Image.new('I;16', size)
-    #     outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
-    #     img_out.frombytes(outpil)
-    #     img_out.save(tiff_filename)
-    #
-    # @staticmethod
-    # def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
-    #     """ Copied from logic/camera_logic2.py
-    #     """
-    #     imlist = []  # this will be a list of pillow Image objects
-    #     for i in range(n_frames):
-    #         img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
-    #         outpil = u16int[i].astype(
-    #             u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
-    #         img_out.frombytes(outpil)  # create pillow object from bytes
-    #         imlist.append(img_out)  # create the list of pillow image objects
-    #     imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
+        :param: str path: complete path where the object is saved to (including the suffix .tif)
+        :param: data: np.array
+
+        :return: None
+        """
+        try:
+            np.save(path, data.astype(np.uint16))
+        except Exception as e:
+            print(f'Error while saving file : {e}')
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -433,17 +406,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if data_saved:
             self.log.info('Data were properly saved')
 
-        # get the data from the camera buffer and launch the worker to start data management in parallel
+        # get the data from the camera buffer and launch the worker to start data management in parallel of acquisition
         image_data = self.ref['cam'].get_acquired_data()
         data_saved = False
-        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
+        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.directory,
                                 self.counter, self.file_format)
         self.threadpool.start(worker)
-
-        ## Previous version - test np.save compared to saving data in tif or fits. Did not improve the saving time
-        ## -------------------------------------------------------------------------------------------------------
-
-        # np.save(cur_save_path, image_data)
 
         ## Previous version - a single file was attributed depending of ROI & laser channel
         ## --------------------------------------------------------------------------------
