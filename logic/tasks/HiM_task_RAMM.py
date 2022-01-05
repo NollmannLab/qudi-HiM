@@ -36,7 +36,8 @@ import time
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, create_path_for_injection_data
+from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
+    create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
@@ -71,6 +72,36 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_counter = None
         self.user_param_dict = {}
         self.logging = True
+        self.start = None
+        self.default_exposure = None
+        self.directory = None
+        self.log_folder = None
+        self.default_info_path = None
+        self.status_dict_path = None
+        self.status_dict = {}
+        self.log_path = None
+        self.num_frames = None
+        self.sample_name = None
+        self.exposure = None
+        self.num_z_planes = None
+        self.z_step = None
+        self.centered_focal_plane = None
+        self.imaging_sequence = []
+        self.save_path = None
+        self.file_format = None
+        self.roi_list_path = None
+        self.injections_path = None
+        self.dapi_path = None
+        self.roi_names = []
+        self.num_laserlines = None
+        self.wavelengths = []
+        self.intensities = []
+        self.probe_dict = {}
+        self.hybridization_list = []
+        self.photobleaching_list = []
+        self.buffer_dict = {}
+        self.probe_list = []
+        self.prefix = None
 
     def startTask(self):
         """ """
@@ -100,7 +131,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
-            self.log.warning('No position 1 defined for injections. Experiment can not be started. Please define position 1!')
+            self.log.warning(
+                'No position 1 defined for injections. Experiment can not be started. Please define position 1!')
             return
 
         if (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
@@ -425,10 +457,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.save_metadata_file(metadata, file_path)
 
                 # calculate and save projection for bokeh --------------------------------------------------------------
-                #start = time.time()
+                # start = time.time()
                 self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
-                #stop = time.time()
-                #print("Projection calculation time : {}".format(stop-start))
+                # stop = time.time()
+                # print("Projection calculation time : {}".format(stop-start))
 
                 # save file with z positions (same procedure for either file format)
                 file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
@@ -511,7 +543,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
+                    complete_path = create_path_for_injection_data(self.directory,
+                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   'photobleaching', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
@@ -584,7 +618,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
-            # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default position .. (maybe not necessary because all those elements will still be done above)
+            # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
+            # position .. (maybe not necessary because all those elements will still be done above)
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
@@ -722,10 +757,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         current_pos = self.ref['focus'].get_position()
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
+        # the scan should start below the current position so that the focal plane will be the central plane or one of
+        # the central planes in case of an even number of planes
+        if centered_focal_plane:
             # even number of planes:
             if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
+                # focal plane is the first one of the upper half of the number of planes
+                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
             # odd number of planes:
             else:
                 start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
@@ -812,12 +850,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
-        metadata['Scan step length (um)'] = self.z_step
-        metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
-        metadata['Number laserlines'] = self.num_laserlines
+        metadata = {'Sample name': self.sample_name, 'Exposure time (s)': float(np.round(self.exposure, 3)),
+                    'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
+                    'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
@@ -828,7 +863,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # add autofocus information :
         metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
-        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision,2))
+        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
         metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
         metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
 
@@ -839,12 +874,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['Z_STEP'] = (self.z_step, 'scan step length (um)')
-        metadata['Z_TOTAL'] = (self.z_step * self.num_z_planes, 'scan total length (um)')
-        metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
+        metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
+                    'Z_STEP': (self.z_step, 'scan step length (um)'),
+                    'Z_TOTAL': (self.z_step * self.num_z_planes, 'scan total length (um)'),
+                    'CHANNELS': (self.num_laserlines, 'number laserlines')}
         for i in range(self.num_laserlines):
             metadata[f'LINE{i+1}'] = (self.imaging_sequence[i][0], f'laser line {i+1}')
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
@@ -853,7 +886,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # add autofocus information :
         metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
+        metadata['AF_PREC'] = np.round(self.ref['focus']._precision, 2)
         metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
         metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
 
