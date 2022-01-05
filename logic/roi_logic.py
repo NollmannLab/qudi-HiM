@@ -1027,6 +1027,24 @@ class RoiLogic(GenericLogic):
 # Methods interacting with hardware
 # ----------------------------------------------------------------------------------------------------------------------
 
+    def set_stage_led_mode(self, mode):
+        """
+        Change the mode to control the bright field illumination (optional - depends on the ASI stage)
+
+        :param: str mode : defined the mode "Internal" or "Triggered"
+        :return: None
+        """
+        self._stage.led_mode(mode)
+
+    def set_stage_led_intensity(self, intensity):
+        """
+        Change the intensity of the ASI LED for brightfield imaging
+
+        :param: int intensity : value of intensity (between 0-100)
+        :return: None
+        """
+        self._stage.led_control(intensity)
+
     def _move_stage(self, position):
         """
         Move the translation stage to position.
@@ -1068,15 +1086,19 @@ class RoiLogic(GenericLogic):
         if self.tracking:
             self.stop_tracking()
         self.sigDisableTracking.emit()
+        sleep(0.5)
 
     def enable_tracking_mode(self):
         """ This method makes tracking mode again available from GUI, for example when a Task is finishing. """
         self.sigEnableTracking.emit()
+        sleep(0.5)
 
     def disable_roi_actions(self):
         """ This method provides a security to avoid all stage related actions from GUI, for example during Tasks. """
         self.sigDisableRoiActions.emit()
+        sleep(0.5)
 
     def enable_roi_actions(self):
         """ This method resets all ROI / stage related actions from GUI to callable state, for example after Tasks. """
         self.sigEnableRoiActions.emit()
+        sleep(0.5)

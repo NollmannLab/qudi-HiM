@@ -70,7 +70,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def startTask(self):
         """ """
-        self.log.info('started Task')
+        self.log.info('started Task for Fast Timelaspe DUMMY')
+
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
 
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
@@ -93,7 +95,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.directory = self.create_directory(self.save_path)
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = len(self.roi_names) * self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
@@ -133,6 +134,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # go to roi
             self.ref['roi'].set_active_roi(name=item)
+            self.log.info(f'Moved to {item} xy position')
             self.ref['roi'].go_to_roi_xy()
             self.ref['roi'].stage_wait_for_idle()
 
@@ -148,9 +150,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             print('Running autofocus...')
             # time.sleep(0.1)  # maybe replace by a random time
 
-            start_position = self.calculate_start_position(self.centered_focal_plane)
+            start_position, end_position = self.calculate_start_position(self.centered_focal_plane)
 
-            # print(f'time after moving to roi {item} and autofocus: {time.time() - start_time}')
+            print(f'time after moving to roi {item} and autofocus: {time.time() - start_time}')
 
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
@@ -159,13 +161,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # position the piezo
                 position = start_position + plane * self.z_step
+                print(f'z position = {position} with a step of {self.z_step} and plane is {plane}')
                 self.ref['focus'].go_to_position(position)
+                print('piezo moved')
                 time.sleep(0.03)
 
                 # removed here the part concerned with handling synchronization daq fpga
 
-            self.ref['focus'].go_to_position(start_position)
-            # print(f'time after imaging {item}: {time.time() - start_time}')
+            self.ref['focus'].go_to_position(end_position)
+            print(f'time after imaging {item}: {time.time() - start_time}')
 
         # go back to first ROI
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -213,6 +217,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
 
         # enable gui actions
         # roi gui
@@ -301,16 +306,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         current_pos = self.ref['focus'].get_position()
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
-            # even number of planes:
+        if centered_focal_plane:
+            # the scan should start below the current position so that the focal plane will be the central plane or one
+            # of the central planes in case of an even number of planes even number of planes:
             if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
-            # odd number of planes:
+                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the
+                # upper half of the number of planes odd number of planes:
             else:
                 start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
+            return start_pos, current_pos
         else:
-            return current_pos  # the scan starts at the current position and moves up
+            return current_pos, current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling

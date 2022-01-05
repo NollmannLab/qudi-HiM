@@ -245,7 +245,8 @@ class CameraThorlabs(Base, CameraInterface):
 
         :return: bool: Success ?
         """
-        if self.get_ready_state():
+        status = self.get_ready_state()
+        if status:
             self._acquiring = True
             self._live = True
             # code = self._dll.is_CaptureVideo(self._camera_handle, c_int(IS_DONT_WAIT))
@@ -265,6 +266,7 @@ class CameraThorlabs(Base, CameraInterface):
                 return False
             return True
         else:
+            print("The camera is not ready for an acquisition. Status : {}".format(status))
             return False
 
     def stop_acquisition(self):

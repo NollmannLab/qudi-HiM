@@ -58,6 +58,8 @@ class Task(InterruptableTask):
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter = None
         self.user_param_dict = {}
+        self.rt_injection = 0
+        self.needle_pos = None
 
     def startTask(self):
         """ """
@@ -82,7 +84,13 @@ class Task(InterruptableTask):
                     'No position 1 defined for injections. Experiment can not be started. Please define position 1')
                 return
             # position the needle in the probe
-            self.ref['pos'].start_move_to_target(self.probe_list[0][0])
+            self.needle_pos = self.probe_list[0][0]
+            self.ref['pos'].start_move_to_target(self.needle_pos)
+            while self.ref['pos'].moving is True:
+                sleep(0.1)
+
+            # disable again the move stage button
+            self.ref['pos'].disable_positioning_actions()
 
         # set the valve default positions for injection
         self.ref['valves'].set_valve_position('b', 1)  # inject probe
@@ -107,12 +115,26 @@ class Task(InterruptableTask):
             self.ref['valves'].set_valve_position('a', valve_pos)
             self.ref['valves'].wait_for_idle()
 
+            # for the Airyscan, the needle is connected to valve position 3. If this valve is called more than once,
+            # the needle will move to the next position. The procedure was added to make the DAPI injection
+            # easier.
+            print('Valve position : {}'.format(valve_pos))
+            if self.rt_injection == 0 and valve_pos == 3:
+                self.rt_injection += 1
+                self.needle_pos += 1
+            elif self.rt_injection > 0 and valve_pos == 3:
+                self.ref['pos'].start_move_to_target(self.needle_pos)
+                while self.ref['pos'].moving is True:
+                    sleep(0.1)
+                self.rt_injection += 1
+                self.needle_pos += 1
+                self.ref['pos'].disable_positioning_actions()
+
             # pressure regulation
             self.ref['flow'].set_pressure(0.0)  # as initial value
             self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[self.step_counter]['flowrate'])
             # start counting the volume of buffer or probe
-            sampling_interval = 1  # in seconds
-            self.ref['flow'].start_volume_measurement(self.hybridization_list[self.step_counter]['volume'], sampling_interval)
+            self.ref['flow'].start_volume_measurement(self.hybridization_list[self.step_counter]['volume'])
 
             ready = self.ref['flow'].target_volume_reached
             while not ready:
@@ -133,6 +155,7 @@ class Task(InterruptableTask):
             for i in range(num_steps):
                 if not self.aborted:
                     sleep(30)
+                    print("Elapsed time : {}s".format((i + 1) * 30))
 
             if not self.aborted:
                 sleep(remainder)

@@ -33,3 +33,4 @@
 *.log
 *.log.*
 /scratchfiles/test_yaml_json_txt.py
+/qudi_injection_parameters_test

@@ -137,6 +137,7 @@ class FocusLogic(GenericLogic):
     # autofocus attributes
     _calibration_range = 2  # Autofocus calibration range in µm
     _slope = None
+    _precision = None
     _z0 = None
     _dt = None
     _calibrated = False
@@ -354,7 +355,7 @@ class FocusLogic(GenericLogic):
         detected by the QPD or the camera. This methods updates the class attribute _autofocus_lost.
         :return: None
         """
-        self._autofocus_lost = not self._autofocus_logic.autofocus_check_signal
+        self._autofocus_lost = not self._autofocus_logic.autofocus_check_signal()
 
 # Calibration of the autofocus -----------------------------------------------------------------------------------------
     def calibrate_focus_stabilization(self):
@@ -396,9 +397,9 @@ class FocusLogic(GenericLogic):
 
         # measure the precision of the autofocus
         iterations = 30
-        precision = self.measure_precision(iterations)
+        self._precision = self.measure_precision(iterations)
 
-        self.sigPlotCalibration.emit(piezo_position, autofocus_signal, p(piezo_position), self._slope, precision)
+        self.sigPlotCalibration.emit(piezo_position, autofocus_signal, p(piezo_position), self._slope, self._precision)
 
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.stop_camera_live()
@@ -535,10 +536,8 @@ class FocusLogic(GenericLogic):
 
             # calculate the necessary movement of piezo dz
             z = self._z0 + pid / self._slope
-
             dz = np.absolute(self.get_position() - z)
-
-            print(f'z is {z}, dz is {dz}')
+            # print(f'z is {z}, dz is {dz}')
 
             if self._min_z + 1 < z < self._max_z - 1:
                 if dz > 0.1:
@@ -555,7 +554,8 @@ class FocusLogic(GenericLogic):
                 return
 
             worker = AutofocusWorker(self._dt)
-            worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable, search_focus=search_focus))
+            worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+                                                       search_focus=search_focus))
             self.threadpool.start(worker)
 
     def stop_autofocus(self):
@@ -580,6 +580,21 @@ class FocusLogic(GenericLogic):
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
 
+    def update_autofocus_offset_parameters(self, offset, setpoint):
+        """ From the gui, it is possible to manually indicate which offset and setpoint should be used for the
+        autofocus. This is particularly useful in case the program crashed and the user wants to reuse the same
+        parameters.
+        :param: float offset & float setpoint values previously saved by the user
+        :return: None
+        """
+        # Define the offset value and display it on the main window
+        self.sigOffsetCalibration.emit(offset)
+        self._autofocus_logic._focus_offset = offset
+        # Define the setpoint value and display it on the main window
+        self._setpoint_defined = True
+        self.sigSetpointDefined.emit(setpoint)
+        self._autofocus_logic._setpoint = setpoint
+
     def rescue_autofocus(self):
         """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
         The stage moves along the z axis until the signal is found.
@@ -594,14 +609,14 @@ class FocusLogic(GenericLogic):
         The autofocus method with readout on a reference plane is used.
         :return: None
         """
-        self.stop_autofocus()
         self.piezo_correction_running = True
+        self.stop_autofocus()
         success = True
 
         piezo_pos = self.get_position()
 
         if (piezo_pos < 10) or (piezo_pos > 50):  # correction necessary
-            print('doing piezo position correction..')
+            print('doing piezo position correction.')
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
             self._autofocus_logic.stage_move_z(offset)
@@ -681,7 +696,9 @@ class FocusLogic(GenericLogic):
         """ This method provides a security to avoid all focus / autofocus related toolbar actions from GUI,
         for example during Tasks. """
         self.sigDisableFocusActions.emit()
+        sleep(0.5)
 
     def enable_focus_actions(self):
         """ This method resets all focus related toolbar actions on GUI to callable state, for example after Tasks. """
         self.sigEnableFocusActions.emit()
+        sleep(0.5)

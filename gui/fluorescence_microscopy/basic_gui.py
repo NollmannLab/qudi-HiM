@@ -7,7 +7,7 @@ Camera image, camera status control, laser and filter settings.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho - JB. Fiche for updates and later modifications
 
 Created on Thu Oct 29 2020
 -----------------------------------------------------------------------------------
@@ -30,22 +30,23 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-import sys
+# import sys
 from datetime import datetime
-import re
+# import re
 import numpy as np
+from time import sleep
 
 from qtpy import QtCore
-from qtpy import QtGui
+# from qtpy import QtGui
 from qtpy import QtWidgets
 from qtpy import uic
 import pyqtgraph as pg
-from functools import partial
+# from functools import partial
 
 from gui.guibase import GUIBase
 from core.connector import Connector
 from core.configoption import ConfigOption
-from qtwidgets.scan_plotwidget import ScanImageItem, ScanViewBox
+# from qtwidgets.scan_plotwidget import ScanImageItem, ScanViewBox
 from gui.validators import NameValidator
 
 
@@ -127,22 +128,25 @@ class BasicGUI(GUIBase):
 
     Basic Imaging:
         module.Class: 'fluorescence_microscopy.basic_gui.BasicGUI'
-        default_path: 'E:\'
-        brightfield_control: False
+        default_path: 'E:\DATA'
+        brightfield_control: True
+        Setup: 'RAMM'
         connect:
             camera_logic: 'camera_logic'
             laser_logic: 'lasercontrol_logic'
             filterwheel_logic: 'filterwheel_logic'
+            brightfield_logic: 'brightfield_logic'
     """
     # define connectors to logic modules
     camera_logic = Connector(interface='CameraLogic')
     laser_logic = Connector(interface='LaserControlLogic')
     filterwheel_logic = Connector(interface='FilterwheelLogic')
-    brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)  
+    brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)
 
     # config options
     default_path = ConfigOption('default_path', missing='error')
     brightfield_control = ConfigOption('brightfield_control', False)
+    setup = ConfigOption('Setup', False)
 
     # signals
     # signals to camera logic
@@ -225,6 +229,14 @@ class BasicGUI(GUIBase):
         self._mw.rotate_image_cw_MenuAction.setChecked(False)
         self._mw.rotate_image_ccw_MenuAction.setChecked(False)
         self._mw.rot180_image_MenuAction.setChecked(False)
+
+        # adapt the windows according to the setup
+        if self.setup == "Airyscan":
+            self._mw.camera_DockWidget.hide()
+            self._mw.camera_status_DockWidget.hide()
+            self._mw.toolBar.close()
+        elif self.setup == "RAMM":
+            self._mw.camera_status_DockWidget.hide()
 
         # Menu bar actions
         # File menu
@@ -329,6 +341,9 @@ class BasicGUI(GUIBase):
         self._mw.set_sensor_Action.setEnabled(True)
         self._mw.set_sensor_Action.setChecked(self.region_selector_enabled)
         self._mw.set_sensor_Action.triggered.connect(self.select_sensor_region)
+
+        # signals
+        self._mw.select_folder_pushButton.clicked.connect(self.load_saving_path_clicked)
 
         # signals to logic
         self.sigImageStart.connect(self._camera_logic.start_single_acquistion)
@@ -707,12 +722,23 @@ class BasicGUI(GUIBase):
         self._save_sd.foldername_LineEdit.setText(samplename)
 
     @QtCore.Slot()
+    def load_saving_path_clicked(self):
+        """ Callback of select_folder_pushButton. Opens a dialog to select the complete path to the folder where the
+        data will be saved.
+        """
+        default_path = self._mw.save_path_LineEdit.text()
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw, 'Select saving directory', default_path)
+        if this_dir:
+            self._mw.save_path_LineEdit.setText(this_dir)
+
+    @QtCore.Slot()
     def update_data(self):
         """ Callback of sigUpdateDisplay in the camera_logic module.
         Get the image data from the logic and show it in the image item.
         """
         image_data = self._camera_logic.get_last_image()
-        # handle the rotation that occurs due to the image formatting conventions (see also https://github.com/pyqtgraph/pyqtgraph/issues/315)
+        # handle the rotation that occurs due to the image formatting conventions
+        # (see also https://github.com/pyqtgraph/pyqtgraph/issues/315)
         # this could be improved by another method ?! though reversing the y axis did not work.
         image_data = np.rot90(image_data, 3)  # 90 deg clockwise
 
@@ -724,8 +750,8 @@ class BasicGUI(GUIBase):
         if self.rot180:
             image_data = np.rot90(image_data, 2)
         self.imageitem.setImage(image_data.T)
-        # transposing the data makes the rotations behave as they should when axisOrder row-major is used (set in initialization of ImageItem)
-        # see also https://github.com/pyqtgraph/pyqtgraph/issues/315
+        # transposing the data makes the rotations behave as they should when axisOrder row-major is used (set in
+        # initialization of ImageItem). See also https://github.com/pyqtgraph/pyqtgraph/issues/315
 
 # camera dockwidget toolbar --------------------------------------------------------------------------------------------
     @QtCore.Slot()
@@ -1171,11 +1197,13 @@ class BasicGUI(GUIBase):
     def disable_filter_selection(self):
         """ Disables filter combobox (for example as safety during tasks). """
         self._mw.filter_ComboBox.setDisabled(True)
+        sleep(0.5)
 
     @QtCore.Slot()
     def enable_filter_selection(self):
         """ Enables filter combobox. """
         self._mw.filter_ComboBox.setDisabled(False)
+        sleep(0.5)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Close function: Stop all continuous actions.

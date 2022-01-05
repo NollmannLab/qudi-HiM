@@ -70,6 +70,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('started Task')
 
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['cam'].stop_live_mode()
         self.ref['cam'].disable_camera_actions()
@@ -88,7 +90,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].close_default_session()
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].start_acquisition()
@@ -175,6 +176,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.file_format == 'fits':
                 metadata = self.get_fits_metadata()
                 self.ref['cam'].save_to_fits(self.complete_path, image_data, metadata)
+            elif self.file_format == 'npy':
+                self.ref['cam'].save_to_npy(self.complete_path, image_data)
+                metadata = self.get_metadata()
+                file_path = self.complete_path.replace('npy', 'yaml', 1)
+                self.save_metadata_file(metadata, file_path)
             else:   # use tiff as default format
                 self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
                 metadata = self.get_metadata()

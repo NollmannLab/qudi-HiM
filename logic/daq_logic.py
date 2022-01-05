@@ -7,7 +7,7 @@ except the laser control which is handled by a dedicated module (lasercontrol_lo
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
 Created on Wed March 24, 2021
 -----------------------------------------------------------------------------------
@@ -162,7 +162,7 @@ class DAQLogic(GenericLogic):
 # The following methods are defined in the hardware module to avoid having to deal with the corresponding taskhandle,
 # which would be the case if using the low-level methods above.
 # ----------------------------------------------------------------------------------------------------------------------
-# Methods for analog in/out channels controlling a piezo
+# Methods for analog in/out channels controlling a piezo - not used for the moment on any setup
 # ----------------------------------------------------------------------------------------------------------------------
 
     def read_piezo(self):
@@ -219,10 +219,35 @@ class DAQLogic(GenericLogic):
         self._daq.write_to_fluidics_pump_channel(voltage)
 
     def get_pressure(self):
-        """ Retrive the applied voltage of the peristaltic pump used for flowcontrol. It is stored under the name
+        """ Retrieve the applied voltage of the peristaltic pump used for flowcontrol. It is stored under the name
         _pressure although it is a voltage (for common user interface with system where a real readout of the
         pressure is possible).
 
         :return: float tension applied to the peristaltic pump
         """
         return self._pressure
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods specific to communication with the airyscan microscope
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def initialize_digital_channel(self, channel, d_type):
+        """ Initialize the digitial port for the daq. This step is specific to the mcc daq used on the Airy scan
+        setup
+
+        :param: float channel
+        :param: string type - define whether the selected port is used as an inout or output
+        """
+
+        if d_type is 'input':
+            self._daq.set_up_di_channel(channel)
+            # print(f'init channel {channel} as input')
+        else:
+            self._daq.set_up_do_channel(channel)
+            # print(f'init channel {channel} as output')
+
+    def initialize_ao_channels(self):
+        """ The ao channel used to control the lumencor laser source must all be set to +5V before starting an
+         acquisition
+         """
+        self._daq.init_trigger_laser_line()

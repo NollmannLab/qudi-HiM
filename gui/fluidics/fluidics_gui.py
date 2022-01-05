@@ -99,6 +99,7 @@ class FluidicsGUI(GUIBase):
         pos1_x_default: 12.0
         pos1_y_default: 4.5
         pos1_z_default: 89.0
+        exp_setup: 'RAMM'  # or 'Airyscan'
         connect:
             valve_logic: 'valve_logic'
             flowcontrol_logic: 'flowcontrol_logic'
@@ -114,6 +115,7 @@ class FluidicsGUI(GUIBase):
     pos1_x_default = ConfigOption('pos1_x_default', 0)
     pos1_y_default = ConfigOption('pos1_y_default', 0)
     pos1_z_default = ConfigOption('pos1_z_default', 0)
+    exp_setup = ConfigOption('exp_setup', '')
 
     # Signals
     # signals for valve settings
@@ -123,7 +125,8 @@ class FluidicsGUI(GUIBase):
     sigSetPressure = QtCore.Signal(float)
     sigStartFlowMeasure = QtCore.Signal()
     sigStopFlowMeasure = QtCore.Signal()
-    sigStartVolumeMeasurement = QtCore.Signal(int, int)
+    # sigStartVolumeMeasurement = QtCore.Signal(int, int)
+    sigStartVolumeMeasurement = QtCore.Signal(int)
     sigStopVolumeMeasurement = QtCore.Signal()
     sigStartRinsing = QtCore.Signal(int)
     sigStopRinsing = QtCore.Signal()
@@ -592,12 +595,13 @@ class FluidicsGUI(GUIBase):
             self.sigStopVolumeMeasurement.emit()
         else:
             target_volume = 500000  # np.inf  --> caused problems because the value is sometimes large negative !
-            sampling_interval = 1  # in seconds, fixed for measurement started from GUI
+            # sampling_interval = 1  # in seconds, fixed for measurement started from GUI
             self._mw.volume_measurement_Action.setText('Stop volume measurement')
-            self.sigStartVolumeMeasurement.emit(target_volume, sampling_interval)
+            self.sigStartVolumeMeasurement.emit(target_volume)
+            # self.sigStartVolumeMeasurement.emit(target_volume, sampling_interval)
 
-    @QtCore.Slot(int, int)
-    def update_volume_and_time(self, total_volume, time):
+    @QtCore.Slot(int, int, int, int)
+    def update_volume_and_time(self, total_volume, time, flow_rate, pressure):
         """ Callback of a signal emitted from logic informing the GUI about the new total volume
         and time since start of the measurement.
 
@@ -606,6 +610,8 @@ class FluidicsGUI(GUIBase):
         """
         self._mw.volume_LineEdit.setText(str(total_volume))
         self._mw.time_since_start_LineEdit.setText(str(time))  # change formatting: maybe in min:sec when > 60 s ??
+        self._mw.flowrate_LineEdit.setText(str(flow_rate))
+        self._mw.pressure_LineEdit.setText(str(pressure))
 
     @QtCore.Slot()
     def reset_volume_measurement_button(self):
@@ -629,10 +635,8 @@ class FluidicsGUI(GUIBase):
             self._mw.rinsing_time_SpinBox.setDisabled(False)
             self.sigStopRinsing.emit()
         else:
-            # make sure to set the RT rinsing valve to the correct position (pos 1)
-            if self._valve_logic.get_valve_position('b') != 1:
-                self._valve_logic.set_valve_position('b', 1)  # hardcoded version - needs modification in case another system is set up differently (i.e. if RT rinsing valve not as valve 'b', rinse needle not at pos 1)
-                self._valve_logic.wait_for_idle()
+            #  make sure to set the RT rinsing valve to the correct position, different cases for the experimental setups
+            self.set_valves_for_rinsing(self.exp_setup)
 
             # handle the start of rinsing
             rinsing_time = self._mw.rinsing_time_SpinBox.value()
@@ -648,6 +652,32 @@ class FluidicsGUI(GUIBase):
         self._mw.rinsing_Action.setChecked(False)
         self._mw.rinsing_time_SpinBox.setDisabled(False)
 
+    def set_valves_for_rinsing(self, exp_setup):
+        """ Helper function when rinsing is started via GUI. Verify if the valves are positioned correctly
+        for the respective setup, and modify if necessary, to avoid injecting air or injecting in a wrong tube.
+        As the exact steps depend on the experimental setup, this information is retrieved as config option.
+        If deployed on new setup, add the respective valve positioning sequence.
+
+        :param: str exp_setup: identifier of the experimental setup ('RAMM' or 'Airyscan' are supported currently)
+        :return: None
+        """
+        if exp_setup == 'RAMM':
+            if self._valve_logic.get_valve_position('b') != 1:
+                self._valve_logic.set_valve_position('b', 1)
+                self._valve_logic.wait_for_idle()
+
+        elif exp_setup == 'Airyscan':
+            if self._valve_logic.get_valve_position('a') != 3:
+                self._valve_logic.set_valve_position('a', 3)
+                self._valve_logic.wait_for_idle()
+
+            if self._valve_logic.get_valve_position('b') != 2:
+                self._valve_logic.set_valve_position('b', 2)
+                self._valve_logic.wait_for_idle()
+
+        else:
+            pass
+
 # Disable/Enable user interface actions --------------------------------------------------------------------------------
     @QtCore.Slot()
     def disable_flowcontrol_buttons(self):
@@ -657,6 +687,7 @@ class FluidicsGUI(GUIBase):
         self._mw.set_pressure_Action.setDisabled(True)
         self._mw.volume_measurement_Action.setDisabled(True)
         self._mw.rinsing_Action.setDisabled(True)
+        self._mw.start_flow_measurement_Action.setDisabled(True)
 
     @QtCore.Slot()
     def enable_flowcontrol_buttons(self):
@@ -664,6 +695,7 @@ class FluidicsGUI(GUIBase):
         self._mw.set_pressure_Action.setDisabled(False)
         self._mw.volume_measurement_Action.setDisabled(False)
         self._mw.rinsing_Action.setDisabled(False)
+        self._mw.start_flow_measurement_Action.setDisabled(False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Slots related to the valve control dockwidget

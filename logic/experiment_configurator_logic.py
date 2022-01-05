@@ -224,50 +224,84 @@ class ExpConfigLogic(GenericLogic):
             if experiment == 'Multicolor imaging PALM':
                 if not filename:
                     filename = 'multicolor_imaging_task_PALM.yml'
-                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path', 'imaging_sequence', 'file_format']
+                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path',
+                                   'imaging_sequence', 'file_format']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Multicolor scan PALM':
                 if not filename:
                     filename = 'multicolor_scan_task_PALM.yml'
-                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane']
+                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path',
+                                   'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Multicolor scan RAMM':
                 if not filename:
                     filename = 'multicolor_scan_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane']
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'num_z_planes', 'z_step', 'centered_focal_plane']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Multicolor scan Airyscan':
+                if not filename:
+                    filename = 'multicolor_scan_task_AIRYSCAN.yml'
+                keys_to_extract = ['imaging_sequence', 'num_z_planes']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'ROI multicolor scan PALM':
                 if not filename:
                     filename = 'ROI_multicolor_scan_task_PALM.yml'
-                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path']
+                keys_to_extract = ['sample_name', 'filter_pos', 'exposure', 'gain', 'num_frames', 'save_path',
+                                   'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
+                                   'roi_list_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'ROI multicolor scan RAMM':
                 if not filename:
                     filename = 'ROI_multicolor_scan_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'dapi', 'rna', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'roi_list_path', 'centered_focal_plane']
+                keys_to_extract = ['sample_name', 'dapi', 'rna', 'exposure', 'save_path', 'file_format',
+                                   'imaging_sequence', 'num_z_planes', 'z_step', 'roi_list_path',
+                                   'centered_focal_plane']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'ROI multicolor scan Airyscan':
+                if not filename:
+                    filename = 'ROI_multicolor_scan_task_AIRYSCAN.yml'
+                keys_to_extract = ['sample_name', 'dapi', 'rna', 'save_path', 'imaging_sequence', 'num_z_planes',
+                                   'roi_list_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fluidics RAMM':
                 if not filename:
                     filename = 'fluidics_task_RAMM.yml'
                 keys_to_extract = ['injections_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fluidics Airyscan':
                 if not filename:
                     filename = 'fluidics_task_AIRYSCAN.yml'
                 keys_to_extract = ['injections_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Hi-M RAMM':
                 if not filename:
                     filename = 'hi_m_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path', 'dapi_path']
-                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
-
-            elif experiment == 'Hi-M Airyscan':
-                if not filename:
-                    filename = 'hi_m_task_airyscan.yml'
-                    keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
                                    'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path',
                                    'dapi_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hi-M Airyscan Lumencor':
+                if not filename:
+                    filename = 'hi_m_task_AIRYSCAN.yml'
+                    keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
+                                       'injections_path', 'dapi_path']
+                    config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hi-M Airyscan Confocal':
+                if not filename:
+                    filename = 'hi_m_task_AIRYSCAN_confocal.yml'
+                    keys_to_extract = ['sample_name', 'save_path', 'roi_list_path', 'injections_path', 'dapi_path']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Photobleaching RAMM':
@@ -278,20 +312,22 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Fast timelapse RAMM':
                 if not filename:
                     filename = 'fast_timelapse_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations']
-
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Timelapse RAMM':
                 if not filename:
                     filename = 'timelapse_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence', 'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Timelapse PALM':
                 if not filename:
                     filename = 'timelapse_task_PALM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'gain', 'save_path', 'file_format', 'imaging_sequence', 'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
+                keys_to_extract = ['sample_name', 'exposure', 'gain', 'save_path', 'file_format', 'imaging_sequence',
+                                   'centered_focal_plane', 'roi_list_path', 'num_iterations', 'time_step']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             # add here all additional experiments and select the relevant keys
@@ -304,6 +340,7 @@ class ExpConfigLogic(GenericLogic):
 
         config_dict['experiment'] = experiment
         complete_path = os.path.join(path, filename)
+        print(complete_path)
         with open(complete_path, 'w') as file:
             yaml.safe_dump(config_dict, file, default_flow_style=False)
         self.log.info('Saved experiment configuration to {}'.format(complete_path))
@@ -337,7 +374,9 @@ class ExpConfigLogic(GenericLogic):
                     intensity = item['intensity']
                     num_z_planes = item['num_z_planes']
                     z_step = item['z_step']
-                    self.img_sequence_model_timelapse_ramm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step})
+                    self.img_sequence_model_timelapse_ramm.items.append(
+                        {'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes,
+                         'z_step': z_step})
 
             elif self.config_dict['experiment'] == 'Timelapse PALM':
                 self.sigUpdateListModel.emit(2)
@@ -349,7 +388,9 @@ class ExpConfigLogic(GenericLogic):
                     num_z_planes = item['num_z_planes']
                     z_step = item['z_step']
                     filter_pos = item['filter_pos']
-                    self.img_sequence_model_timelapse_palm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step, 'filter_pos': filter_pos})
+                    self.img_sequence_model_timelapse_palm.items.append(
+                        {'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes,
+                         'z_step': z_step, 'filter_pos': filter_pos})
 
             else:
                 self.sigUpdateListModel.emit(0)
@@ -547,11 +588,14 @@ class ExpConfigLogic(GenericLogic):
         :return: None
         """
         if self.is_timelapse_ramm:
-            self.img_sequence_model_timelapse_ramm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step})
+            self.img_sequence_model_timelapse_ramm.items.append(
+                {'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step})
             self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_ramm.items
 
         elif self.is_timelapse_palm:
-            self.img_sequence_model_timelapse_palm.items.append({'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step, 'filter_pos': filter_pos})
+            self.img_sequence_model_timelapse_palm.items.append(
+                {'lightsource': lightsource, 'intensity': intensity, 'num_z_planes': num_z_planes, 'z_step': z_step,
+                 'filter_pos': filter_pos})
             self.config_dict['imaging_sequence'] = self.img_sequence_model_timelapse_palm.items
 
         else:

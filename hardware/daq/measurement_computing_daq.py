@@ -6,7 +6,7 @@ This file contains a class for the Measurement Computing DAQ.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F.Barho / JB.Fiche
 
 Created on Wed June 6 2021
 -----------------------------------------------------------------------------------
@@ -28,18 +28,17 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import numpy as np
-from time import sleep
 from mcculw import ul
-from mcculw.enums import ULRange, DigitalIODirection, InterfaceType
-from mcculw.ul import ULError
+from mcculw.enums import DigitalIODirection, InterfaceType  # ULRange,
+# from mcculw.ul import ULError
 from mcculw.device_info import DaqDeviceInfo
 
 from core.module import Base
 from core.configoption import ConfigOption
+from interface.lasercontrol_interface import LasercontrolInterface
 
 
-class MccDAQ(Base):
+class MccDAQ(Base, LasercontrolInterface):
     """ Class representing the measurement computing DAQ.
 
     Example config for copy-paste:
@@ -47,21 +46,24 @@ class MccDAQ(Base):
             module.Class: 'daq.measurement_computing_daq.MccDAQ'
             rinsing_pump_channel: 0
             fluidics_pump_channel: 1
+            ...
 
     """
 
     # config options
-    # ao channels
+    # ao channels for the fluidics
     rinsing_pump_channel = ConfigOption('rinsing_pump_channel', None, missing='warn')
     fluidics_pump_channel = ConfigOption('fluidics_pump_channel', None, missing='warn')
+
+    # parameters for the laser control
+    _wavelengths = ConfigOption('wavelengths', None)
+    _laser_write_ao_channels = ConfigOption('laser_ao_channels', None)
+    _ao_voltage_range = ConfigOption('ao_voltage_range', default=(0, 5))
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.board_num = None
         self.port = None
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
 
     def on_activate(self):
         """ Initialization steps when module is called.
@@ -136,27 +138,23 @@ class MccDAQ(Base):
             raise Exception('Error: The DAQ device does not support '
                             'analog output')
         ao_info = daq_dev_info.get_ao_info()
-        print(ao_info.supported_ranges)
         ao_range = ao_info.supported_ranges[0]
-        print(ao_range)
-
-        print('Outputting', voltage, 'Volts to channel', channel)
         # Send the value to the device (optional parameter omitted)
         ul.v_out(self.board_num, channel, ao_range, voltage)
 
 # Analog input channels ------------------------------------------------------------------------------------------------
     # no ai channels for this daq
-    def read_ai_channel(self, channel):
-        """ Read a value from an analog input channel.
-
-        :param: int channel: identifier number of the requested channel
-
-        :return: float data: value read from the ai channel
-        """
-        daq_dev_info = DaqDeviceInfo(self.board_num)
-        if not daq_dev_info.supports_analog_input:
-            raise Exception('Error: The DAQ device does not support '
-                            'analog input')
+    # def read_ai_channel(self, channel):
+    #     """ Read a value from an analog input channel.
+    #
+    #     :param: int channel: identifier number of the requested channel
+    #
+    #     :return: float data: value read from the ai channel
+    #     """
+    #     daq_dev_info = DaqDeviceInfo(self.board_num)
+    #     if not daq_dev_info.supports_analog_input:
+    #         raise Exception('Error: The DAQ device does not support '
+    #                         'analog input')
 
 # Digital output channels ----------------------------------------------------------------------------------------------
     def set_up_do_channel(self, channel_number):
@@ -180,7 +178,7 @@ class MccDAQ(Base):
 
         :return: None
         """
-        print('Setting', self.port.type.name, channel, 'to', digital_write)
+        # print('Setting', self.port.type.name, channel, 'to', digital_write)
         # Output the value to the channel (bit)
         # ul.d_out(self.board_num, port.type, digital_write)
         ul.d_bit_out(self.board_num, self.port.type, channel, digital_write)
@@ -208,12 +206,45 @@ class MccDAQ(Base):
         bit_value = ul.d_bit_in(self.board_num, self.port.type, channel)
         return bit_value
 
-    def test_function(self):
-        self.set_up_do_channel(0)  # configure bit 0 as output
-        self.set_up_di_channel(2)  # configure bit 2 as input
+# ----------------------------------------------------------------------------------------------------------------------
+# Lasercontrol Interface functions
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def apply_voltage(self, voltage, channel):
+        """ Writes a voltage to the specified channel.
+
+        :param: float voltage: voltage value to be applied
+        :param: str channel: analog output line such as /Dev1/AO0
+
+        :return: None
+        """
+        self.write_to_ao_channel(self.laser_ao_taskhandles[channel], voltage)
+
+    def get_dict(self):
+        """ Retrieves the channel name and the voltage range for each analog output for laser control from the
+        configuration file and associates it to the laser wavelength which is controlled by this channel.
+
+        Make sure that the config contains all the necessary elements.
+
+        :return: dict laser_dict
+        """
+        laser_dict = {}
+
+        for i, item in enumerate(
+                self._wavelengths):  # use any of the lists retrieved as config option, just to have an index variable
+            label = 'laser{}'.format(i + 1)  # create a label for the i's element in the list starting from 'laser1'
+
+            dic_entry = {'label': label,
+                         'wavelength': self._wavelengths[i],
+                         'channel': self._laser_write_ao_channels[i],
+                         'ao_voltage_range': self._ao_voltage_range}
+
+            laser_dict[dic_entry['label']] = dic_entry
+
+        return laser_dict
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Various functionality of DAQ
+# Various functionality of DAQ for the Airy-scan microscope
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Needle rinsing pump---------------------------------------------------------------------------------------------------
@@ -231,26 +262,34 @@ class MccDAQ(Base):
 
 # Flowcontrol pump------------------------------------------------------------------------------------------------------
     def write_to_fluidics_pump_channel(self, voltage):
+        """ Control the pump voltage
+
+        :param: float voltage: target voltage to apply to the channel
+
+        :return: None
+        """
         if 0 <= voltage <= 10:  # replace by reading limits from device
             self.write_to_ao_channel(voltage, self.fluidics_pump_channel)
         else:
             self.log.warning('Voltage not in allowed range.')
 
+# Send trigger to laser source celesta ---------------------------------------------------------------------------------
+    def init_trigger_laser_line(self):
+        for channel in self._laser_write_ao_channels:
+            if channel is not None:
+                self.write_to_ao_channel(0, channel)
 
 
-if __name__ == '__main__':
-    mcc_daq = MccDAQ()
-    mcc_daq.on_activate()
+# if __name__ == '__main__':
+    # mcc_daq = MccDAQ()
+    # print(mcc_daq._wavelengths)
+    # mcc_daq.on_activate()
     # mcc_daq.write_to_ao_channel(0, 0)
-    mcc_daq.write_to_pump_ao_channel(1)
-    sleep(2)
-    mcc_daq.write_to_pump_ao_channel(0)
-
-    mcc_daq.write_to_fluidics_pump_ao_channel(1)
-    sleep(2)
-    mcc_daq.write_to_fluidics_pump_ao_channel(0)
-
-    mcc_daq.on_deactivate()
+    # mcc_daq.set_up_do_channel(2)
+    # mcc_daq.write_to_do_channel(2, 0, 1)
+    # sleep(1)
+    # mcc_daq.write_to_do_channel(2, 0, 0)
+    # mcc_daq.on_deactivate()
     # mcc_daq.config_first_detected_device(0)
     # mcc_daq.read_ai()
     # mcc_daq.read_di()

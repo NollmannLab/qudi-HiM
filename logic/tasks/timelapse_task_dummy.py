@@ -72,6 +72,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('started Task')
 
+        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
@@ -93,7 +95,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.directory = self.create_directory(self.save_path)
 
         # prepare the camera
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
         num_z_planes_total = sum(self.imaging_sequence[i]['num_z_planes'] for i in range(len(self.imaging_sequence)))  # get the total number of planes per cycle
         self.num_frames = len(self.roi_names) * num_z_planes_total
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)

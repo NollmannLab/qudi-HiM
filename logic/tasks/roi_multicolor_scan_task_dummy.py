@@ -4,13 +4,14 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains a task to perform a multicolor scan on RAMM setup iterating over a list of ROIs.
+This module contains a simulation of a task to perform a multicolor scan as on the RAMM setup
+iterating over a list of ROIs.
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
 in each plane of the stack.)
 
 @author: F. Barho
 
-Created on Wed March 30 2021
+Created on Wed Sept 8 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -48,7 +49,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     Config example pour copy-paste:
 
     ROIMulticolorScanTask:
-        module: 'roi_multicolor_scan_task_RAMM'
+        module: 'roi_multicolor_scan_task_dummy'
         needsmodules:
             laser: 'lasercontrol_logic'
             bf: 'brightfield_logic'
@@ -57,7 +58,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             focus: 'focus_logic'
             roi: 'roi_logic'
         config:
-            path_to_user_config: 'C:/Users/sCMOS-1/qudi_files/qudi_task_config_files/ROI_multicolor_scan_task_RAMM.yml'
+            path_to_user_config: '/home/barho/qudi_files/qudi_task_config_files/ROI_multicolor_scan_task_RAMM.yml'
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -67,7 +68,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
-        print("Path to user config file : {}".format(self.user_config_path))
         self.roi_counter = None
         self.directory = None
         self.user_param_dict = {}
@@ -92,9 +92,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
-        # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
-
         # read all user parameters from config
         self.load_user_parameters()
 
@@ -104,20 +101,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
         if self.is_dapi:
             imag_dict = {'imaging_sequence': self.imaging_sequence}
-            dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
+            dapi_channel_info_path = os.path.join(self.directory, 'dapi_channel_info.yml')
             write_dict_to_file(dapi_channel_info_path, imag_dict)
-
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
 
         # prepare the camera
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-
-        # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
-        self.ref['laser'].start_task_session(bitfile)
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
 
         # initialize a counter to iterate over the ROIs
         self.roi_counter = 0
@@ -140,36 +129,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
         self.ref['roi'].stage_wait_for_idle()
 
-        # autofocus
-        self.ref['focus'].start_search_focus()
-        # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
-        ready = self.ref['focus']._stage_is_positioned
-        counter = 0
-        while not ready:
-            counter += 1
-            sleep(0.1)
-            ready = self.ref['focus']._stage_is_positioned
-            if counter > 500:
-                break
-
-        # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
-        self.ref['focus'].do_piezo_position_correction()
-        busy = True
-        while busy:
-            sleep(0.5)
-            busy = self.ref['focus'].piezo_correction_running
-
+        # # autofocus
+        # self.ref['focus'].start_search_focus()
+        # for simulatied task only
+        reference_position = self.ref['focus'].get_position() + np.random.normal()
+        self.ref['focus'].go_to_position(reference_position)
         start_position = self.calculate_start_position(self.centered_focal_plane)
 
         # --------------------------------------------------------------------------------------------------------------
         # imaging sequence
         # --------------------------------------------------------------------------------------------------------------
-        # prepare the daq: set the digital output to 0 before starting the task
-        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
-        self.ref['cam'].start_acquisition()
+        # self.ref['cam'].stop_acquisition()  # for safety
+        # self.ref['cam'].start_acquisition()
 
         # initialize arrays to save the target and current z positions
         z_target_positions = []
@@ -189,48 +161,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             z_target_positions.append(position)
             z_actual_positions.append(cur_pos)
 
-            # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([1], dtype=np.uint8))
-            sleep(0.005)
-            self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1, np.array([0], dtype=np.uint8))
-
-            # wait for signal from FPGA to DAQ ('acquisition ready')
-            fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-            t0 = time()
-
-            while not fpga_ready:
-                sleep(0.001)
-                fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
-                t1 = time() - t0
-                if t1 > 1:  # for safety: timeout if no signal received within 1 s
-                    self.log.warning('Timeout occurred')
-                    break
-
         self.ref['focus'].go_to_position(start_position)
 
         # --------------------------------------------------------------------------------------------------------------
         # data saving
         # --------------------------------------------------------------------------------------------------------------
-        image_data = self.ref['cam'].get_acquired_data()
+        image_data = np.random.normal(size=(self.num_frames, 125, 125))   # self.ref['cam'].get_acquired_data()
 
         if self.file_format == 'fits':
             metadata = self.get_fits_metadata()
             self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
-        elif self.file_format == 'npy':
-            self.ref['cam'].save_to_npy(self.complete_path, image_data)
-            metadata = self.get_metadata()
-            file_path = self.complete_path.replace('tif', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
         else:  # use tiff as default format
             self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
             metadata = self.get_metadata()
-            file_path = cur_save_path.replace('npy', 'yaml', 1)
+            file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
-
-        # save the projection of the acquired stack if DAPI was checked (for experiment tracking option)
-        if self.is_dapi:
-            self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
 
         # save file with z positions (same procedure for either file format)
         file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
@@ -263,9 +208,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].end_task_session()
         self.ref['laser'].restart_default_session()
         self.log.info('restarted default session')
-
-        # reset stage velocity to default
-        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
 
         # enable gui actions
         # roi gui
@@ -402,9 +344,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # special format if option dapi or rna checked in experiment configurator
         if self.is_dapi:
-            foldername = f'{prefix}_HiM_{self.sample_name}_DAPI'
+            foldername = f'{prefix}_HiM_{self.sample_name}_dapi'
         elif self.is_rna:
-            foldername = f'{prefix}_HiM_{self.sample_name}_RNA'
+            foldername = f'{prefix}_HiM_{self.sample_name}_rna'
         else:
             foldername = f'{prefix}_Scan_{self.sample_name}'
 
@@ -442,9 +384,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
 
         if self.is_dapi:
-            file_name = f'scan_{self.prefix}_DAPI_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_dapi_{roi_number_inv}.{self.file_format}'
         elif self.is_rna:
-            file_name = f'scan_{self.prefix}_RNA_{roi_number_inv}.{self.file_format}'
+            file_name = f'scan_{self.prefix}_rna_{roi_number_inv}.{self.file_format}'
         else:
             file_name = f'scan_{self.prefix}_{roi_number_inv}.{self.file_format}'
 
@@ -462,24 +404,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         metadata = {}
         metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
+        metadata['Exposure time (s)'] = self.exposure
         metadata['Scan step length (um)'] = self.z_step
         metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
         metadata['Number laserlines'] = self.num_laserlines
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
-
-        # add translation stage position
-        metadata['x position'] = float(self.ref['roi'].stage_position[0])
-        metadata['y position'] = float(self.ref['roi'].stage_position[1])
-
-        # add autofocus information :
-        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
-        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
-        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
-        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
-
+            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
+        # metadata['x position'] = self.ref['roi'].stage_position[0]
+        # metadata['y position'] = self.ref['roi'].stage_position[1]
+        # pixel size ???
         return metadata
 
     def get_fits_metadata(self):
@@ -500,13 +434,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
         # metadata['ROI001'] = (self.ref['roi'].get_roi_position('ROI001'), 'ROI 001 position')
         # pixel size
-
-        # add autofocus information :
-        metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
-        metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
-        metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
-
         return metadata
 
     def save_metadata_file(self, metadata, path):
@@ -518,20 +445,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(path, 'w') as outfile:
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for acquisition tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)

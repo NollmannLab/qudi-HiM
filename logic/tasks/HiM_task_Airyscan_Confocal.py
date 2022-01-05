@@ -4,11 +4,11 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains the Hi-M Experiment for the RAMM setup.
+This module contains the Hi-M Experiment for the Airyscan experimental setup using confocal configuration.
 
-@author: F. Barho
+@author: F. Barho, JB. Fiche
 
-Created on Wed March 30 2021
+Created on Thu Aug 26 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -33,32 +33,33 @@ import numpy as np
 import pandas as pd
 import os
 import time
+from time import sleep
 from datetime import datetime
-from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, create_path_for_injection_data
+from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
+from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task performs a Hi-M experiment on the RAMM setup.
+    """ This task performs a Hi-M experiment on the Airyscan setup in epifluorescence configuration using the
+     lumencor celesta lightsource.
 
     Config example pour copy-paste:
-
-    HiMTask:
-        module: 'HiM_task_RAMM'
+    HiMTask_confocal:
+        module: 'HiM_task_Airyscan_Confocal'
         needsmodules:
-            laser: 'lasercontrol_logic'
-            bf: 'brightfield_logic'
-            cam: 'camera_logic'
-            daq: 'nidaq_logic'
-            focus: 'focus_logic'
+            daq : 'daq_logic'
             roi: 'roi_logic'
             valves: 'valve_logic'
             pos: 'positioning_logic'
             flow: 'flowcontrol_logic'
         config:
-            path_to_user_config: 'C:/Users/sCMOS-1/qudi_files/qudi_task_config_files/hi_m_task_RAMM.yml'
+            path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN_confocal.yml'
+            IN7_ZEN : 0
+            OUT7_ZEN : 1
+            OUT8_ZEN : 3
+            camera_global_exposure : 2
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -68,31 +69,39 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
+        self.directory = None
+        self.user_param_dict = {}
+        self.sample_name = None
         self.probe_counter = None
         self.user_param_dict = {}
         self.logging = True
+        self.save_path = None
+        self.roi_list_path = None
+        self.roi_names = []
+        self.IN7_ZEN = self.config['IN7_ZEN']
+        self.OUT7_ZEN = self.config['OUT7_ZEN']
+        self.OUT8_ZEN = self.config['OUT8_ZEN']
+        self.log_folder = None
+        self.default_info_path = None
+        self.status_dict_path = None
+        self.log_path = None
+        self.status_dict = {}
+        self.start = None
+        self.injections_path = None
+        self.hybridization_list = []
+        self.photobleaching_list = []
+        self.buffer_dict = {}
+        self.probe_list = []
+        self.prefix = None
+        self.probe_dict = {}
 
     def startTask(self):
         """ """
         self.start = time.time()
 
-        self.log.info('started Task')
-
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
-
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
         self.ref['roi'].disable_roi_actions()
-
-        self.ref['cam'].stop_live_mode()
-        self.ref['cam'].disable_camera_actions()
-
-        self.ref['laser'].stop_laser_output()
-        self.ref['bf'].led_off()
-        self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
-
-        self.ref['focus'].stop_autofocus()
-        self.ref['focus'].disable_focus_actions()
 
         self.ref['valves'].disable_valve_positioning()
         self.ref['flow'].disable_flowcontrol_actions()
@@ -100,12 +109,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
-            self.log.warning('No position 1 defined for injections. Experiment can not be started. Please define position 1!')
+            self.log.warning(
+                'No position 1 defined for injections. Experiment can not be started. Please define position 1!')
             return
 
-        if (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
-            self.log.warning('Autofocus is not calibrated. Experiment can not be started. Please calibrate autofocus!')
-            return
+        # Send message that initialization is complete and the experiment is starting
+        self.log.info('HiM experiment is starting ...')
 
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
@@ -113,8 +122,31 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # read all user parameters from config
         self.load_user_parameters()
 
+        # create the daq channels
+        self.ref['daq'].initialize_digital_channel(self.OUT7_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.OUT8_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.IN7_ZEN, 'output')
+
+        # indicate to the user the parameters he should use for zen configuration
+        self.log.warning('############ ZEN PARAMETERS ############')
+        self.log.warning('This task is compatible with experiment ZEN/HiM_confocal')
+        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(
+            len(self.probe_list) * len(self.roi_names)))
+        self.log.warning('Select the acquisition block and hit "Start Experiment"')
+        self.log.warning('########################################')
+
+        # wait for the trigger from ZEN indicating that the experiment is starting
+        trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
+        while trigger == 0 and not self.aborted:
+            sleep(.1)
+            trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
+
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
+
+        # # save the acquisition parameters
+        # metadata = self.get_metadata()
+        # self.save_metadata_file(metadata, os.path.join(self.directory, "parameters.yml"))
 
         # log file paths -----------------------------------------------------------------------------------------------
         self.log_folder = os.path.join(self.directory, 'hi_m_log')
@@ -139,25 +171,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # update the default_info file that is necessary to run the bokeh app
         if self.logging:
-            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+            hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+            photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
-            update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
-                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
+            update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
+                                self.probe_dict, last_roi_number, hybr_list, photobl_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
-
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-
-        # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
-        self.ref['laser'].start_task_session(bitfile)
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
-                                                              self.num_laserlines, self.exposure)
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
 
@@ -165,15 +185,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-        # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
-        if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
+
+        # go directly to cleanupTask if position 1 is not defined or ZEN ready trigger not received
+        if not self.ref['pos'].origin:
             return False
 
         if not self.aborted:
             now = time.time()
-            # info message
+            # info message indicating the probe
             self.probe_counter += 1
-            self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter-1][1]}')
+            probe_name = self.probe_list[self.probe_counter - 1][1]
+            self.log.info(f'Probe number {self.probe_counter}: {probe_name}')
 
             if self.logging:
                 self.status_dict['cycle_no'] = self.probe_counter
@@ -183,13 +205,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # position the needle in the probe
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
-            self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
             while self.ref['pos'].moving is True:
-                time.sleep(0.1)
+                sleep(0.1)
 
-            # keep in memory the position of the needle
-            needle_pos = self.probe_list[self.probe_counter-1][0]
-            rt_injection = 0
+            # disable again the move stage button
+            self.ref['pos'].disable_positioning_actions()
+
+        # keep in memory the position of the needle
+        needle_pos = self.probe_list[self.probe_counter - 1][0]
+        rt_injection = 0
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
@@ -202,9 +226,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
             # position the valves for hybridization sequence
-            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: inject probe
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
+            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: inject probe
             self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the hybridization sequence
@@ -223,28 +245,26 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
-                    # for the RAMM, the needle is connected to valve position 7. If this valve is called more than once,
-                    # the needle will be moved to the next position. The procedure was added to make the DAPI injection
-                    # easier.
-                    if rt_injection == 0 and valve_pos == 7:
+                    # for the Airyscan, the needle is connected to valve position 3. If this valve is called more than
+                    # once, the needle will move to the next position. The procedure was added to make the DAPI
+                    # injection easier.
+                    print('Valve position : {}'.format(valve_pos))
+                    if rt_injection == 0 and valve_pos == 3:
                         rt_injection += 1
                         needle_pos += 1
-                    elif rt_injection > 0 and valve_pos == 7:
-                        self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: close
-                        self.ref['valves'].wait_for_idle()
+                    elif rt_injection > 0 and valve_pos == 3:
                         self.ref['pos'].start_move_to_target(needle_pos)
+                        while self.ref['pos'].moving is True:
+                            sleep(0.1)
                         rt_injection += 1
                         needle_pos += 1
-                        while self.ref['pos'].moving is True:
-                            time.sleep(0.1)
-                        self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
-                        self.ref['valves'].wait_for_idle()
+                        self.ref['pos'].disable_positioning_actions()
 
                     # pressure regulation
                     # create lists containing pressure and volume data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [0]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
@@ -271,15 +291,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     # save pressure and volume data to file
                     complete_path = create_path_for_injection_data(self.directory,
-                                                                   self.probe_list[self.probe_counter - 1][1],
+                                                                   probe_name,
                                                                    'hybridization', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
                     self.log.info(f'Incubation time.. {t} s')
-                    self.ref['valves'].set_valve_position('c', 1)  # stop flux
-                    self.ref['valves'].wait_for_idle()
 
                     # allow abort by splitting the waiting time into small intervals of 30 s
                     num_steps = t // 30
@@ -287,27 +305,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     for i in range(num_steps):
                         if not self.aborted:
                             time.sleep(30)
-                            print("Elapsed time : {}s".format((i+1)*30))
-                    time.sleep(remainder)
+                    if not self.aborted:
+                        time.sleep(remainder)
 
-                    self.ref['valves'].set_valve_position('c', 2)  # open flux again
-                    self.ref['valves'].wait_for_idle()
                     self.log.info('Incubation time finished')
 
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
 
             # set valves to default positions
-            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
-            self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
             self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
+            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Inject probe
             self.ref['valves'].wait_for_idle()
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
-        # Hybridization finished ---------------------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
@@ -319,123 +332,43 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            for item in self.roi_names:
+            # initialize roi counter and start the while loop over all the roi
+            for roi in self.roi_names:
+
                 if self.aborted:
                     break
 
-                # create the save path for each roi --------------------------------------------------------------------
-                cur_save_path = self.get_complete_path(self.directory, item, self.probe_list[self.probe_counter - 1][1])
+                # define the name of the file according to the roi number and cycle
+                scan_name = self.file_name(roi, probe_name)
 
                 # move to roi ------------------------------------------------------------------------------------------
                 self.ref['roi'].active_roi = None
-                self.ref['roi'].set_active_roi(name=item)
+                self.ref['roi'].set_active_roi(name=roi)
                 self.ref['roi'].go_to_roi_xy()
-                self.log.info('Moved to {}'.format(item))
+                self.log.info('Moved to {}'.format(roi))
                 self.ref['roi'].stage_wait_for_idle()
+
                 if self.logging:
-                    add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
+                    add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi}')
 
-                # autofocus --------------------------------------------------------------------------------------------
-                self.ref['focus'].start_search_focus()
-                # need to ensure that focus is stable here.
-                ready = self.ref['focus']._stage_is_positioned
-                counter = 0
-                while not ready:
-                    counter += 1
-                    time.sleep(0.1)
-                    ready = self.ref['focus']._stage_is_positioned
-                    if counter > 500:
-                        break
+                # --------------------------------------------------------------------------------------------------------------
+                # acquisition block (ZEN)
+                # --------------------------------------------------------------------------------------------------------------
 
-                # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50) ---------------
-                self.ref['focus'].do_piezo_position_correction()
-                busy = True
-                while busy:
-                    time.sleep(0.5)
-                    busy = self.ref['focus'].piezo_correction_running
+                # send trigger to ZEN to start the autofocus search and the acquisition
+                sleep(5)
+                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+                sleep(0.1)
+                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
-                reference_position = self.ref['focus'].get_position()  # save it to go back to this plane after imaging
-                start_position = self.calculate_start_position(self.centered_focal_plane)
+                # wait for ZEN trigger indicating the task is completed
+                trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+                while trigger == 0 and not self.aborted:
+                    sleep(.1)
+                    trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
-                # imaging sequence -------------------------------------------------------------------------------------
-                # prepare the daq: set the digital output to 0 before starting the task
-                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-                                                    np.array([0], dtype=np.uint8))
-
-                # start camera acquisition
-                self.ref['cam'].stop_acquisition()   # for safety
-                self.ref['cam'].start_acquisition()
-
-                # initialize arrays to save the target and current z positions
-                z_target_positions = []
-                z_actual_positions = []
-
-                print(f'{item}: performing z stack..')
-
-                # iterate over all planes in z
-                for plane in tqdm(range(self.num_z_planes)):
-
-                    # position the piezo
-                    position = start_position + plane * self.z_step
-                    self.ref['focus'].go_to_position(position)
-                    # print(f'target position: {position} um')
-                    time.sleep(0.03)
-                    cur_pos = self.ref['focus'].get_position()
-                    # print(f'current position: {cur_pos} um')
-                    z_target_positions.append(position)
-                    z_actual_positions.append(cur_pos)
-
-                    # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-                                                        np.array([1], dtype=np.uint8))
-                    time.sleep(0.005)
-                    self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-                                                        np.array([0], dtype=np.uint8))
-
-                    # wait for signal from FPGA to DAQ ('acquisition ready')
-                    fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-                    t0 = time.time()
-
-                    while not fpga_ready:
-                        time.sleep(0.001)
-                        fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
-                        t1 = time.time() - t0
-                        if t1 > 1:  # for safety: timeout if no signal received within 1 s
-                            self.log.warning('Timeout occurred')
-                            break
-
-                self.ref['focus'].go_to_position(reference_position)
-
-                # data handling ----------------------------------------------------------------------------------------
-                image_data = self.ref['cam'].get_acquired_data()
-
-                if self.file_format == 'fits':
-                    metadata = self.get_fits_metadata()
-                    self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
-                elif self.file_format == 'npy':
-                    self.ref['cam'].save_to_npy(cur_save_path, image_data)
-                    metadata = self.get_metadata()
-                    file_path = cur_save_path.replace('npy', 'yaml', 1)
-                    self.save_metadata_file(metadata, file_path)
-                else:  # use tiff as default format
-                    self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
-                    metadata = self.get_metadata()
-                    file_path = cur_save_path.replace('tif', 'yaml', 1)
-                    self.save_metadata_file(metadata, file_path)
-
-                # calculate and save projection for bokeh --------------------------------------------------------------
-                #start = time.time()
-                self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
-                #stop = time.time()
-                #print("Projection calculation time : {}".format(stop-start))
-
-                # save file with z positions (same procedure for either file format)
-                file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
-                save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
-
-                if self.logging:  # to modify: check if data saved correctly before writing this log entry
-                    add_log_entry(self.log_path, self.probe_counter, 2, 'Image data saved', 'info')
+                # save the file name
+                self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -443,7 +376,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
-        # Imaging (for all ROIs) finished ------------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
@@ -454,16 +386,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.status_dict['process'] = 'Photobleaching'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
-
-            # rinse needle in parallel with photobleaching
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
-            self.ref['valves'].wait_for_idle()
-            self.ref['daq'].start_rinsing(60)
-            start_rinsing_time = time.time()
-
-            # inject product
-            self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
-            self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the photobleaching sequence
             for step in range(len(self.photobleaching_list)):
@@ -485,7 +407,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # create lists containing pressure, volume and flowrate data and initialize first value to 0
                     pressure = [0]
                     volume = [0]
-                    flowrate = [0]
+                    flowrate = self.ref['flow'].get_flowrate()
 
                     self.ref['flow'].set_pressure(0.0)  # as initial value
                     self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
@@ -493,7 +415,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['flow'].start_volume_measurement(self.photobleaching_list[step]['volume'])
 
                     ready = self.ref['flow'].target_volume_reached
-
                     while not ready:
                         time.sleep(1)
                         ready = self.ref['flow'].target_volume_reached
@@ -508,17 +429,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # get the last data points
                     self.append_flow_data(pressure, volume, flowrate)
                     time.sleep(1)
+
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory, self.probe_list[self.probe_counter-1][1], 'photobleaching', step)
+                    complete_path = create_path_for_injection_data(self.directory,
+                                                                   probe_name,
+                                                                   'photobleaching', step)
                     save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
                     self.log.info(f'Incubation time.. {t} s')
-                    self.ref['valves'].set_valve_position('c', 1)
-                    self.ref['valves'].wait_for_idle()
 
                     # allow abort by splitting the waiting time into small intervals of 30 s
                     num_steps = t // 30
@@ -528,22 +450,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             time.sleep(30)
                     time.sleep(remainder)
 
-                    self.ref['valves'].set_valve_position('c', 2)
-                    self.ref['valves'].wait_for_idle()
                     self.log.info('Incubation time finished')
 
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
-            # stop flux by closing valve towards pump
-            self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
+            # rinse needle after photobleaching
+            self.ref['valves'].set_valve_position('a', 3)  # Towards probe
             self.ref['valves'].wait_for_idle()
-
-            # verify if rinsing finished in the meantime
-            current_time = time.time()
-            diff = current_time-start_rinsing_time
-            if diff < 60:
-                time.sleep(60-diff+1)
+            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
+            self.ref['valves'].wait_for_idle()
+            self.ref['flow'].start_rinsing(60)
+            time.sleep(61)   # block the program flow until rinsing is finished
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -553,7 +471,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
-        # Photobleaching finished --------------------------------------------------------------------------------------
 
         if not self.aborted:
             if self.logging:
@@ -584,16 +501,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
-            # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default position .. (maybe not necessary because all those elements will still be done above)
-
-        # reset the camera to default state
-        self.ref['cam'].reset_camera_after_multichannel_imaging()
-        self.ref['cam'].set_exposure(self.default_exposure)
-
-        # close the fpga session
-        self.ref['laser'].end_task_session()
-        self.ref['laser'].restart_default_session()
-        self.log.info('restarted default fpga session')
+            # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
+            # position .. (maybe not necessary because all those elements will still be done above)
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
@@ -602,11 +511,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # roi gui
         self.ref['roi'].enable_tracking_mode()
         self.ref['roi'].enable_roi_actions()
-        # basic imaging gui
-        self.ref['cam'].enable_camera_actions()
-        self.ref['laser'].enable_laser_actions()
-        # focus tools gui
-        self.ref['focus'].enable_focus_actions()
+
         # fluidics control gui
         self.ref['valves'].enable_valve_positioning()
         self.ref['flow'].enable_flowcontrol_actions()
@@ -631,14 +536,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
-            sample_name: 'Mysample'
-            exposure: 0.05  # in s
-            num_z_planes: 50
-            z_step: 0.25  # in um
-            centered_focal_plane: False
-            imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
-            save_path: 'E:/'
-            file_format: 'tif'
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             injections_path: 'pathstem/qudi_files/qudi_injection_parameters/injections_2021_01_01.yml'
             dapi_path: 'E:/imagedata/2021_01_01/001_HiM_MySample_dapi'
@@ -648,44 +545,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.user_param_dict = yaml.safe_load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
-                self.exposure = self.user_param_dict['exposure']
-                self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
-                self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
-                self.file_format = self.user_param_dict['file_format']
-                self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
-                self.dapi_path = self.user_param_dict['dapi_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
         # establish further user parameters derived from the given ones:
-
-        # load rois from file and create a list ------------------------------------------------------------------------
+        # load rois from file and create a list
         self.ref['roi'].load_roi_list(self.roi_list_path)
         self.roi_names = self.ref['roi'].roi_names
-
-        # imaging ------------------------------------------------------------------------------------------------------
-        # convert the imaging_sequence given by user into format required by the bitfile
-        lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
-        self.num_laserlines = len(self.imaging_sequence)
-        wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        wavelengths = [lightsource_dict[key] for key in wavelengths]
-        for i in range(self.num_laserlines, 5):
-            wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
-        self.wavelengths = wavelengths
-
-        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, 5):
-            self.intensities.append(0)
-
-        # injections ---------------------------------------------------------------------------------------------------
+        # injections
         self.load_injection_parameters()
-
-        self.log.info('user parameters loaded and processed')
 
     def load_injection_parameters(self):
         """ Load relevant information from the document containing the injection parameters in a specific format.
@@ -710,28 +581,25 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
 
-    def calculate_start_position(self, centered_focal_plane):
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for injection tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+        append them to lists storing all values.
+        :param: list pressure_list
+        :param: list volume_list
+        :param: list flowrate_list
+
+        :return: None
         """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
-
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
-
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()
-
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
-            # odd number of planes:
-            else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
+        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
+        new_total_volume = self.ref['flow'].total_volume
+        new_flowrate = self.ref['flow'].get_flowrate()[0]
+        pressure_list.append(round(new_pressure, 1))
+        volume_list.append(round(new_total_volume, 1))
+        flowrate_list.append(round(new_flowrate, 1))
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -740,10 +608,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def create_directory(self, path_stem):
         """ Create the directory (based on path_stem given as user parameter),
         in which the folders for the ROI will be created
-        Example: path_stem/YYYY_MM_DD/001_HiM_samplename
+        Example: path_stem/YYYY_MM_DD/001_Scan_samplename (default)
+        or path_stem/YYYY_MM_DD/001_Scan_samplename_dapi (option dapi)
+        or path_stem/YYYY_MM_DD/001_Scan_samplename_rna (option rna)
 
-        :param: str pathstem
-        :return: str path to directory
+        :param: str path_stem: base name of the path that will be created
+
+        :return: str path (see example above)
         """
         cur_date = datetime.today().strftime('%Y_%m_%d')
 
@@ -757,15 +628,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.log.error('Error {0}'.format(e))
 
         # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
-        dir_list = [folder for folder in os.listdir(path_stem_with_date) if os.path.isdir(os.path.join(path_stem_with_date, folder))]
+        dir_list = [folder for folder in os.listdir(path_stem_with_date) if
+                    os.path.isdir(os.path.join(path_stem_with_date, folder))]
         number_dirs = len(dir_list)
 
-        prefix = str(number_dirs+1).zfill(3)
+        prefix = str(number_dirs + 1).zfill(3)
         # make prefix accessible to include it in the filename generated in the method get_complete_path
         self.prefix = prefix
 
-        foldername = f'{prefix}_HiM_{self.sample_name}'
-
+        foldername = f'{prefix}_Scan_{self.sample_name}'
         path = os.path.join(path_stem_with_date, foldername)
 
         # create the path  # no need to check if it already exists due to incremental prefix
@@ -776,32 +647,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return path
 
-    def get_complete_path(self, directory, roi_number, probe_number):
-        """ Create the complete path for a file containing image data,
-        based on the directory for the experiment that was already created,
-        the ROI number and the probe number,
-        such as directory/ROI_007/RT2/scan_num_RT2_007_ROI.tif
+    def file_name(self, roi_number, probe_name):
+        """ Define the complete name of the image data file.
 
-        :param: str directory
-        :param: str roi_number: identifier of the current ROI
-        :param: str probe_number: identifier of the current RT
-
-        :return: str complete path (as in the example above)
+        :param: str roi_number: string identifier of the current ROI for which a complete path shall be created
+        :param: str probe_name: string identifier of the current probe
+        :return: str complete_path: such as directory/ROI_001/scan_001_004_ROI.tif (experiment nb. 001, ROI nb. 004)
         """
-        path = os.path.join(directory, roi_number, probe_number)
 
-        if not os.path.exists(path):
-            try:
-                os.makedirs(path)  # recursive creation of all directories on the path
-            except Exception as e:
-                self.log.error('Error {0}'.format(e))
+        roi_number_inv = roi_number.strip('ROI_') + '_ROI'  # for compatibility with analysis format
+        file_name = f'scan_{self.prefix}_{probe_name}_{roi_number_inv}'
+        return file_name
 
-        roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
+    @staticmethod
+    def save_file_name(file, movie_name):
+        """ Save the name of the movie by appending the file for each new acquisition.
 
-        file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}.{self.file_format}'
-
-        complete_path = os.path.join(path, file_name)
-        return complete_path
+        :param: str file: string identifier of the file where the data are saved
+        :param: str movie_name: string identifier of the movie name (indicating the ROI and the probe)
+        """
+        with open(file, 'a+') as outfile:
+            outfile.write(movie_name)
+            outfile.write("\n")
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
@@ -812,52 +679,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = float(np.round(self.exposure, 3))
-        metadata['Scan step length (um)'] = self.z_step
-        metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
-        metadata['Number laserlines'] = self.num_laserlines
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
+        metadata = {'Sample name': self.sample_name}
 
-        # add translation stage position
-        metadata['x position'] = float(self.ref['roi'].stage_position[0])
-        metadata['y position'] = float(self.ref['roi'].stage_position[1])
+        for roi in self.roi_names:
+            pos = self.ref['roi'].get_roi_position(roi)
+            metadata[roi] = f'X = {pos[0]} - Y = {pos[1]}'
 
-        # add autofocus information :
-        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
-        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision,2))
-        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
-        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
-
-        return metadata
-
-    def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
-        """
-        metadata = {}
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['Z_STEP'] = (self.z_step, 'scan step length (um)')
-        metadata['Z_TOTAL'] = (self.z_step * self.num_z_planes, 'scan total length (um)')
-        metadata['CHANNELS'] = (self.num_laserlines, 'number laserlines')
-        for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i][0], f'laser line {i+1}')
-            metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
-        metadata['X_POS'] = (self.ref['roi'].stage_position[0], 'x position')
-        metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
-
-        # add autofocus information :
-        metadata['AF_OFFST'] = self.ref['focus']._autofocus_logic._focus_offset
-        metadata['AF_PREC'] = np.round(self.ref['focus']._precision,2)
-        metadata['AF_SLOPE'] = np.round(self.ref['focus']._slope, 3)
-        metadata['AF_SETPT'] = np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
-
-        # pixel size
         return metadata
 
     def save_metadata_file(self, metadata, path):
@@ -870,38 +697,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for injection tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
-        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
-        append them to lists storing all values.
-        :param: list pressure_list
-        :param: list volume_list
-        :param: list flowrate_list
-        :return: None
-        """
-        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
-        new_total_volume = self.ref['flow'].total_volume
-        new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(new_pressure)
-        volume_list.append(new_total_volume)
-        flowrate_list.append(new_flowrate)
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for acquisition tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)

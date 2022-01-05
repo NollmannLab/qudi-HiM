@@ -51,11 +51,12 @@ class WorkerSignals(QtCore.QObject):
 
     sigFinished = QtCore.Signal()
     sigRegulationWaitFinished = QtCore.Signal(float)  # parameter: target_flowrate
-    sigIntegrationIntervalFinished = QtCore.Signal(float, float)  # parameters: target_volume, integration_interval
+    # sigIntegrationIntervalFinished = QtCore.Signal(float, float)  # parameters: target_volume, integration_interval
+    sigIntegrationIntervalFinished = QtCore.Signal(float)  # parameters : sampling_interval
 
 
 class MeasurementWorker(QtCore.QRunnable):
-    """ Worker thread to monitor the pressure and the flowrate every x seconds when measuring mode is on.
+    """ Worker thread to monitor the pressure and the flow-rate every x seconds when measuring mode is on.
 
     The worker handles only the waiting time, and emits a signal that serves to trigger the update of indicators on GUI.
     """
@@ -94,19 +95,24 @@ class VolumeCountWorker(QtCore.QRunnable):
     """ Worker thread to measure the injected volume of buffer or probe
 
     The worker handles only the waiting time, and emits a signal that serves to trigger a new sampling.
-    The signal transmits the target volume and the sampling interval to the next loop iteration. """
+    The signal originally transmits the target volume and the sampling interval to the next loop iteration. However,
+    different target_volumes values were sometimes transmitted (not clear why - likely due to previous interactions with
+    the GUI). To simplify the script, only the sampling interval is now transmitted. The target volume is defined
+    elsewhere in the code."""
 
-    def __init__(self, target_volume, sampling_interval):
+    # def __init__(self, target_volume, sampling_interval):
+    def __init__(self, sampling_interval):
         super(VolumeCountWorker, self).__init__()
         self.signals = WorkerSignals()
-        self.target_volume = target_volume
+        # self.target_volume = target_volume
         self.sampling_interval = sampling_interval
 
     @QtCore.Slot()
     def run(self):
         """ """
         sleep(self.sampling_interval)
-        self.signals.sigIntegrationIntervalFinished.emit(self.target_volume, self.sampling_interval)
+        self.signals.sigIntegrationIntervalFinished.emit(self.sampling_interval)
+        # self.signals.sigIntegrationIntervalFinished.emit(self.target_volume, self.sampling_interval)
 
 
 # ======================================================================================================================
@@ -141,7 +147,7 @@ class FlowcontrolLogic(GenericLogic):
     # signals
     sigUpdateFlowMeasurement = QtCore.Signal(list, list)
     sigUpdatePressureSetpoint = QtCore.Signal(float)
-    sigUpdateVolumeMeasurement = QtCore.Signal(int, int)
+    sigUpdateVolumeMeasurement = QtCore.Signal(int, int, int, int)
     sigTargetVolumeReached = QtCore.Signal()
     sigRinsingFinished = QtCore.Signal()
     sigDisableFlowActions = QtCore.Signal()
@@ -151,12 +157,15 @@ class FlowcontrolLogic(GenericLogic):
     measuring_flowrate = False
     regulating = False
     measuring_volume = False
+    target_volume = 0
     total_volume = 0
     time_since_start = 0
     target_volume_reached = True
     rinsing_enabled = False
 
-    # attributes for pid
+    # attributes for pid - the sampling rate defines the frequency at which the volume & flow-rate will be measured. Be
+    # aware that modifying this value will likely require to change the pid settings as well.
+    sampling_interval = 1  # in s
     p_gain = ConfigOption('p_gain', 0.005, missing='warn')   # 0.005
     i_gain = ConfigOption('i_gain', 0.01, missing='warn')  # 0.001 for Airyscan   # 0.01 for RAMM
     d_gain = ConfigOption('d_gain', 0.0, missing='warn')  # 0.0
@@ -372,7 +381,8 @@ class FlowcontrolLogic(GenericLogic):
         new_pressure = float(self.pid(flowrate[0]))
         self.set_pressure(new_pressure, log_entry=False)
 
-# first tests with a simple version where the channels are not specified (we would need signal overloading in the worker thread... to be explored later)
+    # first tests with a simple version where the channels are not specified
+    # (we would need signal overloading in the worker thread... to be explored later)
     def start_pressure_regulation_loop(self, target_flowrate):
         """ Start a continuous mode to regulate the pressure to achieve the target_flowrate.
         :param: int target_flowrate
@@ -411,46 +421,55 @@ class FlowcontrolLogic(GenericLogic):
     # in case multiplexing shall be implemented, the signal sigUpdateVolumeMeasurement could be overloaded,
     # such as sigVolumeMeasurement = QtCore.Signal(list, int), self.total_volume would be a list in this case
     # and the calculation of self.total_volume in volume_measurement_loop would need to be modified.
-    def start_volume_measurement(self, target_volume, sampling_interval):
+    def start_volume_measurement(self, target_volume):
         """ Start a continuous measurement of the injected volume.
         :param: int target_volume: target volume to be injected.
                                 Volume measurement will be stopped when target volume is reached (necessary for tasks).
-        :param: float: sampling interval: time in seconds as sampling period.
         :return: None
         """
         self.measuring_volume = True
         self.total_volume = 0.0
         self.time_since_start = 0
-        if self.total_volume < target_volume:
+        self.target_volume = target_volume
+        if self.total_volume < self.target_volume:
             self.target_volume_reached = False
         # start summing up the total volume, using a worker thread
-        worker = VolumeCountWorker(target_volume, sampling_interval)
+        # worker = VolumeCountWorker(target_volume, sampling_interval)
+        worker = VolumeCountWorker(self.sampling_interval)
         worker.signals.sigIntegrationIntervalFinished.connect(self.volume_measurement_loop)
         self.threadpool.start(worker)
 
-    def volume_measurement_loop(self, target_volume, sampling_interval):
+    def volume_measurement_loop(self):
         """ Perform a step in the volume count loop.
         :param: int target_volume: target volume to be injected.
                                 Volume measurement will be stopped when target volume is reached (necessary for tasks).
-        :param: float: sampling interval: time in seconds as sampling period.
         :return: None
         """
+        # calculate the fluidics parameters. Note that the total volume is rounded as safety to avoid entering into the
+        # else part when target volume is not yet reached due to data overflow
         flowrate = self.get_flowrate()[0]
-        self.total_volume += flowrate * sampling_interval / 60
-        self.total_volume = np.round(self.total_volume, decimals=3)  # as safety to avoid entering into the else part when target volume is not yet reached due to data overflow
-        self.time_since_start += sampling_interval
-        # print(self.total_volume, self.time_since_start, target_volume)
-        self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start)
-        if self.total_volume < target_volume:
+        pressure = self.get_pressure()[0]
+        self.total_volume += flowrate * self.sampling_interval / 60
+        self.total_volume = np.round(self.total_volume, decimals=3)
+        self.time_since_start += self.sampling_interval
+
+        #  print("The target volume is {}, the total volume is {}, the duration of injection is {}"\
+        #  .format(self.target_volume, self.total_volume, self.time_since_start))
+        self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start, flowrate, pressure)
+
+        # The second conditions was added to avoid target volume error. Sometimes, the target volume is never reached
+        # and the pump keeps injecting without stopping.
+        if self.total_volume < self.target_volume and self.measuring_volume:
             self.target_volume_reached = False
         else:
             self.target_volume_reached = True
             self.measuring_volume = False
             self.sigTargetVolumeReached.emit()
 
-        if not self.target_volume_reached and self.measuring_volume:  # second condition is necessary to stop measurement via GUI button
+        # second condition is necessary to stop measurement via GUI button
+        if not self.target_volume_reached and self.measuring_volume:
             # enter in a loop until the target_volume is reached
-            worker = VolumeCountWorker(target_volume, sampling_interval)
+            worker = VolumeCountWorker(self.sampling_interval)
             worker.signals.sigIntegrationIntervalFinished.connect(self.volume_measurement_loop)
             self.threadpool.start(worker)
 

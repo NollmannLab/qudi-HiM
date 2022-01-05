@@ -179,7 +179,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.raise_()
 
     def init_configuration_form(self):
-        """ Enter items into the comboboxes according to available elements on the setup. """
+        """ Enter items into the combo-boxes according to available elements on the setup. """
         self._mw.filterpos_ComboBox.addItems(self._exp_logic.filters)
         self._mw.laser_ComboBox.addItems(self._exp_logic.lasers)
         self._mw.fileformat_ComboBox.addItems(self._exp_logic.supported_fileformats)
@@ -211,6 +211,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.formWidget.hide()
             self._mw.save_config_Action.setDisabled(True)
             self._mw.save_config_copy_Action.setDisabled(True)
+
         elif experiment == 'Multicolor imaging PALM':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
@@ -227,6 +228,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+
         elif experiment == 'Multicolor scan PALM':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
@@ -243,6 +245,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+
         elif experiment == 'Multicolor scan RAMM':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
@@ -255,6 +258,30 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_filter_settings(False)
             self.set_visibility_imaging_settings(True)
             self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(False)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
+
+            # additional visibility settings
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+
+        elif experiment == 'Multicolor scan Airyscan':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(False)
+            self.set_visibility_camera_settings(False)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(False)
             self.set_visibility_scan_settings(True)
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
@@ -301,6 +328,38 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
             self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
+
+            # additional visibility modifications
+            self._mw.dapi_CheckBox.setVisible(True)
+            self._mw.rna_CheckBox.setVisible(True)
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.injections_list_Label.setVisible(False)
+            self._mw.injections_list_LineEdit.setVisible(False)
+            self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+
+        elif experiment == 'ROI multicolor scan Airyscan':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(False)
             self.set_visibility_filter_settings(False)
             self.set_visibility_imaging_settings(True)
             self.set_visibility_save_settings(True)
@@ -373,7 +432,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
 
-        elif experiment == 'Hi-M Airyscan':  # modify to remove the non necessary entries - right now just a copy of Hi-M RAMM
+        elif experiment == 'Hi-M Airyscan Lumencor':  # modify to remove the non necessary entries - right now just a copy of Hi-M RAMM
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
             self._exp_logic.is_timelapse_ramm = False
@@ -381,11 +440,35 @@ class ExpConfiguratorGUI(GUIBase):
 
             self._mw.formWidget.setVisible(True)
             self.set_visibility_general_settings(True)
-            self.set_visibility_camera_settings(True)
+            self.set_visibility_camera_settings(False)
             self.set_visibility_filter_settings(False)
             self.set_visibility_imaging_settings(True)
             self.set_visibility_save_settings(True)
             self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
+
+            # additional visibility settings
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+
+        elif experiment == 'Hi-M Airyscan Confocal':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(False)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(False)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(False)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
@@ -455,6 +538,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.time_step_Label.setVisible(False)
             self._mw.time_step_SpinBox.setVisible(False)
 
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
+
         elif experiment == 'Timelapse RAMM':
             # change the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model_timelapse_ramm)
@@ -484,6 +570,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_path_Label.setVisible(False)
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
+
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
 
         elif experiment == 'Timelapse PALM':
             # change the listview model
