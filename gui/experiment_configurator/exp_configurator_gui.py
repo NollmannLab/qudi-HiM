@@ -134,6 +134,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.illumination_time_DSpinBox.valueChanged.connect(self._exp_logic.update_illumination_time)
         self._mw.num_iterations_SpinBox.valueChanged.connect(self._exp_logic.update_num_iterations)
         self._mw.time_step_SpinBox.valueChanged.connect(self._exp_logic.update_time_step)
+        self._mw.axial_calibration_path_lineEdit.textChanged.connect(self._exp_logic.update_axial_calibration_path)
 
         # pushbuttons
         # pushbuttons belonging to the listview
@@ -150,6 +151,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.load_roi_PushButton.clicked.connect(self.load_roi_list_clicked)
         self._mw.load_injections_PushButton.clicked.connect(self.load_injections_clicked)
         self._mw.load_dapi_PushButton.clicked.connect(self.load_dapi_path_clicked)
+        self._mw.load_dz_calibration_pushButton.clicked.connect(self.load_axial_calibration_path_clicked)
 
         # signals to logic
         self.sigSaveConfig.connect(self._exp_logic.save_to_exp_config_file)
@@ -570,6 +572,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_path_Label.setVisible(False)
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.dz_calibration_label.setVisible(False)
+            self._mw.axial_calibration_path_lineEdit.setVisible(False)
+            self._mw.load_dz_calibration_pushButton.setVisible(False)
 
             # Modify the laser list in order to add the bright field control
             self._mw.laser_ComboBox.addItems(['Brightfield'])
@@ -600,6 +605,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_path_Label.setVisible(False)
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.dz_calibration_label.setVisible(False)
+            self._mw.axial_calibration_path_lineEdit.setVisible(False)
+            self._mw.load_dz_calibration_pushButton.setVisible(False)
 
         # add here additional experiment types
 
@@ -706,6 +714,9 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.num_iterations_SpinBox.setVisible(visible)
         self._mw.time_step_Label.setVisible(visible)
         self._mw.time_step_SpinBox.setVisible(visible)
+        self._mw.dz_calibration_label.setVisible(visible)
+        self._mw.axial_calibration_path_lineEdit.setVisible(visible)
+        self._mw.load_dz_calibration_pushButton.setVisible(visible)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of the toolbuttons
@@ -821,6 +832,18 @@ class ExpConfiguratorGUI(GUIBase):
                                                           '/home')  # to be changed using a correct path stem
         if this_dir:
             self._mw.dapi_data_LineEdit.setText(this_dir)
+
+    def load_axial_calibration_path_clicked(self):
+        """ Callback of load axial calibration path pushbutton. Opens a dialog to select the complete path to the folder
+        with the associated calibration data. This file can be used for TFL experiment in order to skip the autofocus
+        calibration.
+        """
+        # data_directory = os.path.join(self.default_location, 'qudi_injection_parameters')
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
+                                                          'Open axial calibration directory',
+                                                          '/home')  # to be changed using a correct path stem
+        if this_dir:
+            self._mw.axial_calibration_path_lineEdit.setText(this_dir)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of signals sent from the logic
