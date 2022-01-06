@@ -133,11 +133,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if not self.ref['pos'].origin:
             self.log.warning(
                 'No position 1 defined for injections. Experiment can not be started. Please define position 1!')
-            return
+            self.aborted = True
 
         if (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
             self.log.warning('Autofocus is not calibrated. Experiment can not be started. Please calibrate autofocus!')
-            return
+            self.aborted = True
 
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
