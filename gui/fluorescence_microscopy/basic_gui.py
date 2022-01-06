@@ -31,6 +31,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import os
 # import sys
+import time
 from datetime import datetime
 # import re
 import numpy as np
@@ -540,10 +541,13 @@ class BasicGUI(GUIBase):
     def cam_update_settings(self):
         """ Write new settings from the gui to the logic module.
         """
-        # interrupt live display if it is on
+        # interrupt live display if it is on - a sleep time was added to make sure the live was stopped before the
+        # exposure time was updated. Else, it is executed too fast and is not taken into account because live seems not
+        # yet to be interrupted. This is why kinetic time indicator was not updated when live is on.
         if self._camera_logic.enabled:  # camera is acquiring
             self.sigInterruptLive.emit()
-        # this is executed too fast and is not taken into account because live seems not yet to be interrupted. This is why kinetic time indicator is not updated when live is on.
+            time.sleep(0.5)
+
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
         # new_exposure = self._cam_sd.exposure_doubleSpinBox.value()
         # self.sigSetExposure.emit(new_exposure)
@@ -875,6 +879,9 @@ class BasicGUI(GUIBase):
             self.sigResetSensor.emit()
             self._mw.set_sensor_Action.setText('Set sensor region')
 
+            # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+            self.cam_update_settings()
+
     @QtCore.Slot(QtCore.QRectF)
     def mouse_area_selected(self, rect):
         """ This slot is called when the user has selected an area of the camera image using the rubberband tool.
@@ -897,13 +904,17 @@ class BasicGUI(GUIBase):
         self.log.debug('hstart={}, hend={}, vstart={}, vend={}'.format(hstart_, hend_, vstart_, vend_))
         # inversion along the y axis:
         # it is needed to call the function set_sensor_region(hbin, vbin, hstart, hend, vstart, vend)
-        # using the following arguments: set_sensor_region(hbin, vbin, start, hend, num_px_y - vend, num_px_y - vstart) ('vstart' needs to be smaller than 'vend')
+        # using the following arguments: set_sensor_region(hbin, vbin, start, hend, num_px_y - vend, num_px_y - vstart)
+        # ('vstart' needs to be smaller than 'vend')
         num_px_y = self._camera_logic.get_max_size()[1]  # height is stored in the second return value of get_size
         # self.log.debug(num_px_y)
 
         self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_)
         if self._camera_logic.enabled:  # if live mode is on hide rubberband selector directly
             self.imageitem.getViewBox().rbScaleBox.hide()
+
+        # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+        self.cam_update_settings()
 
 # menubar options belonging to camera image ---------------------------------------------------------------------------
     @QtCore.Slot()
