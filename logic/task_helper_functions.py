@@ -39,6 +39,12 @@ def save_roi_start_times_to_file(roi_start_times, path):
         yaml.safe_dump(data_dict, outfile, default_flow_style=False)
 
 
+def save_z_position_step_to_file(roi_z_start_position, path):
+    data_dict = {'roi_starting_z_position': roi_z_start_position}
+    with open(path, 'w') as outfile:
+        yaml.safe_dump(data_dict, outfile, default_flow_style=False)
+
+
 def create_path_for_injection_data(pathstem, rt_label, process, step):
     """ Create a complete path to a csv file where injection data will be saved.
     The folder hierarchy is pathstem/injections/rt_label/process_stepnum.csv
