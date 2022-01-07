@@ -38,7 +38,7 @@ from logic.task_helper_functions import save_roi_start_times_to_file
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task iterates over all roi given in a file (typically a mosaique) and does an acquisition of a series of
+    """ This task iterates over all roi given in a file (typically a mosaic) and does an acquisition of a series of
     planes in z direction color by color. This is repeated num_iterations times, after a defined waiting time per
     iteration. The stack at an ROI for each color can have a different number of planes and distances in z direction.
 
