@@ -183,7 +183,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict = {}
         self.lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
         self.user_config_path = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles = 4
+        self.n_dz_calibration_cycles = 10
         self.sample_name = None
         self.exposure = None
         self.centered_focal_plane = False
@@ -207,6 +207,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.autofocus_stabilization_time = []
         self.saving_time = []
         self.scan_time = []
+        self.calibration_path = None
 
         print('Task {0} added!'.format(self.name))
 
@@ -245,7 +246,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # close the default session and start the FTL session on the fpga using the user parameters
             self.ref['laser'].close_default_session()
-            bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+            bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
             self.ref['laser'].start_task_session(bitfile)
             print(
                 f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
@@ -260,19 +261,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['roi'].active_roi = None
 
             # launch the calibration procedure to measure the tilt of the sample
-            ## Add the possibility to load a calibration file.
+            if not self.calibration_path:
+                roi_z_positions = np.zeros((self.n_dz_calibration_cycles, len(self.roi_names)))
 
-            roi_z_positions = np.zeros((self.n_dz_calibration_cycles, len(self.roi_names)))
+                # for each roi, the autofocus positioning is performed. The process is repeated n_dz_calibration_cycles
+                # times, in order to get a good average position.
+                for n in range(self.n_dz_calibration_cycles):
+                    roi_start_z = self.measure_sample_tilt(n)
+                    roi_z_positions[n, :] = np.array(roi_start_z)
 
-            # for each roi, the autofocus positioning is performed. The process is repeated n_dz_calibration_cycles
-            # times, in order to get a good average position.
-            for n in range(self.n_dz_calibration_cycles):
+                # calculate the average variation of axial displacement between two successive rois
+                self.dz = self.calculate_roi_dz(roi_z_positions)
 
-                roi_start_z = self.measure_sample_tilt(n)
-                roi_z_positions[n, :] = np.array(roi_start_z)
-
-            # calculate the average variation of axial displacement between two successive rois
-            self.dz = self.calculate_roi_dz(roi_z_positions)
+            else:
+                with open(self.calibration_path, 'r') as file:
+                    calibration = yaml.load(file, Loader=yaml.FullLoader)
+                self.dz = calibration['dz']
 
             # initialize a counter to iterate over the number of cycles to do
             self.counter = 0
@@ -561,6 +565,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.num_iterations = self.user_param_dict['num_iterations']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
+                self.calibration_path = self.user_param_dict['axial_calibration_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
