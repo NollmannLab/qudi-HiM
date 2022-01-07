@@ -838,12 +838,11 @@ class ExpConfiguratorGUI(GUIBase):
         with the associated calibration data. This file can be used for TFL experiment in order to skip the autofocus
         calibration.
         """
-        # data_directory = os.path.join(self.default_location, 'qudi_injection_parameters')
-        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
-                                                          'Open axial calibration directory',
-                                                          '/home')  # to be changed using a correct path stem
-        if this_dir:
-            self._mw.axial_calibration_path_lineEdit.setText(this_dir)
+        # data_directory = os.path.join(self.default_location, 'qudi_roi_lists')
+        this_file = QtWidgets.QFileDialog.getOpenFileName(self._mw,
+                                                          'Open axial calibration file')[0]
+        if this_file:
+            self._mw.axial_calibration_path_lineEdit.setText(this_file)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of signals sent from the logic

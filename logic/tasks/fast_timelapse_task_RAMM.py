@@ -183,7 +183,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict = {}
         self.lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
         self.user_config_path = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles = 10
+        self.n_dz_calibration_cycles = 4
         self.sample_name = None
         self.exposure = None
         self.centered_focal_plane = False
@@ -261,6 +261,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['roi'].active_roi = None
 
             # launch the calibration procedure to measure the tilt of the sample
+
+            print(self.calibration_path)
+
             if not self.calibration_path:
                 roi_z_positions = np.zeros((self.n_dz_calibration_cycles, len(self.roi_names)))
 
@@ -789,12 +792,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
 
         # calculate the median displacement as well as the std error
-        dz = np.median(dz, axis=0)
+        print(f'size dz : {dz.shape}')
+        print(f'dz : {dz}')
+        dz_med = np.median(dz, axis=0)
         dz_std = np.std(dz, axis=0)
 
         # plot the results
         x = np.linspace(1, n_roi - 1, n_roi - 1)
-        plt.errorbar(x, dz, yerr=dz_std)
+        plt.errorbar(x, dz_med, yerr=dz_std)
         plt.xlabel('ROI number')
         plt.ylabel('dZ (in µm)')
         figure_path = os.path.join(self.directory, f'dz_step.png')
@@ -806,7 +811,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(dz_path, 'w') as outfile:
             yaml.safe_dump(data_dict, outfile, default_flow_style=False)
 
-        return dz
+        return dz_med
 
 # async def save_data(path, array):
 #     np.save(path, array)
