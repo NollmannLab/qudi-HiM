@@ -119,6 +119,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities, self.num_laserlines, self.exposure)
 
+        # Check the autofocus is calibrated
+        if (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
+            self.log.warning('Autofocus is not calibrated. Experiment can not be started. Please calibrate autofocus!')
+            self.aborted = True
+
         # initialize a counter to iterate over the ROIs
         self.roi_counter = 0
         # set the active_roi to none to avoid having two active rois displayed
