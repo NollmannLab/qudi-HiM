@@ -195,9 +195,10 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
-        self.config_dict['dapi_path'] = '' # not necessary, it can be left empty and needs hence to be initialized as empty string
+        self.config_dict['dapi_path'] = ''  # not necessary, it can be empty and needs to be initialized as empty string
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
+        self.config_dict['axial_calibration_path'] = ''
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
 
@@ -314,7 +315,8 @@ class ExpConfigLogic(GenericLogic):
                 if not filename:
                     filename = 'fast_timelapse_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
-                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations']
+                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations',
+                                   'axial_calibration_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Timelapse RAMM':
