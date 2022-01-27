@@ -33,14 +33,14 @@ import numpy as np
 import os
 import yaml
 import time
+import matplotlib.pyplot as plt
 # import asyncio
 from datetime import datetime
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_roi_start_times_to_file, save_z_position_step_to_file
+from logic.task_helper_functions import save_roi_start_times_to_file  #, save_z_position_step_to_file
 from qtpy import QtCore
 # from PIL import Image
 from tifffile import TiffWriter
-import matplotlib.pyplot as plt
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication did not work)
 
@@ -107,7 +107,7 @@ class SaveDataWorker(QtCore.QRunnable):
         """
 
         file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{file_format}'
-        directory_path = os.path.join(directory, 'channel_'+str(channel))
+        directory_path = os.path.join(directory, 'channel_'+str(channel), str(roi))
 
         # check if folder exists, if not: create it
         if not os.path.exists(directory_path):
@@ -199,15 +199,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensities = []
         self.default_exposure = None
         self.roi_names = None
+        self.num_roi = None
         self.prefix = None
         self.wavelengths = []
         self.num_laserlines = None
         self.dz = []
-        self.cam_prep_time = []
-        self.autofocus_stabilization_time = []
-        self.saving_time = []
-        self.scan_time = []
         self.calibration_path = None
+        self.roi_start_times = []
 
         print('Task {0} added!'.format(self.name))
 
@@ -236,6 +234,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # read all user parameters from config
         self.load_user_parameters()
+        self.num_roi = len(self.roi_names)
 
         # control that autofocus has been calibrated and a setpoint is defined
         self.autofocus_ok = self.ref['focus']._calibrated and self.ref['focus']._setpoint_defined
@@ -254,7 +253,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                                                   self.num_laserlines, self.exposure)
 
             # prepare the camera
-            self.num_frames = len(self.roi_names) * self.num_z_planes * self.num_laserlines
+            self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
             self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
             # set the active_roi to none to avoid having two active rois displayed
@@ -262,10 +261,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # launch the calibration procedure to measure the tilt of the sample
 
-            print(self.calibration_path)
+            print(f'calibration file path: {self.calibration_path}')
 
             if not self.calibration_path:
-                roi_z_positions = np.zeros((self.n_dz_calibration_cycles, len(self.roi_names)))
+                roi_z_positions = np.zeros((self.n_dz_calibration_cycles, self.num_roi))
 
                 # for each roi, the autofocus positioning is performed. The process is repeated n_dz_calibration_cycles
                 # times, in order to get a good average position.
@@ -278,16 +277,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             else:
                 with open(self.calibration_path, 'r') as file:
-                    calibration = yaml.load(file, Loader=yaml.FullLoader)
-                self.dz = calibration['dz']
+                    calibration = yaml.safe_load(file)
+                self.dz = calibration['dz_med']
+                print(f'dz : {self.dz}')
 
             # initialize a counter to iterate over the number of cycles to do
             self.counter = 0
 
-            self.cam_prep_time = []
-            self.autofocus_stabilization_time = []
-            self.saving_time = []
-            self.scan_time = []
+            # initialize an array to keep track of the saving time for each cycle
+            self.roi_start_times = np.zeros((self.num_iterations, self.num_roi))
 
         else:
             self.aborted = True
@@ -313,12 +311,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].stop_acquisition()  # for safety
         self.ref['cam'].start_acquisition()
 
-        self.cam_prep_time.append(time.time()-start_time)
-
         # --------------------------------------------------------------------------------------------------------------
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
-        roi_start_times = []
 
         for n, item in enumerate(self.roi_names):
 
@@ -326,8 +321,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 break
 
             # measure the start time for the ROI
-            roi_start_time = time.time()
-            roi_start_times.append(roi_start_time)
+            self.roi_start_times[self.counter, n] = time.time()
 
             # go to roi
             self.ref['roi'].set_active_roi(name=item)
@@ -339,7 +333,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if n == 0:
                 # autofocus
-                autofocus_start_time = time.time()
                 self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
 
                 # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
@@ -353,8 +346,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     if counter > 500:  # maybe increase the counter ?
                         break
 
-                self.autofocus_stabilization_time.append(time.time() - autofocus_start_time)
-
             else:
                 dz = self.dz[n-1]
                 current_z = self.ref['focus'].get_position()
@@ -367,8 +358,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # imaging sequence
             # ----------------------------------------------------------------------------------------------------------
             # prepare the daq: set the digital output to 0 before starting the task
-
-            imaging_start_time = time.time()
 
             self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                                 np.array([0], dtype=np.uint8))
@@ -402,7 +391,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     if t1 > 1:  # for safety: timeout if no signal received within 1 s
                         self.log.warning('Timeout occurred')
                         break
-            self.scan_time.append(time.time() - imaging_start_time)
 
             self.ref['focus'].go_to_position(end_position)
             # print(f'time after imaging {item}: {time.time() - start_time}')
@@ -414,8 +402,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # data saving
         # --------------------------------------------------------------------------------------------------------------
-
-        saving_start_time = time.time()
 
         # check whether the previous data were saved. A global variable was used instead of signal/slot. The latter
         # solution was not reproducible
@@ -466,13 +452,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # else:  # use tiff as default format
         #     self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
 
-        # save roi start times to file
-        roi_start_times = [item - start_time for item in roi_start_times]
-        num = str(self.counter+1).zfill(2)
-        file_path = os.path.join(self.directory, f'roi_start_times_step_{num}.yml')
-        save_roi_start_times_to_file(roi_start_times, file_path)
-
-        self.saving_time.append(time.time() - saving_start_time)
+        # # save roi start times to file
+        # roi_start_times = [item - start_time for item in roi_start_times]
+        # num = str(self.counter+1).zfill(2)
+        # file_path = os.path.join(self.directory, f'roi_start_times_step_{num}.yml')
+        # save_roi_start_times_to_file(roi_start_times, file_path)
 
         # increment cycle counter
         self.counter += 1
@@ -490,20 +474,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def cleanupTask(self):
         """ """
-        if not self.aborted:
-            file_path = os.path.join(self.directory, f'saving_time.yml')
-            save_roi_start_times_to_file(self.saving_time, file_path)
-
-            file_path = os.path.join(self.directory, f'autofocus_time.yml')
-            save_roi_start_times_to_file(self.autofocus_stabilization_time, file_path)
-
-            file_path = os.path.join(self.directory, f'imaging_time.yml')
-            save_roi_start_times_to_file(self.scan_time, file_path)
-
-            file_path = os.path.join(self.directory, f'camera_time.yml')
-            save_roi_start_times_to_file(self.cam_prep_time, file_path)
-
         self.log.info('cleanupTask called')
+
+        # save the time tracking file
+        saving_path = os.path.join(self.directory, 'roi_start_times.npy')
+        with open(saving_path, 'wb') as file:
+            np.save(file, self.roi_start_times)
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
@@ -766,8 +742,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             roi_start_z.append(current_z)
 
         # save the roi z start position
-        file_path = os.path.join(self.directory, f'z_start_position_step_{n_cycle}.yml')
-        save_z_position_step_to_file(roi_start_z, file_path)
+        # file_path = os.path.join(self.directory, f'z_start_position_step_{n_cycle}.yml')
+        # save_z_position_step_to_file(roi_start_z, file_path)
 
         # go back to first ROI
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -784,11 +760,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :param ndarray roi_z_positions: array containing all the axial focus position of each ROI, for each repetition
         :return ndarray dz: array containing the average axial displacement between successive ROIs
         """
-        n_roi = len(self.roi_names)
         n_cycles = self.n_dz_calibration_cycles
 
-        dz = np.zeros((n_cycles, n_roi - 1))
-        for n in range(n_roi - 1):
+        dz = np.zeros((n_cycles, self.num_roi - 1))
+        for n in range(self.num_roi - 1):
             dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
 
         # calculate the median displacement as well as the std error
@@ -798,7 +773,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         dz_std = np.std(dz, axis=0)
 
         # plot the results
-        x = np.linspace(1, n_roi - 1, n_roi - 1)
+        x = np.linspace(1, self.num_roi - 1, self.num_roi - 1)
         plt.errorbar(x, dz_med, yerr=dz_std)
         plt.xlabel('ROI number')
         plt.ylabel('dZ (in µm)')
@@ -806,7 +781,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         plt.savefig(figure_path)
 
         # save the dz values in a specific file
-        data_dict = {'dz': dz.tolist()}
+        data_dict = {'dz': dz.tolist(), 'dz_med': dz_med.tolist(), 'dz_std': dz_std.tolist()}
         dz_path = os.path.join(self.directory, f'dz.yml')
         with open(dz_path, 'w') as outfile:
             yaml.safe_dump(data_dict, outfile, default_flow_style=False)
