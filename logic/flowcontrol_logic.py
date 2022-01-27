@@ -6,7 +6,7 @@ This module contains the logic to control the microfluidics pump and flowrate se
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho - modifications : JB Fiche
 
 Created on Thu Mars 4 2021
 -----------------------------------------------------------------------------------
@@ -30,7 +30,6 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import numpy as np
 from time import sleep
-import math
 from simple_pid import PID
 
 from qtpy import QtCore
@@ -453,8 +452,9 @@ class FlowcontrolLogic(GenericLogic):
         self.total_volume = np.round(self.total_volume, decimals=3)
         self.time_since_start += self.sampling_interval
 
-        #  print("The target volume is {}, the total volume is {}, the duration of injection is {}"\
-        #  .format(self.target_volume, self.total_volume, self.time_since_start))
+        print(f"The target volume is {self.target_volume} & the total volume is {self.total_volume}")
+        print("")
+
         self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start, flowrate, pressure)
 
         # The second conditions was added to avoid target volume error. Sometimes, the target volume is never reached
@@ -512,8 +512,11 @@ class FlowcontrolLogic(GenericLogic):
 
     def disable_flowcontrol_actions(self):
         """ This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
-        button on GUI, for example during Tasks. """
+        button on GUI, for example during Tasks. By security, all thread actions (measuring flow-rate and volume are
+         stopped as well)."""
         self.sigDisableFlowActions.emit()
+        self.stop_flow_measurement()
+        self.stop_volume_measurement()
 
     def enable_flowcontrol_actions(self):
         """ This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks. """
