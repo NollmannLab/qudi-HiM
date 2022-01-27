@@ -65,6 +65,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Generic Task methods
     # ==================================================================================================================
 
+    # TODO : defines the type for the variables self.var : type = default
+    
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
@@ -345,7 +347,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
-
             if self.logging:
                 self.status_dict['process'] = 'Imaging'
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
