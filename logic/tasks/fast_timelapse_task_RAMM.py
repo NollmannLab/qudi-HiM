@@ -295,7 +295,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # times, in order to get a good average position.
                 for n in range(self.n_dz_calibration_cycles):
                     roi_start_z = self.measure_sample_tilt(n)
-                    roi_z_positions[n, :] = np.array(roi_start_z)
+                    roi_z_positions[n, :] = roi_start_z
 
                 # calculate the average variation of axial displacement between two successive rois
                 self.dz = self.calculate_roi_dz(roi_z_positions)
@@ -630,16 +630,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return array roi_start_z: axial focus position associated to each ROI
         """
 
-        roi_start_z = []
-        for item in self.roi_names:
+        roi_start_z = np.zeros((self.num_roi,))
+        for n, item in enumerate(self.roi_names):
 
             if self.aborted:
                 break
 
             # go to roi
-            self.ref['roi'].set_active_roi(name=item)
-            self.ref['roi'].go_to_roi_xy()
-            self.ref['roi'].stage_wait_for_idle()
+            print(item)
+            self.move_to_roi(item, True)
+            # self.ref['roi'].set_active_roi(name=item)
+            # self.ref['roi'].go_to_roi_xy()
+            # self.ref['roi'].stage_wait_for_idle()
 
             # autofocus
             self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
@@ -657,18 +659,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # Save the z position after the focus
             current_z = self.ref['focus'].get_position()
-            roi_start_z.append(current_z)
+            roi_start_z[n] = current_z
 
         # save the roi z start position
         # file_path = os.path.join(self.directory, f'z_start_position_step_{n_cycle}.yml')
         # save_z_position_step_to_file(roi_start_z, file_path)
 
         # go back to first ROI
-        self.ref['roi'].set_active_roi(name=self.roi_names[0])
-        self.ref['roi'].go_to_roi_xy()
+        self.move_to_roi(self.roi_names[0], True)
+
+        # move the piezo to its first measured position
+        self.ref['focus'].go_to_position(roi_start_z[0])
 
         # correct for the piezo position if it gets too close to the limits
-        self.ref['focus'].do_piezo_position_correction()
+        # self.ref['focus'].do_piezo_position_correction()
 
         return roi_start_z
 
