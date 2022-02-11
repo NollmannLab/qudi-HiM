@@ -303,7 +303,11 @@
         </widget>
        </item>
        <item row="34" column="2">
-        <widget class="QSpinBox" name="num_iterations_SpinBox"/>
+        <widget class="QSpinBox" name="num_iterations_SpinBox">
+         <property name="maximum">
+          <number>1000</number>
+         </property>
+        </widget>
        </item>
        <item row="4" column="2">
         <widget class="QDoubleSpinBox" name="exposure_DSpinBox">
