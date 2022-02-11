@@ -452,8 +452,8 @@ class FlowcontrolLogic(GenericLogic):
         self.total_volume = np.round(self.total_volume, decimals=3)
         self.time_since_start += self.sampling_interval
 
-        print(f"The target volume is {self.target_volume} & the total volume is {self.total_volume}")
-        print("")
+        # print(f"The target volume is {self.target_volume} & the total volume is {self.total_volume}")
+        # print("")
 
         self.sigUpdateVolumeMeasurement.emit(int(self.total_volume), self.time_since_start, flowrate, pressure)
 
