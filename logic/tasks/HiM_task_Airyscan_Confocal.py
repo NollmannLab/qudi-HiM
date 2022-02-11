@@ -171,11 +171,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # update the default_info file that is necessary to run the bokeh app
         if self.logging:
-            hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
             update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
-                                self.probe_dict, last_roi_number, hybr_list, photobl_list)
+                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
         # initialize a counter to iterate over the number of probes to inject

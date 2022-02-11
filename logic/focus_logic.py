@@ -236,6 +236,14 @@ class FocusLogic(GenericLogic):
         # in case this function is called via console, update the GUI
         self.sigStepChanged.emit(step)
 
+    # def go_to_position_relative(self, dz):
+    #     """ Perform a relative movement
+    #
+    #     @param dz: indicate the axial displacement to perform
+    #     """
+    #     self._piezo.move_rel({self._axis: dz})
+    #     sleep(0.03)
+
     def go_to_position(self, position):
         """ Move piezo to the target position using a ramp to avoid moving in too big steps.
         :param: float position: target position for piezo
