@@ -134,10 +134,10 @@ class MCLNanoDrive(Base, MotorInterface):
     def move_rel(self, param_dict):
         """ Moves stage in given direction (relative movement).
 
-        :param dict param_dict: Dictionary with axis name and step (in um units) as key - value pairs
-
-        :return bool: error code (True: ok, False: not ok)
+        @param param_dict: Dictionary with axis name and step (in um units) as key - value pairs
+        @return: error code (True: ok, False: not ok)
         """
+
         # this version is for a param_dict with one entry.
         constraints = self.get_constraints()
         (_, position) = self.get_pos().popitem()  # get_pos returns a dict {axis_label: position}

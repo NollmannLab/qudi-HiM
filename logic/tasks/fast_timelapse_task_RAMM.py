@@ -270,6 +270,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # close the default session and start the FTL session on the fpga using the user parameters
             self.ref['laser'].close_default_session()
+            # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
             bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
             self.ref['laser'].start_task_session(bitfile)
             print(
@@ -344,9 +345,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.aborted:
                 break
-
-            # measure the start time for the ROI
-            # self.roi_start_times[self.counter, n] = time()
 
             # perform the autofocus routine only for the first ROI. For the other ones, simply move the objective
             # according to the axial shift measured during the calibration
@@ -519,7 +517,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             return start_pos, current_pos
         else:
-            return current_pos, current_pos  # the scan starts at the current position and moves upp
+            return current_pos, current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -759,6 +757,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # calculate the starting and ending positions for the stack
         start_position, end_position = self.calculate_start_position(self.centered_focal_plane, self.num_z_planes,
                                                                      self.z_step)
+
         return start_position, end_position
 
     def acquire_single_stack(self, start_position, end_position):
@@ -777,7 +776,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # position the piezo
             position = start_position + plane * self.z_step
             self.ref['focus'].go_to_position(position)
-            # self.ref['focus'].go_to_position_relative(self.z_step)
 
             # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
             self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
