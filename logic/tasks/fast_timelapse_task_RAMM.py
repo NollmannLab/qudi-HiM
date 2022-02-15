@@ -341,29 +341,39 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
 
+        check_dz = np.zeros((self.num_roi,))
         for n, item in enumerate(self.roi_names):
 
             if self.aborted:
                 break
 
+            # go to roi
+            # if n > 0:
+            self.move_to_roi(item, True)
+
             # perform the autofocus routine only for the first ROI. For the other ones, simply move the objective
             # according to the axial shift measured during the calibration
             if n == 0:
-                start_position, end_position = self.search_focus()
+                start_position, end_position = self.perform_autofocus()
                 start_position_roi_0 = start_position
             else:
                 start_position, end_position = self.move_to_next_z_position(n)
 
-            # go to roi
-            if n > 0:
-                self.move_to_roi(item, True)
+            # check the actual piezo position follows the expected dz
+            check_dz[n] = self.ref['focus'].get_position()
 
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
             # ----------------------------------------------------------------------------------------------------------
             self.acquire_single_stack(start_position, end_position)
 
-        # go back to first ROI
+        # save the check_dz positions
+        data_dict = {'z': check_dz.tolist()}
+        dz_path = os.path.join(self.directory, f'z_check.yml')
+        with open(dz_path, 'w') as outfile:
+            yaml.safe_dump(data_dict, outfile, default_flow_style=False)
+
+        # go back to the first ROI and the initial piezo position
         self.move_to_roi(self.roi_names[0], False)
         self.ref['focus'].go_to_position(start_position_roi_0)
 
@@ -492,32 +502,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensities = [self.imaging_sequence[i][1] for i in range(self.num_laserlines)]
         for i in range(self.num_laserlines, 5):
             self.intensities.append(0)
-
-    def calculate_start_position(self, centered_focal_plane, num_z_planes, z_step):
-        """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
-
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
-
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()
-
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the
-            # central plane or one of the central planes in case of an even number of planes
-            # even number of planes:
-            if num_z_planes % 2 == 0:
-                # focal plane is the first one of the upper half of the number of planes
-                start_pos = current_pos - num_z_planes / 2 * z_step
-            # odd number of planes:
-            else:
-                start_pos = current_pos - (num_z_planes - 1)/2 * z_step
-
-            return start_pos, current_pos
-        else:
-            return current_pos, current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -669,9 +653,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move the piezo to its first measured position
         self.ref['focus'].go_to_position(roi_start_z[0])
 
-        # correct for the piezo position if it gets too close to the limits
-        # self.ref['focus'].do_piezo_position_correction()
-
         return roi_start_z
 
     def calculate_roi_dz(self, roi_z_positions):
@@ -720,8 +701,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['roi'].stage_wait_for_idle()
 
     @log
-    def search_focus(self):
-        """ Perform focus stabilization.
+    def perform_autofocus(self):
+        """ Perform focus stabilization for the first ROI
         """
         # autofocus
         self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
@@ -750,15 +731,41 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         performing the stack
         """
         dz = self.dz[n - 1]
-        # self.ref['focus'].go_to_position_relative(dz)
-        current_z = self.ref['focus'].get_position()
-        self.ref['focus'].go_to_position(current_z + dz)
+        self.ref['focus'].go_to_position_relative(dz)
+        # current_z = self.ref['focus'].get_position()
+        # self.ref['focus'].go_to_position(current_z + dz)
 
         # calculate the starting and ending positions for the stack
         start_position, end_position = self.calculate_start_position(self.centered_focal_plane, self.num_z_planes,
                                                                      self.z_step)
 
         return start_position, end_position
+
+    def calculate_start_position(self, centered_focal_plane, num_z_planes, z_step):
+        """
+        This method calculates the piezo position at which the z stack will start. It can either start in the
+        current plane or calculate an offset so that the current plane will be centered inside the stack.
+
+        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
+                                            or if the focal plane is the bottommost plane in the scan (False)
+
+        :return: float piezo start position
+        """
+        current_pos = self.ref['focus'].get_position()
+
+        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the
+            # central plane or one of the central planes in case of an even number of planes
+            # even number of planes:
+            if num_z_planes % 2 == 0:
+                # focal plane is the first one of the upper half of the number of planes
+                start_pos = current_pos - num_z_planes / 2 * z_step
+            # odd number of planes:
+            else:
+                start_pos = current_pos - (num_z_planes - 1)/2 * z_step
+
+            return start_pos, current_pos
+        else:
+            return current_pos, current_pos  # the scan starts at the current position and moves up
 
     def acquire_single_stack(self, start_position, end_position):
         """ Launch acquisition of a single stack of images.
@@ -775,7 +782,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # position the piezo
             position = start_position + plane * self.z_step
-            self.ref['focus'].go_to_position(position)
+            self.ref['focus'].go_to_position(position, direct=True)
 
             # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
             self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
