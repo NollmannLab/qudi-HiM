@@ -145,7 +145,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.aborted = True
 
         # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
+        self.ref['roi'].set_stage_velocity({'x': 0.1, 'y': 0.1})
 
         # read all user parameters from config
         self.load_user_parameters()
