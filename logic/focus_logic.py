@@ -243,12 +243,15 @@ class FocusLogic(GenericLogic):
         """
         self._piezo.move_rel({self._axis: dz})
 
-    def go_to_position(self, position):
+    def go_to_position(self, position, direct=False):
         """ Move piezo to the target position using a ramp to avoid moving in too big steps.
         :param: float position: target position for piezo
         :return: None
         """
-        self.piezo_ramp(position)
+        if direct:
+            self._piezo.move_abs({self._axis: position})
+        else:
+            self.piezo_ramp(position)
 
     def piezo_ramp(self, target_pos):
         """ Helper function implementing a ramp to go to target_pos with max step as far as possible and then do
@@ -272,6 +275,43 @@ class FocusLogic(GenericLogic):
             self.move_up(last_step)
         else:
             self.move_down(-last_step)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for testing tne piezo stability
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def test_reading_position_error(self, n_repeat, dt):
+        """ Build-in functionality to test the reproducibility of the measured piezo position
+
+        @param n_repeat: number of measurements to perform
+        @param dt: lapse of time between two successive measurement (in s)
+        """
+        z = np.zeros((n_repeat,))
+        for n in range(n_repeat):
+            z[n] = self.get_position()
+            sleep(dt)
+
+        print(f'The average position is z={np.mean(z)} +/- {np.std(z)} nm')
+
+    def test_position_reproducibility(self, dz, n_repeat, dt):
+        """ Build-in functionality to test the reproducibility of the piezo displacement.
+
+        @param dz: relative displacement to perform (in µm)
+        @param n_repeat: number of measurements to perform
+        @param dt: lapse of time between movement and position measurement (in s)
+        """
+        z = np.zeros((n_repeat, 2))
+        for n in range(n_repeat):
+            z[n, 0] = self.get_position()
+            self.go_to_position_relative(dz)
+            sleep(dt)
+            z[n, 1] = self.get_position()
+            self.go_to_position_relative(-dz)
+            sleep(dt)
+
+        z_mean = np.mean(z, axis=0)
+        z_std = np.std(z, axis=0)
+        print(f'The average positions are z1 = {z_mean[0]} +/- {z_std[0]}nm and z2 = {z_mean[1]} +/- {z_std[1]}nm')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for the timetrace of the piezo position (timetrace dockwidget)
