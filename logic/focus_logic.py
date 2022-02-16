@@ -250,7 +250,7 @@ class FocusLogic(GenericLogic):
         """
         if direct:
             self._piezo.move_abs({self._axis: position})
-            sleep(0.01)
+            sleep(0.03)
         else:
             self.piezo_ramp(position)
 
@@ -442,15 +442,15 @@ class FocusLogic(GenericLogic):
         autofocus_signal = np.zeros((n_positions,))
 
         # Position the piezo (the first position is taking longer to stabilize)
-        self.go_to_position(z[0])
-        sleep(0.5)
+        self.go_to_position(z[0], direct=True)
+        # sleep(0.5)
 
         # Start the calibration
         for n in range(n_positions):
             current_z = z[n]
-            self.go_to_position(current_z)
-            # Timer necessary to make sure the piezo has reached the position and is stable
-            sleep(0.05)
+            self.go_to_position(current_z, direct=True)
+            # # Timer necessary to make sure the piezo has reached the position and is stable
+            # sleep(0.05)
             piezo_position[n] = self.get_position()
             # Read the latest QPD signal
             autofocus_signal[n] = self.read_detector_signal()
@@ -460,8 +460,8 @@ class FocusLogic(GenericLogic):
         self._slope = p(1) - p(0)
         self._calibrated = True
 
-        self.go_to_position(z0)
-        sleep(0.5)  # wait until position is stable
+        self.go_to_position(z0, direct=True)
+        #sleep(0.5)  # wait until position is stable
 
         # measure the precision of the autofocus
         iterations = 30
