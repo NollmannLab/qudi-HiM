@@ -369,7 +369,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # save the check_dz positions
         data_dict = {'z': check_dz.tolist()}
-        dz_path = os.path.join(self.directory, f'z_check.yml')
+        dz_path = os.path.join(self.directory, f'z_check_{self.counter}.yml')
         with open(dz_path, 'w') as outfile:
             yaml.safe_dump(data_dict, outfile, default_flow_style=False)
 
@@ -731,9 +731,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         performing the stack
         """
         dz = self.dz[n - 1]
-        self.ref['focus'].go_to_position_relative(dz)
-        # current_z = self.ref['focus'].get_position()
-        # self.ref['focus'].go_to_position(current_z + dz)
+        # self.ref['focus'].go_to_position_relative(dz)
+        current_z = self.ref['focus'].get_position()
+        self.ref['focus'].go_to_position(current_z + dz, direct=True)
 
         # calculate the starting and ending positions for the stack
         start_position, end_position = self.calculate_start_position(self.centered_focal_plane, self.num_z_planes,
