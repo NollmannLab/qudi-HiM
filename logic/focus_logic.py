@@ -609,7 +609,7 @@ class FocusLogic(GenericLogic):
 
             if self._min_z + 1 < z < self._max_z - 1:
                 if dz > 0.1:
-                    self.go_to_position(z)
+                    self.go_to_position(z, direct=True)
                 else:
                     pass
 
