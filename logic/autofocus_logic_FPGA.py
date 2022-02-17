@@ -140,8 +140,8 @@ class AutofocusLogic(GenericLogic):
         :return bool: True: signal ok, False: signal too low
         """
         qpd_sum = self.qpd_read_sum()
-        print("Autofocus check signal : SUM = {}".format(qpd_sum))
         if qpd_sum < 300:
+            print("Autofocus check signal is too low : SUM = {}".format(qpd_sum))
             return False
         else:
             return True
