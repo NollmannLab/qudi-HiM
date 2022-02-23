@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>921</width>
-    <height>966</height>
+    <height>995</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,14 +18,14 @@
     <item>
      <widget class="QWidget" name="formWidget" native="true">
       <layout class="QGridLayout" name="gridLayout">
-       <item row="28" column="1">
+       <item row="29" column="1">
         <widget class="QLabel" name="injections_list_Label">
          <property name="text">
           <string>Injection list path</string>
          </property>
         </widget>
        </item>
-       <item row="32" column="2">
+       <item row="33" column="2">
         <widget class="QDoubleSpinBox" name="illumination_time_DSpinBox">
          <property name="decimals">
           <number>1</number>
@@ -41,7 +41,7 @@
        <item row="19" column="1">
         <widget class="QLabel" name="save_path_Label">
          <property name="text">
-          <string>Path</string>
+          <string>Local path</string>
          </property>
         </widget>
        </item>
@@ -80,7 +80,7 @@
          </property>
         </widget>
        </item>
-       <item row="20" column="2">
+       <item row="21" column="2">
         <widget class="QComboBox" name="fileformat_ComboBox"/>
        </item>
        <item row="4" column="1">
@@ -90,7 +90,7 @@
          </property>
         </widget>
        </item>
-       <item row="31" column="1">
+       <item row="32" column="1">
         <widget class="QLabel" name="prebleach_settings_Label">
          <property name="font">
           <font>
@@ -104,7 +104,7 @@
          </property>
         </widget>
        </item>
-       <item row="29" column="1">
+       <item row="30" column="1">
         <widget class="QLabel" name="dapi_path_Label">
          <property name="text">
           <string>Path to associated DAPI data</string>
@@ -144,24 +144,24 @@
        <item row="19" column="2" colspan="2">
         <widget class="QLineEdit" name="save_path_LineEdit"/>
        </item>
-       <item row="27" column="2" colspan="2">
+       <item row="28" column="2" colspan="2">
         <widget class="QLineEdit" name="roi_list_path_LineEdit">
          <property name="enabled">
           <bool>true</bool>
          </property>
         </widget>
        </item>
-       <item row="29" column="2" colspan="2">
+       <item row="30" column="2" colspan="2">
         <widget class="QLineEdit" name="dapi_data_LineEdit"/>
        </item>
-       <item row="20" column="1">
+       <item row="21" column="1">
         <widget class="QLabel" name="fileformat_Label">
          <property name="text">
           <string>Fileformat</string>
          </property>
         </widget>
        </item>
-       <item row="22" column="1">
+       <item row="23" column="1">
         <widget class="QLabel" name="scan_settings_Label">
          <property name="font">
           <font>
@@ -248,7 +248,7 @@
          </property>
         </widget>
        </item>
-       <item row="24" column="2">
+       <item row="25" column="2">
         <widget class="QDoubleSpinBox" name="z_step_DSpinBox">
          <property name="decimals">
           <number>3</number>
@@ -271,7 +271,7 @@
          </property>
         </widget>
        </item>
-       <item row="27" column="1">
+       <item row="28" column="1">
         <widget class="QLabel" name="roi_list_path_Label">
          <property name="text">
           <string>ROI list path</string>
@@ -292,7 +292,7 @@
          </property>
         </widget>
        </item>
-       <item row="34" column="2">
+       <item row="35" column="2">
         <widget class="QSpinBox" name="num_iterations_SpinBox">
          <property name="maximum">
           <number>1000</number>
@@ -328,7 +328,7 @@
          </property>
         </spacer>
        </item>
-       <item row="26" column="1">
+       <item row="27" column="1">
         <widget class="QLabel" name="documents_Label">
          <property name="font">
           <font>
@@ -342,28 +342,28 @@
          </property>
         </widget>
        </item>
-       <item row="29" column="4">
+       <item row="30" column="4">
         <widget class="QPushButton" name="load_dapi_PushButton">
          <property name="text">
           <string>Load DAPI path</string>
          </property>
         </widget>
        </item>
-       <item row="27" column="4">
+       <item row="28" column="4">
         <widget class="QPushButton" name="load_roi_PushButton">
          <property name="text">
           <string>Load ROI list</string>
          </property>
         </widget>
        </item>
-       <item row="23" column="1">
+       <item row="24" column="1">
         <widget class="QLabel" name="num_z_planes_Label">
          <property name="text">
           <string>Number of planes</string>
          </property>
         </widget>
        </item>
-       <item row="30" column="1">
+       <item row="31" column="1">
         <spacer name="verticalSpacer_6">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -376,7 +376,7 @@
          </property>
         </spacer>
        </item>
-       <item row="25" column="1">
+       <item row="26" column="1">
         <spacer name="verticalSpacer_5">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -416,7 +416,7 @@
          </property>
         </widget>
        </item>
-       <item row="23" column="3">
+       <item row="24" column="3">
         <widget class="QCheckBox" name="centered_focal_plane_CheckBox">
          <property name="text">
           <string>Centered focal plane?</string>
@@ -440,10 +440,10 @@
        <item row="12" column="2" colspan="2">
         <widget class="QListView" name="imaging_sequence_ListView"/>
        </item>
-       <item row="28" column="2" colspan="2">
+       <item row="29" column="2" colspan="2">
         <widget class="QLineEdit" name="injections_list_LineEdit"/>
        </item>
-       <item row="24" column="1">
+       <item row="25" column="1">
         <widget class="QLabel" name="z_step_Label">
          <property name="text">
           <string>Step (um)</string>
@@ -471,7 +471,7 @@
          </property>
         </widget>
        </item>
-       <item row="28" column="4">
+       <item row="29" column="4">
         <widget class="QPushButton" name="load_injections_PushButton">
          <property name="text">
           <string>Load injections list</string>
@@ -485,7 +485,7 @@
          </property>
         </widget>
        </item>
-       <item row="33" column="1">
+       <item row="34" column="1">
         <widget class="QLabel" name="timelapse_settings_Label">
          <property name="font">
           <font>
@@ -508,7 +508,7 @@
          </attribute>
         </widget>
        </item>
-       <item row="21" column="1">
+       <item row="22" column="1">
         <spacer name="verticalSpacer_4">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
@@ -521,7 +521,7 @@
          </property>
         </spacer>
        </item>
-       <item row="23" column="2">
+       <item row="24" column="2">
         <widget class="QSpinBox" name="num_z_planes_SpinBox">
          <property name="minimum">
           <number>1</number>
@@ -534,7 +534,7 @@
        <item row="9" column="2">
         <widget class="QComboBox" name="filterpos_ComboBox"/>
        </item>
-       <item row="32" column="1">
+       <item row="33" column="1">
         <widget class="QLabel" name="illumination_time_Label">
          <property name="text">
           <string>Illumination time (min)</string>
@@ -554,37 +554,54 @@
          </attribute>
         </widget>
        </item>
-       <item row="34" column="1">
+       <item row="35" column="1">
         <widget class="QLabel" name="num_iterations_Label">
          <property name="text">
           <string>Number of iterations</string>
          </property>
         </widget>
        </item>
-       <item row="35" column="1">
+       <item row="36" column="1">
         <widget class="QLabel" name="time_step_Label">
          <property name="text">
           <string>Time step (s)</string>
          </property>
         </widget>
        </item>
-       <item row="35" column="2">
+       <item row="36" column="2">
         <widget class="QSpinBox" name="time_step_SpinBox"/>
        </item>
-       <item row="36" column="1">
+       <item row="37" column="1">
         <widget class="QLabel" name="dz_calibration_label">
          <property name="text">
           <string>Dz calibration file</string>
          </property>
         </widget>
        </item>
-       <item row="36" column="2" colspan="2">
+       <item row="37" column="2" colspan="2">
         <widget class="QLineEdit" name="axial_calibration_path_lineEdit"/>
        </item>
-       <item row="36" column="4">
+       <item row="37" column="4">
         <widget class="QPushButton" name="load_dz_calibration_pushButton">
          <property name="text">
           <string>Load dz calibration</string>
+         </property>
+        </widget>
+       </item>
+       <item row="20" column="1">
+        <widget class="QLabel" name="save_remote_path_Label">
+         <property name="text">
+          <string>Network path (HiM task only)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="20" column="2" colspan="2">
+        <widget class="QLineEdit" name="save_network_path_LineEdit">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="readOnly">
+          <bool>false</bool>
          </property>
         </widget>
        </item>

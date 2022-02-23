@@ -87,7 +87,8 @@ class ImagingSequenceModelTimelapsePALM(QtCore.QAbstractListModel):
     def data(self, index, role):
         if role == QtCore.Qt.DisplayRole:
             source, intens, num_z_planes, z_step, filter_pos = self.items[index.row()].values()
-            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}, filter_pos: {filter_pos}"
+            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}," \
+                   f"filter_pos: {filter_pos}"
 
     def rowCount(self, index):
         return len(self.items)
@@ -133,6 +134,7 @@ class ExpConfigLogic(GenericLogic):
     experiments = ConfigOption('experiments')
     supported_fileformats = ConfigOption('supported fileformats')
     default_path_images = ConfigOption('default path imagedata')
+    default_network_path = ConfigOption('default network path')
 
     config_dict = {}
 
@@ -192,6 +194,7 @@ class ExpConfigLogic(GenericLogic):
         self.img_sequence_model_timelapse_ramm.items = []
         self.img_sequence_model_timelapse_palm.items = []
         self.config_dict['save_path'] = self.default_path_images
+        self.config_dict['network_save_path'] = self.default_network_path
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
@@ -287,9 +290,9 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Hi-M RAMM':
                 if not filename:
                     filename = 'hi_m_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
-                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path',
-                                   'dapi_path']
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'file_format',
+                                   'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
+                                   'roi_list_path', 'injections_path', 'dapi_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Lumencor':
@@ -487,6 +490,15 @@ class ExpConfigLogic(GenericLogic):
         :return: None
         """
         self.config_dict['save_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_save_network_path(self, path):
+        """ Updates the dictionary entry 'network_save_path' (path where image data will be uploaded).
+        :param: str path: complete path where image et logging data shall be saved on the network
+        :return: None
+        """
+        self.config_dict['network_save_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)

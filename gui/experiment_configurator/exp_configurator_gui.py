@@ -6,7 +6,7 @@ This module contains a GUI that allows to create an experiment config file for a
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho - later modifications JB Fiche
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -124,6 +124,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.num_frames_SpinBox.valueChanged.connect(self._exp_logic.update_frames)
         self._mw.filterpos_ComboBox.currentIndexChanged.connect(self._exp_logic.update_filterpos)
         self._mw.save_path_LineEdit.textChanged.connect(self._exp_logic.update_save_path)
+        self._mw.save_network_path_LineEdit.textChanged.connect(self._exp_logic.update_save_network_path)
         self._mw.fileformat_ComboBox.currentTextChanged.connect(self._exp_logic.update_fileformat)
         self._mw.num_z_planes_SpinBox.valueChanged.connect(self._exp_logic.update_num_z_planes)
         self._mw.z_step_DSpinBox.valueChanged.connect(self._exp_logic.update_z_step)
@@ -668,7 +669,9 @@ class ExpConfiguratorGUI(GUIBase):
         """
         self._mw.save_settings_Label.setVisible(visible)
         self._mw.save_path_Label.setVisible(visible)
+        self._mw.save_remote_path_Label.setVisible(visible)
         self._mw.save_path_LineEdit.setVisible(visible)
+        self._mw.save_network_path_LineEdit.setVisible(visible)
         self._mw.fileformat_Label.setVisible(visible)
         self._mw.fileformat_ComboBox.setVisible(visible)
 
@@ -860,6 +863,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._exp_logic.img_sequence_model_timelapse_ramm.layoutChanged.emit()
         self._exp_logic.img_sequence_model_timelapse_palm.layoutChanged.emit()
         self._mw.save_path_LineEdit.setText(self._exp_logic.config_dict.get('save_path', ''))
+        self._mw.save_network_path_LineEdit.setText(self._exp_logic.config_dict.get('network_save_path', ''))
         self._mw.fileformat_ComboBox.setCurrentText(self._exp_logic.config_dict.get('file_format', ''))
         self._mw.num_z_planes_SpinBox.setValue(self._exp_logic.config_dict.get('num_z_planes', 1))
         self._mw.z_step_DSpinBox.setValue(self._exp_logic.config_dict.get('z_step', 0.0))
