@@ -33,12 +33,40 @@ import numpy as np
 import pandas as pd
 import os
 import time
+import shutil
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
     create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
+from qtpy import QtCore
+from glob import glob
+
+data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
+# available with QRunnable - however, since qudi is using QThreadPool & QRunnable, I kept the same method for multi-
+# threading.
+
+
+class UploadDataWorker(QtCore.QRunnable):
+    """ Worker thread to parallelize data uploading to network during injections.
+
+    :param: str data_path = path to the local data
+    :param: str dest_folder = path where the data should be uploaded
+    """
+
+    def __init__(self, data_path, dest_folder):
+        super(UploadDataWorker, self).__init__()
+        self.data_path = data_path
+        self.dest_folder = dest_folder
+
+    @QtCore.Slot()
+    def run(self):
+        """ Copy the file to destination
+        """
+        shutil.copy(self.data_path, self.dest_folder)
+        global data_saved
+        data_saved = True
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -79,12 +107,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.logging = True
         self.start = None
         self.default_exposure = None
-        self.directory = None
+        self.directory: str = ""
+        self.network_directory: str = ""
         self.log_folder = None
         self.default_info_path = None
-        self.status_dict_path = None
-        self.status_dict = {}
-        self.log_path = None
+        self.status_dict_path: str = ""
+        self.status_dict: dict = {}
+        self.log_path: str = ""
         self.num_frames = None
         self.sample_name = None
         self.exposure = None
@@ -92,7 +121,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.z_step = None
         self.centered_focal_plane = None
         self.imaging_sequence = []
-        self.save_path = None
+        self.save_path: str = ""
+        self.network_save_path: str = ""
         self.file_format = None
         self.roi_list_path = None
         self.injections_path = None
@@ -101,10 +131,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines = None
         self.wavelengths = []
         self.intensities = []
-        self.probe_dict = {}
+        self.probe_dict: dict = {}
         self.hybridization_list = []
         self.photobleaching_list = []
-        self.buffer_dict = {}
+        self.buffer_dict: dict = {}
         self.probe_list = []
         self.prefix = None
 
@@ -152,9 +182,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
+        self.network_directory = self.create_directory(self.network_save_path)
 
         # log file paths -----------------------------------------------------------------------------------------------
-        self.log_folder = os.path.join(self.directory, 'hi_m_log')
+        self.log_folder = os.path.join(self.network_directory, 'hi_m_log')
         os.makedirs(self.log_folder)  # recursive creation of all directories on the path
 
         # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
@@ -238,6 +269,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
+            # list all the files that were already acquired and uploaded
+            path_to_upload = self.check_acquired_data()
+
             # position the valves for hybridization sequence
             self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: inject probe
             self.ref['valves'].wait_for_idle()
@@ -295,6 +329,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         self.append_flow_data(pressure, volume, flowrate)
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
 
                         if self.aborted:
                             ready = True
@@ -322,6 +358,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     num_steps = t // 30
                     remainder = t % 30
                     for i in range(num_steps):
+
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
+
                         if not self.aborted:
                             time.sleep(30)
                             print("Elapsed time : {}s".format((i+1)*30))
@@ -693,6 +733,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
+                self.network_save_path = self.user_param_dict['network_save_path']
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
@@ -942,3 +983,51 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             projection = np.max(image_array, axis=0)
             path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
             np.save(path, projection)
+
+    def check_acquired_data(self):
+        """ List all the acquired data in the directory and all the data already uploaded on the network.
+
+        @return: path_to_upload : list of all the .tif files in the local directory
+        """
+        # look for all the tif files in the folder
+        path_to_upload = glob(self.directory + '/**/*.tif', recursive=True)
+        print(f'Number of tif files found : {path_to_upload}')
+
+        # look for all the tif files in the destination folder
+        uploaded_path = glob(self.network_directory + '/**/*.tif', recursive=True)
+        uploaded_files = []
+        for n, path in enumerate(uploaded_path):
+            uploaded_files.append(os.path.basename(path))
+        print(f'Number of tif files found : {uploaded_files}')
+
+        # remove from the list all the files that have already been transferred
+        path_to_upload_sorted = path_to_upload
+        print(f'path_to_upload : {path_to_upload}')
+        for path in path_to_upload:
+            file_name = os.path.basename(path)
+            if file_name in uploaded_files:
+                path_to_upload_sorted.remove(path)
+
+        print(f'path_to_upload (after sorting): {path_to_upload_sorted}')
+        return path_to_upload_sorted
+
+    def launch_data_uploading(self, path_to_upload):
+        """ Look for the next .tif file to upload and start the worker on a specific thread to launch the transfer
+
+        @param path_to_upload: list of all the .tif files in the local directory
+        """
+        global data_saved
+
+        if data_saved and path_to_upload:
+            print(f'path_to_upload before pop: {path_to_upload}')
+            path = path_to_upload.pop(0)
+            print(f'path_to_upload after pop: {path_to_upload}')
+
+            # launch the worker to start the transfer
+            global data_saved
+            data_saved = False
+            print(f"uploading {path}")
+            worker = UploadDataWorker(path, self.network_directory)
+            self.threadpool.start(worker)
+
+        return path_to_upload
