@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>797</width>
-    <height>856</height>
+    <height>890</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -168,46 +168,6 @@
         <bool>true</bool>
        </property>
        <layout class="QGridLayout" name="gridLayout_7">
-        <item row="2" column="0">
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Precision (nm)</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="0">
-         <widget class="QPushButton" name="setpoint_PushButton">
-          <property name="text">
-           <string>Define setpoint for live stabilization</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="0">
-         <widget class="QPushButton" name="find_offset_PushButton">
-          <property name="text">
-           <string>Define offset for HiM focus search</string>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="1">
-         <widget class="QLineEdit" name="offset_lineEdit"/>
-        </item>
-        <item row="4" column="2">
-         <widget class="QLabel" name="offset_unit_label">
-          <property name="text">
-           <string>um</string>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="1">
-         <widget class="QLineEdit" name="setpoint_lineEdit"/>
-        </item>
-        <item row="2" column="1">
-         <widget class="QLineEdit" name="precision_lineEdit"/>
-        </item>
         <item row="1" column="0" colspan="2">
          <widget class="QPushButton" name="calibration_PushButton">
           <property name="text">
@@ -218,11 +178,54 @@
           </property>
          </widget>
         </item>
+        <item row="3" column="1">
+         <widget class="QLineEdit" name="precision_lineEdit"/>
+        </item>
+        <item row="5" column="1">
+         <widget class="QLineEdit" name="offset_lineEdit"/>
+        </item>
+        <item row="4" column="0">
+         <widget class="QPushButton" name="setpoint_PushButton">
+          <property name="text">
+           <string>Define setpoint for live stabilization</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="2">
+         <widget class="QLabel" name="offset_unit_label">
+          <property name="text">
+           <string>um</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QPushButton" name="find_offset_PushButton">
+          <property name="text">
+           <string>Define offset for HiM focus search</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QLineEdit" name="setpoint_lineEdit"/>
+        </item>
         <item row="0" column="0" colspan="2">
          <widget class="PlotWidget" name="calibration_PlotWidget"/>
         </item>
+        <item row="2" column="1">
+         <widget class="QLineEdit" name="slope_lineEdit"/>
+        </item>
         <item row="1" column="2">
          <widget class="QComboBox" name="comboBox"/>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLabel" name="slope_Label">
+          <property name="text">
+           <string>Slope (um-1)</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
         </item>
         <item row="0" column="2">
          <spacer name="horizontalSpacer">
@@ -236,6 +239,16 @@
            </size>
           </property>
          </spacer>
+        </item>
+        <item row="3" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Precision (nm)</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>
@@ -252,45 +265,13 @@
    </attribute>
    <widget class="QWidget" name="dockWidgetContents_4">
     <layout class="QGridLayout" name="gridLayout_5">
-     <item row="0" column="0">
+     <item row="1" column="0">
       <widget class="QWidget" name="widget_3" native="true">
        <property name="autoFillBackground">
         <bool>true</bool>
        </property>
        <layout class="QGridLayout" name="gridLayout_3">
-        <item row="1" column="0">
-         <widget class="PlotWidget" name="raw_image_PlotWidget">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="minimumSize">
-           <size>
-            <width>200</width>
-            <height>200</height>
-           </size>
-          </property>
-          <property name="maximumSize">
-           <size>
-            <width>300</width>
-            <height>300</height>
-           </size>
-          </property>
-          <property name="transformationAnchor">
-           <enum>QGraphicsView::AnchorUnderMouse</enum>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="0">
-         <widget class="QLabel" name="live_label">
-          <property name="text">
-           <string>Thorlabs camera raw</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="1">
+        <item row="3" column="1">
          <widget class="PlotWidget" name="threshold_image_PlotWidget">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -315,7 +296,14 @@
           </property>
          </widget>
         </item>
-        <item row="0" column="1">
+        <item row="1" column="0">
+         <widget class="QLabel" name="live_label">
+          <property name="text">
+           <string>Thorlabs camera raw</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
            <widget class="QSpinBox" name="threshold_SpinBox">
@@ -338,6 +326,44 @@
            </widget>
           </item>
          </layout>
+        </item>
+        <item row="3" column="0">
+         <widget class="PlotWidget" name="raw_image_PlotWidget">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="minimumSize">
+           <size>
+            <width>200</width>
+            <height>200</height>
+           </size>
+          </property>
+          <property name="maximumSize">
+           <size>
+            <width>300</width>
+            <height>300</height>
+           </size>
+          </property>
+          <property name="transformationAnchor">
+           <enum>QGraphicsView::AnchorUnderMouse</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="2" rowspan="3">
+         <spacer name="verticalSpacer_2">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
         </item>
        </layout>
       </widget>
