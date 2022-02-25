@@ -75,7 +75,7 @@ class FocusWindow(QtWidgets.QMainWindow):
     def __init__(self):
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_focus.ui')
+        ui_file = os.path.join(this_dir, 'ui_focus_v3.ui')
 
         # Load it
         super().__init__()
