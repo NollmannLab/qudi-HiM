@@ -119,6 +119,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.sample_name_LineEdit.textChanged.connect(self._exp_logic.update_sample_name)
         self._mw.dapi_CheckBox.stateChanged.connect(self._exp_logic.update_is_dapi)
         self._mw.rna_CheckBox.stateChanged.connect(self._exp_logic.update_is_rna)
+        self._mw.TransferData_checkBox.stateChanged.connect(self._exp_logic.update_data_transfer)
         self._mw.exposure_DSpinBox.valueChanged.connect(self._exp_logic.update_exposure)
         self._mw.gain_SpinBox.valueChanged.connect(self._exp_logic.update_gain)
         self._mw.num_frames_SpinBox.valueChanged.connect(self._exp_logic.update_frames)
@@ -232,6 +233,11 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
 
+            # additional visibility settings
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
+
         elif experiment == 'Multicolor scan PALM':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
@@ -248,6 +254,11 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+
+            # additional visibility settings
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'Multicolor scan RAMM':
             # chose the right the listview model
@@ -272,6 +283,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'Multicolor scan Airyscan':
             # chose the right the listview model
@@ -296,6 +310,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'ROI multicolor scan PALM':
             # chose the right the listview model
@@ -321,6 +338,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dapi_path_Label.setVisible(False)
             self._mw.dapi_data_LineEdit.setVisible(False)
             self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'ROI multicolor scan RAMM':
             # chose the right the listview model
@@ -353,6 +373,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'ROI multicolor scan Airyscan':
             # chose the right the listview model
@@ -385,6 +408,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'Fluidics RAMM' or experiment == 'Fluidics Airyscan':
             # chose the right the listview model
@@ -435,7 +461,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
 
-        elif experiment == 'Hi-M Airyscan Lumencor':  # modify to remove the non necessary entries - right now just a copy of Hi-M RAMM
+        elif experiment == 'Hi-M Airyscan Lumencor':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
             self._exp_logic.is_timelapse_ramm = False
@@ -458,6 +484,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'Hi-M Airyscan Confocal':
             # chose the right the listview model
@@ -482,6 +511,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         elif experiment == 'Photobleaching RAMM':
             # chose the right the listview model
@@ -540,6 +572,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.time_step_Label.setVisible(False)
             self._mw.time_step_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
             # Modify the laser list in order to add the bright field control
             self._mw.laser_ComboBox.addItems(['Brightfield'])
@@ -576,6 +611,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dz_calibration_label.setVisible(False)
             self._mw.axial_calibration_path_lineEdit.setVisible(False)
             self._mw.load_dz_calibration_pushButton.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
             # Modify the laser list in order to add the bright field control
             self._mw.laser_ComboBox.addItems(['Brightfield'])
@@ -609,6 +647,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.dz_calibration_label.setVisible(False)
             self._mw.axial_calibration_path_lineEdit.setVisible(False)
             self._mw.load_dz_calibration_pushButton.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
 
         # add here additional experiment types
 
@@ -674,6 +715,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.save_network_path_LineEdit.setVisible(visible)
         self._mw.fileformat_Label.setVisible(visible)
         self._mw.fileformat_ComboBox.setVisible(visible)
+        self._mw.TransferData_checkBox.setVisible(visible)
 
     def set_visibility_scan_settings(self, visible):
         """ Show or hide the block with the scan settings widgets.

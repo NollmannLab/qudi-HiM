@@ -186,6 +186,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict = {}
         self.config_dict['dapi'] = False
         self.config_dict['rna'] = False
+        self.config_dict['transfer_data'] = False
         self.config_dict['exposure'] = 0.05
         self.config_dict['gain'] = 0
         self.config_dict['num_frames'] = 1
@@ -290,8 +291,8 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Hi-M RAMM':
                 if not filename:
                     filename = 'hi_m_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'file_format',
-                                   'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'transfer_data',
+                                   'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
                                    'roi_list_path', 'injections_path', 'dapi_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
@@ -444,6 +445,19 @@ class ExpConfigLogic(GenericLogic):
             self.config_dict['rna'] = True
         elif state == 0:  # Unchecked = 0
             self.config_dict['rna'] = False
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(int)
+    def update_data_transfer(self, state):
+        """ Updates the dictionary entry 'data_transfer' indicating whether the automatic transfer of the data to the
+        server should be activated.
+        :param: int state: Qt.CheckState of the data transfer checkbox
+        :return: None
+        """
+        if state == 2:  # Enum Qt::CheckState Checked = 2
+            self.config_dict['transfer_data'] = True
+        elif state == 0:  # Unchecked = 0
+            self.config_dict['transfer_data'] = False
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(float)

@@ -591,7 +591,7 @@
        <item row="20" column="1">
         <widget class="QLabel" name="save_remote_path_Label">
          <property name="text">
-          <string>Network path (HiM task only)</string>
+          <string>Network path </string>
          </property>
         </widget>
        </item>
@@ -602,6 +602,13 @@
          </property>
          <property name="readOnly">
           <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="20" column="4">
+        <widget class="QCheckBox" name="TransferData_checkBox">
+         <property name="text">
+          <string>Transfer data automatically</string>
          </property>
         </widget>
        </item>
