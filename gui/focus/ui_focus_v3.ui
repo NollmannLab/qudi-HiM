@@ -171,17 +171,7 @@
         <item row="8" column="3">
          <widget class="QPushButton" name="find_offset_PushButton">
           <property name="text">
-           <string>Define offset for HiM focus search</string>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="3">
-         <widget class="QPushButton" name="calibration_PushButton">
-          <property name="text">
-           <string>Launch calibration</string>
-          </property>
-          <property name="checkable">
-           <bool>true</bool>
+           <string>Define offset for focus search</string>
           </property>
          </widget>
         </item>
@@ -305,6 +295,16 @@
            </size>
           </property>
          </spacer>
+        </item>
+        <item row="0" column="3" colspan="2">
+         <widget class="QPushButton" name="calibration_PushButton">
+          <property name="text">
+           <string>Launch calibration</string>
+          </property>
+          <property name="checkable">
+           <bool>true</bool>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>
