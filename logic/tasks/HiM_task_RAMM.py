@@ -273,7 +273,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
             # list all the files that were already acquired and uploaded
-            print(f'transfer data is : {self.transfer_data}')
             if self.transfer_data:
                 path_to_upload = self.check_acquired_data()
             else:
@@ -402,11 +401,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-        # make sure there is no data being transferred
-        global data_saved
-        print('Checking there is no data being transferred ...')
-        while not data_saved:
-            time.sleep(1)
+            # make sure there is no data being transferred
+            global data_saved
+            print('Checking there is no data being transferred ...')
+            while not data_saved:
+                time.sleep(1)
 
             for item in self.roi_names:
                 if self.aborted:
