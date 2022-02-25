@@ -168,14 +168,14 @@
         <bool>true</bool>
        </property>
        <layout class="QGridLayout" name="gridLayout_7">
-        <item row="8" column="4">
+        <item row="8" column="3">
          <widget class="QPushButton" name="find_offset_PushButton">
           <property name="text">
            <string>Define offset for HiM focus search</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="4">
+        <item row="0" column="3">
          <widget class="QPushButton" name="calibration_PushButton">
           <property name="text">
            <string>Launch calibration</string>
@@ -185,7 +185,7 @@
           </property>
          </widget>
         </item>
-        <item row="6" column="4">
+        <item row="6" column="3">
          <widget class="QPushButton" name="setpoint_PushButton">
           <property name="text">
            <string>Define setpoint for live stabilization</string>
@@ -193,40 +193,7 @@
          </widget>
         </item>
         <item row="8" column="7">
-         <widget class="QLabel" name="offset_unit_label">
-          <property name="text">
-           <string>um</string>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="5">
-         <widget class="QLineEdit" name="setpoint_lineEdit"/>
-        </item>
-        <item row="2" column="5">
-         <widget class="QLineEdit" name="slope_lineEdit"/>
-        </item>
-        <item row="3" column="5">
-         <widget class="QLineEdit" name="precision_lineEdit"/>
-        </item>
-        <item row="3" column="4">
-         <widget class="QLabel" name="label_3">
-          <property name="text">
-           <string>Precision (nm)</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="1" rowspan="10" colspan="2">
-         <widget class="PlotWidget" name="calibration_PlotWidget">
-          <property name="dragMode">
-           <enum>QGraphicsView::ScrollHandDrag</enum>
-          </property>
-         </widget>
-        </item>
-        <item row="0" column="0">
-         <spacer name="horizontalSpacer">
+         <spacer name="horizontalSpacer_6">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
           </property>
@@ -238,7 +205,53 @@
           </property>
          </spacer>
         </item>
+        <item row="8" column="6">
+         <widget class="QLabel" name="offset_unit_label">
+          <property name="text">
+           <string>um</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="4">
+         <widget class="QLineEdit" name="setpoint_lineEdit"/>
+        </item>
         <item row="2" column="4">
+         <widget class="QLineEdit" name="slope_lineEdit"/>
+        </item>
+        <item row="3" column="4">
+         <widget class="QLineEdit" name="precision_lineEdit"/>
+        </item>
+        <item row="10" column="0">
+         <spacer name="horizontalSpacer_5">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item row="3" column="3">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Precision (nm)</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0" rowspan="10" colspan="3">
+         <widget class="PlotWidget" name="calibration_PlotWidget">
+          <property name="dragMode">
+           <enum>QGraphicsView::ScrollHandDrag</enum>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="3">
          <widget class="QLabel" name="slope_Label">
           <property name="text">
            <string>Slope (um-1)</string>
@@ -248,10 +261,23 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="4" colspan="2">
+        <item row="4" column="3" colspan="2">
          <widget class="QComboBox" name="comboBox"/>
         </item>
-        <item row="9" column="4" colspan="4">
+        <item row="10" column="2">
+         <spacer name="horizontalSpacer_7">
+          <property name="orientation">
+           <enum>Qt::Horizontal</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>40</width>
+            <height>20</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item row="9" column="3" colspan="4">
          <spacer name="verticalSpacer_2">
           <property name="orientation">
            <enum>Qt::Vertical</enum>
@@ -264,10 +290,10 @@
           </property>
          </spacer>
         </item>
-        <item row="8" column="5">
+        <item row="8" column="4">
          <widget class="QLineEdit" name="offset_lineEdit"/>
         </item>
-        <item row="8" column="8">
+        <item row="10" column="1">
          <spacer name="horizontalSpacer_2">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
