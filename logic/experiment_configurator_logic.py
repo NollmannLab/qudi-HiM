@@ -195,7 +195,7 @@ class ExpConfigLogic(GenericLogic):
         self.img_sequence_model_timelapse_ramm.items = []
         self.img_sequence_model_timelapse_palm.items = []
         self.config_dict['save_path'] = self.default_path_images
-        self.config_dict['network_save_path'] = self.default_network_path
+        self.config_dict['save_network_path'] = self.default_network_path
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
@@ -512,7 +512,7 @@ class ExpConfigLogic(GenericLogic):
         :param: str path: complete path where image et logging data shall be saved on the network
         :return: None
         """
-        self.config_dict['network_save_path'] = path
+        self.config_dict['save_network_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)
