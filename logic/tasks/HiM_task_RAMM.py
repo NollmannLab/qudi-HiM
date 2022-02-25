@@ -105,40 +105,41 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.user_config_path = self.config['path_to_user_config']
         self.probe_counter = None
-        self.user_param_dict = {}
-        self.logging = True
-        self.start = None
+        self.user_param_dict: dict = {}
+        self.logging: bool = True
+        self.start: float = None
         self.default_exposure = None
         self.directory: str = ""
         self.network_directory: str = ""
-        self.log_folder = None
-        self.default_info_path = None
+        self.log_folder: str = ""
+        self.default_info_path: str = ""
         self.status_dict_path: str = ""
         self.status_dict: dict = {}
         self.log_path: str = ""
         self.num_frames = None
-        self.sample_name = None
+        self.sample_name: str = ""
         self.exposure = None
         self.num_z_planes = None
         self.z_step = None
-        self.centered_focal_plane = None
-        self.imaging_sequence = []
+        self.centered_focal_plane: bool = False
+        self.imaging_sequence: list = []
         self.save_path: str = ""
         self.save_network_path: str = ""
-        self.file_format = None
-        self.roi_list_path = None
+        self.transfer_data: bool = False
+        self.file_format: str = None
+        self.roi_list_path: list = None
         self.injections_path = None
-        self.dapi_path = None
-        self.roi_names = []
+        self.dapi_path: str = ""
+        self.roi_names: list = []
         self.num_laserlines = None
         self.wavelengths = []
         self.intensities = []
         self.probe_dict: dict = {}
-        self.hybridization_list = []
-        self.photobleaching_list = []
+        self.hybridization_list: list = []
+        self.photobleaching_list: list = []
         self.buffer_dict: dict = {}
-        self.probe_list = []
-        self.prefix = None
+        self.probe_list: list = []
+        self.prefix: str = ""
 
     def startTask(self):
         """ """
@@ -272,7 +273,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
             # list all the files that were already acquired and uploaded
-            path_to_upload = self.check_acquired_data()
+            print(f'transfer data is : {self.transfer_data}')
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
 
             # position the valves for hybridization sequence
             self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: inject probe
@@ -397,6 +402,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
+        # make sure there is no data being transferred
+        global data_saved
+        print('Checking there is no data being transferred ...')
+        while not data_saved:
+            time.sleep(1)
+
             for item in self.roi_names:
                 if self.aborted:
                     break
@@ -412,12 +423,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['roi'].stage_wait_for_idle()
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
-
-                # make sure there is no data being transferred
-                global data_saved
-                print('Checking there is not data being transferred ...')
-                while not data_saved:
-                    time.sleep(1)
 
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
@@ -546,7 +551,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             start_rinsing_time = time.time()
 
             # list all the files that were already acquired and uploaded
-            path_to_upload = self.check_acquired_data()
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
 
             # inject product
             self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
@@ -680,7 +688,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # position .. (maybe not necessary because all those elements will still be done above)
         else:
             # list all the files that were already acquired and uploaded
-            path_to_upload = self.check_acquired_data()
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
             while path_to_upload and not self.aborted:
                 path_to_upload = self.launch_data_uploading(path_to_upload)
 
@@ -753,6 +764,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
                 self.save_network_path = self.user_param_dict['save_network_path']
+                self.transfer_data = self.user_param_dict['transfer_data']
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
@@ -1014,7 +1026,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
         print(f'Number of yaml files found : {len(path_to_upload_yml)}')
         path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
-        print(f'Number of tif files found : {path_to_upload_tif}')
+        print(f'Number of tif files found : {len(path_to_upload_tif)}')
         path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
 
         # look for all the tif files in the destination folder
