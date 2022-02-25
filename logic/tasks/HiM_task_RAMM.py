@@ -466,7 +466,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     # position the piezo
                     position = start_position + plane * self.z_step
-                    self.ref['focus'].go_to_position(position)
+                    self.ref['focus'].go_to_position(position, direct=True)
                     # print(f'target position: {position} um')
                     time.sleep(0.03)
                     cur_pos = self.ref['focus'].get_position()
@@ -494,7 +494,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             self.log.warning('Timeout occurred')
                             break
 
-                self.ref['focus'].go_to_position(reference_position)
+                self.ref['focus'].go_to_position(reference_position, direct=True)
 
                 # data handling ----------------------------------------------------------------------------------------
                 image_data = self.ref['cam'].get_acquired_data()
