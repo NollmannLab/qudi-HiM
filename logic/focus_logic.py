@@ -105,6 +105,7 @@ class FocusLogic(GenericLogic):
     _init_position = ConfigOption('init_position', 10, missing='warn')
     _readout = ConfigOption('readout_device', missing='error')
     _rescue_autofocus_possible = ConfigOption('rescue_autofocus_possible', False, missing='warn')
+    experiments = ConfigOption('experiments', [], missing='warn')
 
     # signals
     sigStepChanged = QtCore.Signal(float)
@@ -171,6 +172,9 @@ class FocusLogic(GenericLogic):
         self._min_z = self._piezo.get_constraints()[self._axis]['pos_min']
         self._max_z = self._piezo.get_constraints()[self._axis]['pos_max']
         self.init_piezo()
+
+        # intialize the first field of the combox
+        self.experiments.insert(0, 'Indicate your experiment..')
 
         # initialize the autofocus class
         self._autofocus_logic = self.autofocus()
