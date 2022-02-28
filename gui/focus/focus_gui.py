@@ -439,9 +439,9 @@ class FocusGUI(GUIBase):
         elif experiment == 'Manual':
             self._mw.find_offset_PushButton.setEnabled(True)
             self._mw.setpoint_PushButton.setEnabled(True)
-        elif experiment == 'Timelapse RAMM' or experiment == 'Fast timelapse RAMM':
-            self._mw.find_offset_PushButton.setEnabled(True)
-            self._mw.setpoint_PushButton.setEnabled(False)
+        elif experiment == 'Timelapse RAMM' or experiment == 'Fast timelapse RAMM' or experiment == 'Hubble RAMM':
+            self._mw.find_offset_PushButton.setEnabled(False)
+            self._mw.setpoint_PushButton.setEnabled(True)
         else:
             self._mw.find_offset_PushButton.setEnabled(False)
             self._mw.setpoint_PushButton.setEnabled(False)
