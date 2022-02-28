@@ -541,7 +541,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.load_dapi_PushButton.setVisible(False)
             self._mw.laser_ComboBox.removeItem(0)  # do not allow the UV laser (405 nm typically)
 
-        elif experiment == 'Fast timelapse RAMM':
+        elif experiment == 'Fast timelapse RAMM' :
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
             self._exp_logic.is_timelapse_ramm = False  # only for 'usual' timelapse is this flag set to True
@@ -575,6 +575,43 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+
+        elif experiment == 'Hubble RAMM':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False  # only for 'usual' timelapse is this flag set to True
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(True)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(True)
+
+            # additional visibility modifications
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.injections_list_Label.setVisible(False)
+            self._mw.injections_list_LineEdit.setVisible(False)
+            self._mw.load_injections_PushButton.setVisible(False)
+            self._mw.dapi_path_Label.setVisible(False)
+            self._mw.dapi_data_LineEdit.setVisible(False)
+            self._mw.load_dapi_PushButton.setVisible(False)
+            self._mw.time_step_Label.setVisible(False)
+            self._mw.time_step_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.num_iterations_Label.setVisible(False)
+            self._mw.num_iterations_SpinBox.setVisible(False)
 
             # Modify the laser list in order to add the bright field control
             self._mw.laser_ComboBox.addItems(['Brightfield'])

@@ -323,6 +323,14 @@ class ExpConfigLogic(GenericLogic):
                                    'axial_calibration_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'Hubble RAMM':
+                if not filename:
+                    filename = 'hubble_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path',
+                                   'axial_calibration_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Timelapse RAMM':
                 if not filename:
                     filename = 'timelapse_task_RAMM.yml'
