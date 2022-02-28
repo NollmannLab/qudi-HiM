@@ -44,6 +44,8 @@ from qtpy import QtCore
 from glob import glob
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
+
+
 # available with QRunnable - however, since qudi is using QThreadPool & QRunnable, I kept the same method for multi-
 # threading.
 
@@ -89,6 +91,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         config:
             path_to_user_config: 'C:/Users/sCMOS-1/qudi_files/qudi_task_config_files/hi_m_task_RAMM.yml'
     """
+
     # ==================================================================================================================
     # Generic Task methods
     # ==================================================================================================================
@@ -237,14 +240,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return: bool: True if the task should continue running, False if it should finish.
         """
         # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
-        if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
+        if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (
+        not self.ref['focus']._setpoint_defined):
             return False
 
         if not self.aborted:
             now = time.time()
             # info message
             self.probe_counter += 1
-            self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter-1][1]}')
+            self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
 
             if self.logging:
                 self.status_dict['cycle_no'] = self.probe_counter
@@ -253,13 +257,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Started cycle {self.probe_counter}', 'info')
 
             # position the needle in the probe
-            self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
+            self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter - 1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
             while self.ref['pos'].moving is True:
                 time.sleep(0.1)
 
             # keep in memory the position of the needle
-            needle_pos = self.probe_list[self.probe_counter-1][0]
+            needle_pos = self.probe_list[self.probe_counter - 1][0]
             rt_injection = 0
 
         # --------------------------------------------------------------------------------------------------------------
@@ -289,7 +293,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.aborted:
                     break
 
-                self.log.info(f'Hybridisation step {step+1}')
+                self.log.info(f'Hybridisation step {step + 1}')
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 1, f'Started injection {step + 1}')
 
@@ -370,7 +374,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                         if not self.aborted:
                             time.sleep(30)
-                            print("Elapsed time : {}s".format((i+1)*30))
+                            print("Elapsed time : {}s".format((i + 1) * 30))
                     time.sleep(remainder)
 
                     self.ref['valves'].set_valve_position('c', 2)  # open flux again
@@ -451,12 +455,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                                     np.array([0], dtype=np.uint8))
 
                 # start camera acquisition
-                self.ref['cam'].stop_acquisition()   # for safety
+                self.ref['cam'].stop_acquisition()  # for safety
                 self.ref['cam'].start_acquisition()
 
-                # initialize arrays to save the target and current z positions
-                z_target_positions = []
-                z_actual_positions = []
+                # # initialize arrays to save the target and current z positions
+                # z_target_positions = []
+                # z_actual_positions = []
 
                 print(f'{item}: performing z stack..')
 
@@ -467,11 +471,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     position = start_position + plane * self.z_step
                     self.ref['focus'].go_to_position(position, direct=True)
                     # print(f'target position: {position} um')
-                    time.sleep(0.03)
+                    # time.sleep(0.03)
                     cur_pos = self.ref['focus'].get_position()
                     # print(f'current position: {cur_pos} um')
-                    z_target_positions.append(position)
-                    z_actual_positions.append(cur_pos)
+                    # z_target_positions.append(position)
+                    # z_actual_positions.append(cur_pos)
 
                     # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
                     self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
@@ -486,7 +490,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     while not fpga_ready:
                         time.sleep(0.001)
-                        fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
+                        fpga_ready = \
+                        self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
 
                         t1 = time.time() - t0
                         if t1 > 1:  # for safety: timeout if no signal received within 1 s
@@ -518,9 +523,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # stop = time.time()
                 # print("Projection calculation time : {}".format(stop-start))
 
-                # save file with z positions (same procedure for either file format)
-                file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
-                save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
+                # # save file with z positions (same procedure for either file format)
+                # file_path = os.path.join(os.path.split(cur_save_path)[0], 'z_positions.yaml')
+                # save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
 
                 if self.logging:  # to modify: check if data saved correctly before writing this log entry
                     add_log_entry(self.log_path, self.probe_counter, 2, 'Image data saved', 'info')
@@ -564,7 +569,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.aborted:
                     break
 
-                self.log.info(f'Photobleaching step {step+1}')
+                self.log.info(f'Photobleaching step {step + 1}')
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Started injection {step + 1}')
 
@@ -641,9 +646,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # verify if rinsing finished in the meantime
             current_time = time.time()
-            diff = current_time-start_rinsing_time
+            diff = current_time - start_rinsing_time
             if diff < 60:
-                time.sleep(60-diff+1)
+                time.sleep(60 - diff + 1)
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -692,6 +697,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 path_to_upload = []
             while path_to_upload and not self.aborted:
+                time.sleep(1)
                 path_to_upload = self.launch_data_uploading(path_to_upload)
 
         # reset the camera to default state
@@ -841,7 +847,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 start_pos = current_pos - self.num_z_planes / 2 * self.z_step
             # odd number of planes:
             else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
+                start_pos = current_pos - (self.num_z_planes - 1) / 2 * self.z_step
             return start_pos
         else:
             return current_pos  # the scan starts at the current position and moves up
@@ -870,10 +876,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.log.error('Error {0}'.format(e))
 
         # count the subdirectories in the directory path (non recursive !) to generate an incremental prefix
-        dir_list = [folder for folder in os.listdir(path_stem_with_date) if os.path.isdir(os.path.join(path_stem_with_date, folder))]
+        dir_list = [folder for folder in os.listdir(path_stem_with_date) if
+                    os.path.isdir(os.path.join(path_stem_with_date, folder))]
         number_dirs = len(dir_list)
 
-        prefix = str(number_dirs+1).zfill(3)
+        prefix = str(number_dirs + 1).zfill(3)
         # make prefix accessible to include it in the filename generated in the method get_complete_path
         self.prefix = prefix
 
@@ -909,7 +916,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             except Exception as e:
                 self.log.error('Error {0}'.format(e))
 
-        roi_number_inv = roi_number.strip('ROI_')+'_ROI'  # for compatibility with analysis format
+        roi_number_inv = roi_number.strip('ROI_') + '_ROI'  # for compatibility with analysis format
 
         file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}.{self.file_format}'
 
@@ -929,8 +936,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
                     'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
+            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
 
         # add translation stage position
         metadata['x position'] = float(self.ref['roi'].stage_position[0])
@@ -954,8 +961,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     'Z_TOTAL': (self.z_step * self.num_z_planes, 'scan total length (um)'),
                     'CHANNELS': (self.num_laserlines, 'number laserlines')}
         for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i][0], f'laser line {i+1}')
-            metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
+            metadata[f'LINE{i + 1}'] = (self.imaging_sequence[i][0], f'laser line {i + 1}')
+            metadata[f'INTENS{i + 1}'] = (self.imaging_sequence[i][1], f'laser intensity {i + 1}')
         metadata['X_POS'] = (self.ref['roi'].stage_position[0], 'x position')
         metadata['Y_POS'] = (self.ref['roi'].stage_position[1], 'y position')
 
@@ -1015,11 +1022,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             np.save(path, projection)
 
     def check_acquired_data(self):
-        """ List all the acquired data in the directory and all the data already uploaded on the network.
+        """ List all the acquired data in the directory and all the data already uploaded on the network. Compare the
+        data in order to return a list containing only the paths to the files that were not transferred yet. In order to
+        optimize the transfer, the npy and yaml files are processed first (allowing to use bokeh).
 
         @return: path_to_upload : list of all the .tif files in the local directory
         """
-        # look for all the tif files in the folder
+        # look for all the tif/npy/yml files in the folder
         path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
         print(f'Number of npy files found : {len(path_to_upload_npy)}')
         path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
@@ -1028,7 +1037,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         print(f'Number of tif files found : {len(path_to_upload_tif)}')
         path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
 
-        # look for all the tif files in the destination folder
+        # look for all the tif/npy/yml files in the destination folder
         uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
         uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
         uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
@@ -1038,14 +1047,33 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             uploaded_files.append(os.path.basename(path))
 
         # remove from the list all the files that have already been transferred
-        path_to_upload_sorted = set(path_to_upload)
+        selected_path_to_upload = set(path_to_upload)
         for path in path_to_upload:
             file_name = os.path.basename(path)
             if file_name in uploaded_files:
-                path_to_upload_sorted.remove(path)
+                selected_path_to_upload.remove(path)
+        selected_path_to_upload = list(selected_path_to_upload)
+
+        # sort the list based on the file format
+        idx_tif = []
+        idx_npy = []
+        idx_yaml = []
+
+        for n, path in enumerate(selected_path_to_upload):
+            if path.__contains__('.npy'):
+                idx_npy.append(n)
+            elif path.__contains__('.yaml'):
+                idx_yaml.append(n)
+            else:
+                idx_tif.append(n)
+
+        # build the final list of file to transfer
+        path_to_upload_sorted = [selected_path_to_upload[i] for i in idx_npy] \
+                                + [selected_path_to_upload[i] for i in idx_yaml] \
+                                + [selected_path_to_upload[i] for i in idx_tif]
 
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
-        return path_to_upload_sorted
+        return list(path_to_upload_sorted)
 
     def launch_data_uploading(self, path_to_upload):
         """ Look for the next .tif file to upload and start the worker on a specific thread to launch the transfer
@@ -1055,15 +1083,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         global data_saved
 
         if data_saved and path_to_upload:
+
             path = path_to_upload.pop(0)
-            #file_name = os.path.basename(path)
 
             # rewrite the path to the server, following the same hierarchy
             relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
             network_dir = os.path.join(self.network_directory, relative_dir)
             os.makedirs(network_dir, exist_ok=True)
-
-            #network_path = os.path.join(network_dir, file_name)
 
             # launch the worker to start the transfer
             data_saved = False
