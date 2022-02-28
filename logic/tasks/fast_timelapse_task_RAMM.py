@@ -6,7 +6,7 @@ An extension to Qudi.
 
 This module contains the fast timelapse experiment for the RAMM setup.
 
-@authors: F. Barho, JB. Fiche
+@authors: JB. Fiche, F. Barho
 
 Created on Thu June 17 2021
 -----------------------------------------------------------------------------------
@@ -195,34 +195,34 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.threadpool = QtCore.QThreadPool()
 
-        self.directory = None
+        self.directory: str = ""
         self.counter = None
-        self.user_param_dict = {}
-        self.lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
-        self.user_config_path = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles = 4
-        self.sample_name = None
-        self.exposure = None
-        self.centered_focal_plane = False
-        self.num_z_planes = None
-        self.z_step = None
-        self.save_path = None
-        self.file_format = None
-        self.roi_list_path = None
-        self.num_iterations = None
-        self.imaging_sequence = []
-        self.autofocus_ok = False
-        self.num_frames = None
-        self.intensities = []
-        self.default_exposure = None
-        self.roi_names = None
-        self.num_roi = None
-        self.prefix = None
-        self.wavelengths = []
-        self.num_laserlines = None
-        self.dz = []
-        self.calibration_path = None
-        self.roi_start_times = []
+        self.user_param_dict: dict = {}
+        self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        self.user_config_path: str = self.config['path_to_user_config']
+        self.n_dz_calibration_cycles: int = 4
+        self.sample_name: str = ""
+        self.exposure: dict = {}
+        self.centered_focal_plane: bool = False
+        self.num_z_planes: int = None
+        self.z_step: int = None
+        self.save_path: str = ""
+        self.file_format: str = ""
+        self.roi_list_path: str = ""
+        self.num_iterations: int = None
+        self.imaging_sequence: list = []
+        self.autofocus_ok: bool = False
+        self.num_frames: int = None
+        self.intensities: list = []
+        self.default_exposure: int = None
+        self.roi_names: dict = {}
+        self.num_roi: int = None
+        self.prefix: str = ""
+        self.wavelengths: list = []
+        self.num_laserlines: int = None
+        self.dz: list = []
+        self.calibration_path: str = ""
+        self.roi_start_times: list = []
 
         print('Task {0} added!'.format(self.name))
 
@@ -245,8 +245,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
-        # set the ASI stage in trigger mode
+        # set the ASI stage in trigger mode and set the stage velocity
         self.ref['roi'].set_stage_led_mode('Triggered')
+        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3, 'z': 3})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -295,7 +296,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # for each roi, the autofocus positioning is performed. The process is repeated n_dz_calibration_cycles
                 # times, in order to get a good average position.
                 for n in range(self.n_dz_calibration_cycles):
-                    roi_start_z = self.measure_sample_tilt(n)
+                    roi_start_z = self.measure_sample_tilt()
                     roi_z_positions[n, :] = roi_start_z
 
                 # calculate the average variation of axial displacement between two successive rois
@@ -614,11 +615,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # task methods
     # ------------------------------------------------------------------------------------------------------------------
 
-    def measure_sample_tilt(self, n_cycle):
+    def measure_sample_tilt(self):
         """ Calculate the axial tilt between successive ROI. This tilt is induced by the sample and the stage and is
         reproducible over time. This calibration is used to save time between successive timelapse acquisition.
 
-        :param int n_cycle: indicate which calibration cycle is currently run
         :return array roi_start_z: axial focus position associated to each ROI
         """
 
@@ -856,6 +856,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
                                 self.counter, self.file_format)
         self.threadpool.start(worker)
+
 # async def save_data(path, array):
 #     np.save(path, array)
 #
