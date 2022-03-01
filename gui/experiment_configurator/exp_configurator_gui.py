@@ -515,7 +515,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
 
-        elif experiment == 'Photobleaching RAMM':
+        elif experiment == 'Photobleaching RAMM' or experiment == 'Photobleaching Airyscan':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
             self._exp_logic.is_timelapse_ramm = False

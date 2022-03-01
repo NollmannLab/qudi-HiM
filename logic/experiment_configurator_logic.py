@@ -315,6 +315,12 @@ class ExpConfigLogic(GenericLogic):
                 keys_to_extract = ['imaging_sequence', 'roi_list_path', 'illumination_time']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'Photobleaching Airyscan':
+                if not filename:
+                    filename = 'photobleaching_task_AIRYSCAN.yml'
+                keys_to_extract = ['imaging_sequence', 'roi_list_path', 'illumination_time']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fast timelapse RAMM':
                 if not filename:
                     filename = 'fast_timelapse_task_RAMM.yml'
