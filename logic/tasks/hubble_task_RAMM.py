@@ -42,134 +42,23 @@ from tifffile import TiffWriter
 from functools import wraps
 from time import time, sleep
 
-# import asyncio
-# from PIL import Image
-# from logic.task_helper_functions import save_roi_start_times_to_file, save_z_position_step_to_file
-
-data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication did not work)
-
 
 # Defines the decorator function for the log
 def log(func):
     @wraps(func)
     def wrap(*args, **kwargs):
+        t_init = args[0].hubble_init_time
         t0 = time()
         result = func(*args, **kwargs)
         t1 = time()
         task_logger = logging.getLogger('Task_logging')
-        task_logger.info(f'function : {func.__name__} - execution time = {t1 - t0}s')
+        task_logger.info(f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
         return result
     return wrap
 
 
-class SaveDataWorker(QtCore.QRunnable):
-    """ Worker thread to parallelize data registration and acquisition.
-
-    :param: array data = array containing all the images acquired by the camera and saved on the buffer
-    :param: array roi_names = contains the name of all the rois
-    :param: int num_laserlines = number of channel
-    :param: int num_z_planes = number of images acquired for each stack
-    :param: str directory = path to the folder where the data will be saved
-    :param: int counter = indicate how many time-lapse cycles have been performed
-    :param: str file_format = indicate the format used to save the data. For the moment, default is tif.
-    """
-
-    def __init__(self, data, roi_names, num_laserlines, num_z_planes, directory, counter, file_format):
-        super(SaveDataWorker, self).__init__()
-        self.data = data
-        self.roi_names = roi_names
-        self.num_laserlines = num_laserlines
-        self.num_z_planes = num_z_planes
-        self.directory = directory
-        self.counter = counter
-        self.file_format = file_format
-
-    @QtCore.Slot()
-    def run(self):
-        """ For each roi and channel a single tif file is created. For the moment, fits format is not handle.
-        """
-
-        # deinterleave the array data according to the number of rois and channels. In order to plan for further
-        # analysis, all images associated to the same acquisition channel are saved in the same folder.
-
-        start_frame = 0
-        for roi in self.roi_names:
-            end_frame = start_frame + self.num_z_planes * self.num_laserlines
-            roi_data = self.data[start_frame:end_frame]
-            for channel in range(self.num_laserlines):
-                data = roi_data[channel:len(roi_data):self.num_laserlines]
-                cur_save_path = self.get_complete_path(self.directory, self.counter + 1, roi, channel, self.file_format)
-
-                if self.file_format == 'tif':
-                    self.save_to_tiff(cur_save_path, data)
-                    start_frame = end_frame
-                else:
-                    self.save_to_npy(cur_save_path, data)
-                    start_frame = end_frame
-
-        # when all the images are saved, the global variable data_saved is set to True
-        global data_saved
-        data_saved = True
-
-    @staticmethod
-    def get_complete_path(directory, counter, roi, channel, file_format):
-        """ Compile the complete saving path for each stack of images, according to the roi and acquisition channel.
-
-    :param: int roi = indicate the number of the roi
-    :param: int channel = number associated to the selected channel
-    :param: str directory = path to the folder where the data will be saved
-    :param: int counter = indicate how many time-lapse cycles have been performed
-
-    :return: str complete_path = complete path indicating the folder and the name of the file
-        """
-
-        file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{file_format}'
-        directory_path = os.path.join(directory, 'channel_'+str(channel), str(roi))
-
-        # check if folder exists, if not: create it
-        if not os.path.exists(directory_path):
-            try:
-                os.makedirs(directory_path)  # recursive creation of all directories on the path
-            except Exception as e:
-                print(f'Error : {e}')
-
-        complete_path = os.path.join(directory_path, file_name)
-        return complete_path
-
-    @staticmethod
-    def save_to_tiff(path, data):
-        """ Save the image data to a tiff file.
-
-        :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
-        :param: str path: complete path where the object is saved to (including the suffix .tif)
-        :param: data: np.array
-
-        :return: None
-        """
-        try:
-            with TiffWriter(path) as tif:
-                tif.save(data.astype(np.uint16))
-        except Exception as e:
-            print(f'Error while saving file : {e}')
-
-    @staticmethod
-    def save_to_npy(path, data):
-        """ Save the image data to a npy file. The images are reformated to uint16, in order to optimize the saving
-        time.
-
-        :param: str path: complete path where the object is saved to (including the suffix .tif)
-        :param: data: np.array
-
-        :return: None
-        """
-        try:
-            np.save(path, data.astype(np.uint16))
-        except Exception as e:
-            print(f'Error while saving file : {e}')
-
-
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
-    """ This task iterates over all roi given in a file (typically a mosaique) and does an acquisition of a series of
+    """ This task iterates over all roi given in a file (typically a mosaic) and does an acquisition of a series of
     planes in z direction in multicolor. This is repeated num_iterations times.
 
     Config example pour copy-paste:
@@ -178,7 +67,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         module: 'fast_timelapse_task_RAMM'
         needsmodules:
             laser: 'lasercontrol_logic'
-            bf: 'brightfield_logic'
+            bf: 'bright-field_logic'
             cam: 'camera_logic'
             daq: 'nidaq_logic'
             focus: 'focus_logic'
@@ -196,34 +85,34 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.threadpool = QtCore.QThreadPool()
 
         self.directory: str = ""
-        self.counter = None
+        self.counter: int = 0
         self.user_param_dict: dict = {}
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
         self.user_config_path: str = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles: int = 4
+        self.n_dz_calibration_cycles: int = 2
         self.sample_name: str = ""
         self.exposure: dict = {}
         self.centered_focal_plane: bool = False
-        self.num_z_planes: int = None
-        self.z_step: int = None
+        self.num_z_planes: int = 0
+        self.z_step: int = 0
         self.save_path: str = ""
         self.file_format: str = ""
         self.roi_list_path: str = ""
-        self.num_iterations: int = None
+        self.num_iterations: int = 0
         self.imaging_sequence: list = []
         self.autofocus_ok: bool = False
-        self.num_frames: int = None
+        self.num_frames: int = 0
         self.intensities: list = []
-        self.default_exposure: int = None
+        self.default_exposure: float = 0.05
         self.roi_names: dict = {}
-        self.num_roi: int = None
+        self.num_roi: int = 0
         self.prefix: str = ""
         self.wavelengths: list = []
-        self.num_laserlines: int = None
+        self.num_laserlines: int = 0
         self.dz: list = []
         self.calibration_path: str = ""
-        self.roi_start_times: list = []
         self.hubble_calibration_step: int = 4
+        self.hubble_init_time: float = time()
 
         print('Task {0} added!'.format(self.name))
 
@@ -305,25 +194,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     roi_z_positions[n, :] = roi_start_z
 
                 # calculate the average variation of axial displacement between two successive rois
-                self.dz = self.calculate_roi_dz(roi_x_positions, roi_y_positions, roi_z_positions)
+                self.dz = self.fit_surface(roi_x_positions, roi_y_positions, roi_z_positions)
 
             else:
                 with open(self.calibration_path, 'r') as file:
                     calibration = yaml.safe_load(file)
-                self.dz = calibration['dz_med']
-                print(f'dz : {self.dz}')
-
-            # initialize a counter to iterate over the number of cycles to do
-            self.counter = 0
-
-            # initialize an array to keep track of the saving time for each cycle
-            self.roi_start_times = np.zeros((self.num_iterations, self.num_roi))
+                self.dz = calibration['dz']
 
         else:
             self.aborted = True
             self.log.warning('Autofocus not calibrated')
 
-    @log
     def runTaskStep(self):
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
@@ -336,18 +217,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # start time-lapse acquisition
         # --------------------------------------------------------------------------------------------------------------
 
-        # create a save path for the current iteration
-        # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
-
         # start camera acquisition
         self.ref['cam'].stop_acquisition()  # for safety
+        self.log.warning('Preparing camera for acquisition ...')
         self.ref['cam'].start_acquisition()
 
         # --------------------------------------------------------------------------------------------------------------
         # move to ROI and focus (using autofocus and stop when stable)
         # --------------------------------------------------------------------------------------------------------------
-
-        check_dz = np.zeros((self.num_roi,))
 
         for n, item in enumerate(self.roi_names):
 
@@ -365,29 +242,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.perform_autofocus()
                 # calculate the absolute positions of the piezo for each ROI
                 z_absolute_position = self.calculate_absolute_z_positions()
-            # else:
-            #     start_position, end_position = self.move_to_next_z_position(z_absolute_position[n])
-            #     start_position, end_position = self.calculate_start_position(z_absolute_position[n],
-            #                                                                  self.centered_focal_plane,
-            #                                                                  self.num_z_planes, self.z_step)
 
             start_position, end_position = self.calculate_start_position(z_absolute_position[n],
                                                                          self.centered_focal_plane,
                                                                          self.num_z_planes, self.z_step)
 
-            # check the actual piezo position follows the expected dz
-            check_dz[n] = self.ref['focus'].get_position()
-
             # ----------------------------------------------------------------------------------------------------------
             # imaging sequence
             # ----------------------------------------------------------------------------------------------------------
             self.acquire_single_stack(start_position, end_position)
-
-        # save the check_dz positions
-        data_dict = {'z': check_dz.tolist()}
-        dz_path = os.path.join(self.directory, f'z_check_{self.counter}.yml')
-        with open(dz_path, 'w') as outfile:
-            yaml.safe_dump(data_dict, outfile, default_flow_style=False)
 
         # go back to the first ROI and the initial piezo position
         self.move_to_roi(self.roi_names[0], False)
@@ -397,14 +260,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # data saving
         # --------------------------------------------------------------------------------------------------------------
 
-        # check whether the previous data were saved. A global variable was used instead of signal/slot. The latter
-        # solution was not reproducible
-        self.check_previous_data_saved()
-        self.launch_save_data_worker()
+        # get acquired images from the camera
+        self.log.warning('Processing data ...')
+        image_data = self.ref['cam'].get_acquired_data()
 
-        # increment cycle counter
-        self.counter += 1
-        return self.counter < self.num_iterations
+        # launch the saving procedure, saving each movies according to channel and roi
+        self.save_hubble_data(image_data)
+
+        return
 
     def pauseTask(self):
         """ """
@@ -417,11 +280,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def cleanupTask(self):
         """ """
         self.log.info('cleanupTask called')
-
-        # save the time tracking file
-        saving_path = os.path.join(self.directory, 'roi_start_times.npy')
-        with open(saving_path, 'wb') as file:
-            np.save(file, self.roi_start_times)
 
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
@@ -484,7 +342,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.save_path = self.user_param_dict['save_path']
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
-                self.num_iterations = self.user_param_dict['num_iterations']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.calibration_path = self.user_param_dict['axial_calibration_path']
 
@@ -550,12 +407,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         prefix = str(number_dirs + 1).zfill(3)
         # make prefix accessible to include it in the filename generated in the method get_complete_path
         self.prefix = prefix
-
         foldername = f'{prefix}_Hubble_{self.sample_name}'
-
         path = os.path.join(path_stem_with_date, foldername)
 
-        # create the path  # no need to check if it already exists due to incremental prefix
+        # create the path # no need to check if it already exists due to incremental prefix
         try:
             os.makedirs(path)  # recursive creation of all directories on the path
         except Exception as e:
@@ -563,17 +418,86 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return path
 
-    def get_complete_path(self, directory, counter):
-        """ Get the complete path to the data file, for the current iteration.
+    @staticmethod
+    def get_complete_path(directory, roi, channel, file_format):
+        """ Compile the complete saving path for each stack of images, according to the roi and acquisition channel.
 
-        :param: str directory: path to the data directory
-        :param: int counter: number of the current iteration
+    :param: int roi = indicate the number of the roi
+    :param: int channel = number associated to the selected channel
+    :param: str directory = path to the folder where the data will be saved
+    :param: int counter = indicate how many time-lapse cycles have been performed
 
-        :return: str complete_path """
+    :return: str complete_path = complete path indicating the folder and the name of the file
+        """
 
-        file_name = f'timelapse_{self.prefix}_step_{str(counter).zfill(2)}.{self.file_format}'
-        complete_path = os.path.join(directory, file_name)
+        file_name = f'hubble_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}.{file_format}'
+        directory_path = os.path.join(directory, 'channel_'+str(channel), str(roi))
+
+        # check if folder exists, if not: create it
+        if not os.path.exists(directory_path):
+            try:
+                os.makedirs(directory_path)  # recursive creation of all directories on the path
+            except Exception as e:
+                print(f'Error : {e}')
+
+        complete_path = os.path.join(directory_path, file_name)
         return complete_path
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # saving method
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @log
+    def save_hubble_data(self, image_data):
+        """ save all the images separately, according to imaging channel and roi.
+
+        @param image_data: data acquired by the camera during acquisition
+        """
+        start_frame = 0
+        for roi in self.roi_names:
+            end_frame = start_frame + self.num_z_planes * self.num_laserlines
+            roi_data = image_data[start_frame:end_frame]
+            for channel in range(self.num_laserlines):
+                data = roi_data[channel:len(roi_data):self.num_laserlines]
+                cur_save_path = self.get_complete_path(self.directory, roi, channel, self.file_format)
+                self.log.info(f'saving file : {os.path.basename(cur_save_path)}')
+
+                if self.file_format == 'tif':
+                    self.save_to_tiff(cur_save_path, data)
+                    start_frame = end_frame
+                else:
+                    self.save_to_npy(cur_save_path, data)
+                    start_frame = end_frame
+
+    @staticmethod
+    def save_to_tiff(path, data):
+        """ Save the image data to a tiff file.
+
+        :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
+        :param: str path: complete path where the object is saved to (including the suffix .tif)
+        :param: data: np.array
+
+        :return: None
+        """
+        try:
+            with TiffWriter(path) as tif:
+                tif.save(data.astype(np.uint16))
+        except Exception as e:
+            print(f'Error while saving file : {e}')
+
+    @staticmethod
+    def save_to_npy(path, data):
+        """ Save the image data to a npy file. The images are re-formated to uint16, in order to optimize the saving
+        time.
+
+        :param: str path: complete path where the object is saved to (including the suffix .tif)
+        :param: data: np.array
+        :return: None
+        """
+        try:
+            np.save(path, data.astype(np.uint16))
+        except Exception as e:
+            print(f'Error while saving file : {e}')
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
@@ -617,9 +541,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('Saved metadata to {}'.format(path))
 
     # ------------------------------------------------------------------------------------------------------------------
-    # task methods
+    # task methods for hubble calibration
     # ------------------------------------------------------------------------------------------------------------------
-
+    @log
     def measure_sample_tilt(self):
         """ Calculate the axial tilt between successive ROI. This tilt is induced by the sample and the stage and is
         reproducible over time. This calibration is used to save time between successive timelapse acquisition. For the
@@ -649,7 +573,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
 
                 # measure the stage position
-                x, y, _ = self.ref['roi'].get_roi_position(item)
+                pos = self.ref['roi'].stage_position
+                x = pos[0]
+                y = pos[1]
 
                 # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
                 # stable is set to false)
@@ -676,7 +602,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return roi_x, roi_y, roi_start_z
 
-    def calculate_roi_dz(self, roi_x_positions, roi_y_positions, roi_z_positions):
+    def fit_surface(self, roi_x_positions, roi_y_positions, roi_z_positions):
         """ Compile the axial positions data to calculate the average value and save the graph.
 
         @param ndarray roi_x_positions: array containing all the x position of each selected ROI, for each repetition
@@ -684,41 +610,61 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         @param ndarray roi_z_positions: array containing all the axial focus position of each ROI, for each repetition
         @return ndarray dz: array containing the average axial displacement between successive ROIs
         """
-        n_cycles = self.n_dz_calibration_cycles
-
         # compute the sample surface
-        x_roi = np.median(roi_x_positions, axis=0)
-        y_roi = np.median(roi_y_positions, axis=0)
+        x_calibration = np.median(roi_x_positions, axis=0)
+        y_calibration = np.median(roi_y_positions, axis=0)
         z_roi = np.median(roi_z_positions, axis=0)
         z_std = np.std(roi_z_positions, axis=0)
 
+        # fit the surface with a paraboloid
+        A = np.array([x_calibration*0+1, x_calibration, y_calibration, x_calibration**2, y_calibration**2,
+                      x_calibration*y_calibration]).T
+        B = z_roi
+        coeff, r, _, s = np.linalg.lstsq(A, B, rcond=None)
 
-        # # compute the
-        # dz = np.zeros((n_cycles, self.num_roi - 1))
-        # for n in range(self.num_roi - 1):
-        #     dz[:, n] = roi_z_positions[:, n + 1] - roi_z_positions[:, n]
-        #
-        # # calculate the median displacement as well as the std error
-        # print(f'size dz : {dz.shape}')
-        # print(f'dz : {dz}')
-        # dz_med = np.median(dz, axis=0)
-        # dz_std = np.std(dz, axis=0)
-        #
-        # # plot the results
-        # x = np.linspace(1, self.num_roi - 1, self.num_roi - 1)
-        # plt.errorbar(x, dz_med, yerr=dz_std)
-        # plt.xlabel('ROI number')
-        # plt.ylabel('dZ (in µm)')
-        # figure_path = os.path.join(self.directory, f'dz_step.png')
-        # plt.savefig(figure_path)
+        # compare the fit with the calibration
+        z_fit = coeff[0]*(x_calibration*0+1) + coeff[1]*x_calibration + coeff[2]*y_calibration +\
+                coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration
+        z_compare = z_roi - z_fit
 
-        # save the dz values in a specific file
-        data_dict = {'x': x_roi.tolist(), 'y': y_roi.tolist(), 'z': z_roi.tolist(), 'z_std': z_std.tolist()}
-        dz_path = os.path.join(self.directory, f'dz.yml')
-        with open(dz_path, 'w') as outfile:
+        # plot the results to inspect if the values were reproducible
+        roi = np.linspace(1, len(x_calibration), len(x_calibration))
+        plt.errorbar(roi, z_roi, yerr=z_std)
+        plt.plot(roi, z_fit)
+        plt.xlabel('ROI number')
+        plt.ylabel('z (in µm)')
+        plt.legend({'fit', 'calibration'})
+        figure_path = os.path.join(self.directory, f'tilt_surface_calibration.png')
+        plt.savefig(figure_path)
+
+        # calculate the dz values based on the fit
+        x_roi = np.zeros((self.num_roi,))
+        y_roi = np.zeros((self.num_roi,))
+        dz = np.zeros((self.num_roi,))
+        for n, roi in enumerate(self.roi_names):
+            x_roi[n], y_roi[n], _ = self.ref['roi'].get_roi_position(roi)
+
+        z_roi = coeff[0]*(x_roi*0+1) + coeff[1]*x_roi + coeff[2]*y_roi + coeff[3]*x_roi**2 + coeff[4]*y_roi**2 \
+            + coeff[5]*x_roi*y_roi
+        for n in range(self.num_roi):
+            if n > 0:
+                dz[n] = z_roi[n] - z_roi[n-1]
+            else:
+                dz[n] = 0
+
+        # save the x,y,z values and the fit results in a specific file
+        data_dict = {'x': x_calibration.tolist(), 'y': y_calibration.tolist(), 'z': z_roi.tolist(), 'dz': dz.tolist(),
+                     'z_std': z_std.tolist(), 'coeff_fit': coeff.tolist(), 'r_fit': r.tolist(), 's_fit': s.tolist(),
+                     'z_compare': z_compare.tolist()}
+        tilt_path = os.path.join(self.directory, f'tilt_surface_calibration.yml')
+        with open(tilt_path, 'w') as outfile:
             yaml.safe_dump(data_dict, outfile, default_flow_style=False)
 
-        # return dz_med
+        return dz
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # task methods for hubble acquisition
+    # ------------------------------------------------------------------------------------------------------------------
 
     def move_to_roi(self, item, wait_for_idle):
         """ Move to roi.
@@ -749,29 +695,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if counter > 500:  # maybe increase the counter ?
                 break
 
-        # # calculate the starting and ending positions for the stack
-        # current_pos = z_absolute_position[0]
-        # start_position, end_position = self.calculate_start_position(current_pos, self.centered_focal_plane, self.num_z_planes,
-        #                                                              self.z_step)
-        # return start_position, end_position, z_absolute_position
-
-    # def move_to_next_z_position(self, n):
-    #     """ Following XY stage displacement, the piezo axial position is changed.
-    #
-    #     @param n: (int) ROI position number
-    #     @return: return the starting position of the stack, the end position where the piezo will go bach after
-    #     performing the stack
-    #     """
-    #     dz = self.dz[n - 1]
-    #     current_z = self.ref['focus'].get_position()
-    #     self.ref['focus'].go_to_position(current_z + dz, direct=True)
-    #
-    #     # calculate the starting and ending positions for the stack
-    #     start_position, end_position = self.calculate_start_position(self.centered_focal_plane, self.num_z_planes,
-    #                                                                  self.z_step)
-    #
-    #     return start_position, end_position
-
     @staticmethod
     def calculate_start_position(current_pos, centered_focal_plane, num_z_planes, z_step):
         """ This method calculates the piezo position at which the z stack will start. It can either start in the
@@ -785,8 +708,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         @return: two positions, the axial positions of the first plane. And the position where the piezo stage should go
         back at the end of the process.
         """
-        #current_pos = self.ref['focus'].get_position()
-
         if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the
             # central plane or one of the central planes in case of an even number of planes
             # even number of planes:
@@ -813,6 +734,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return z_positions
 
+    @log
     def acquire_single_stack(self, start_position, end_position):
         """ Launch acquisition of a single stack of images.
 
@@ -851,38 +773,3 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     break
 
         self.ref['focus'].go_to_position(end_position, direct=True)
-
-    def check_previous_data_saved(self):
-        """ Check the data from the previous cycle were properly saved
-        """
-        global data_saved
-        count = 0
-        while not data_saved:
-            sleep(0.1)
-            count += 1
-            if count > 100:
-                self.log.warning('Error ... data were not saved')
-                break
-
-        if data_saved:
-            self.log.info('Data were properly saved')
-
-    def launch_save_data_worker(self):
-        """ Launch the worker for saving the data while the next cycle is being acquired
-        """
-        global data_saved
-        # get the data from the camera buffer and launch the worker to start data management in parallel of acquisition
-        image_data = self.ref['cam'].get_acquired_data()
-        data_saved = False
-        worker = SaveDataWorker(image_data, self.roi_names, self.num_laserlines, self.num_z_planes, self.directory,
-                                self.counter, self.file_format)
-        self.threadpool.start(worker)
-
-# async def save_data(path, array):
-#     np.save(path, array)
-#
-# async def do_nothing():
-#     pass
-#
-# async def main():
-#     do_nothing()
