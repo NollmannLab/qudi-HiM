@@ -487,6 +487,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.z_step_Label.setVisible(False)
+            self._mw.z_step_DSpinBox.setVisible(False)
+            self._mw.centered_focal_plane_CheckBox.setVisible(False)
 
         elif experiment == 'Hi-M Airyscan Confocal':
             # chose the right the listview model
