@@ -103,6 +103,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_list: list = []
         self.prefix: str = ""
         self.probe_dict: dict = {}
+        self.probe_valve_number: int = self.config['probe_valve_number']
 
     def startTask(self):
         """ """
@@ -267,14 +268,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
-                    # for the Airyscan, the needle is connected to valve position 3. If this valve is called more than
-                    # once, the needle will move to the next position. The procedure was added to make the DAPI
-                    # injection easier.
+                    # for the Airyscan, the needle is connected to the valve position defined in the config file by
+                    # self.probe_valve_number. If this valve is called more than once, the needle will move to the next
+                    # position. The procedure was added to make the DAPI injection easier.
                     print('Valve position : {}'.format(valve_pos))
-                    if rt_injection == 0 and valve_pos == 3:
+                    if rt_injection == 0 and valve_pos == self.probe_valve_number:
                         rt_injection += 1
                         needle_pos += 1
-                    elif rt_injection > 0 and valve_pos == 3:
+                    elif rt_injection > 0 and valve_pos == self.probe_valve_number:
                         self.ref['pos'].start_move_to_target(needle_pos)
                         while self.ref['pos'].moving is True:
                             sleep(0.1)
@@ -561,7 +562,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
             # rinse needle after photobleaching
-            self.ref['valves'].set_valve_position('a', 3)  # Towards probe
+            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
             self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
