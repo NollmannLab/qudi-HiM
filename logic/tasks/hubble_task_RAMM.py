@@ -89,7 +89,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict: dict = {}
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
         self.user_config_path: str = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles: int = 2
+        self.n_dz_calibration_cycles: int = 4
         self.sample_name: str = ""
         self.exposure: dict = {}
         self.centered_focal_plane: bool = False
@@ -111,7 +111,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines: int = 0
         self.dz: list = []
         self.calibration_path: str = ""
-        self.hubble_calibration_step: int = 4
+        self.hubble_calibration_step: int = 4  # should it be in the config file?
         self.hubble_init_time: float = time()
 
         print('Task {0} added!'.format(self.name))
@@ -430,7 +430,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     :return: str complete_path = complete path indicating the folder and the name of the file
         """
 
-        file_name = f'hubble_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}.{file_format}'
+        file_name = f'hubble_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}.{file_format}'
         directory_path = os.path.join(directory, 'channel_'+str(channel), str(roi))
 
         # check if folder exists, if not: create it
@@ -613,23 +613,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # compute the sample surface
         x_calibration = np.median(roi_x_positions, axis=0)
         y_calibration = np.median(roi_y_positions, axis=0)
-        z_roi = np.median(roi_z_positions, axis=0)
+        z_calibration = np.median(roi_z_positions, axis=0)
         z_std = np.std(roi_z_positions, axis=0)
 
         # fit the surface with a paraboloid
         A = np.array([x_calibration*0+1, x_calibration, y_calibration, x_calibration**2, y_calibration**2,
                       x_calibration*y_calibration]).T
-        B = z_roi
+        B = z_calibration
         coeff, r, _, s = np.linalg.lstsq(A, B, rcond=None)
 
         # compare the fit with the calibration
         z_fit = coeff[0]*(x_calibration*0+1) + coeff[1]*x_calibration + coeff[2]*y_calibration +\
-                coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration
-        z_compare = z_roi - z_fit
+            coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration
+        z_compare = z_calibration - z_fit
 
         # plot the results to inspect if the values were reproducible
         roi = np.linspace(1, len(x_calibration), len(x_calibration))
-        plt.errorbar(roi, z_roi, yerr=z_std)
+        plt.errorbar(roi, z_calibration, yerr=z_std)
         plt.plot(roi, z_fit)
         plt.xlabel('ROI number')
         plt.ylabel('z (in µm)')
@@ -653,9 +653,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 dz[n] = 0
 
         # save the x,y,z values and the fit results in a specific file
-        data_dict = {'x': x_calibration.tolist(), 'y': y_calibration.tolist(), 'z': z_roi.tolist(), 'dz': dz.tolist(),
-                     'z_std': z_std.tolist(), 'coeff_fit': coeff.tolist(), 'r_fit': r.tolist(), 's_fit': s.tolist(),
-                     'z_compare': z_compare.tolist()}
+        data_dict = {'x': x_calibration.tolist(), 'y': y_calibration.tolist(), 'z': z_calibration.tolist(),
+                     'dz': dz.tolist(), 'z_std': z_std.tolist(), 'coeff_fit': coeff.tolist(), 'r_fit': r.tolist(),
+                     's_fit': s.tolist(), 'z_compare': z_compare.tolist()}
         tilt_path = os.path.join(self.directory, f'tilt_surface_calibration.yml')
         with open(tilt_path, 'w') as outfile:
             yaml.safe_dump(data_dict, outfile, default_flow_style=False)
