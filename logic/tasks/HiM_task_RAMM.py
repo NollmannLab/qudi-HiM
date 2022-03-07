@@ -220,12 +220,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                 self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
+        # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
+        # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
+        # issue is only happening for the very first acquisition.
+        self.num_frames = self.num_z_planes * self.num_laserlines
+        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        self.ref['cam'].stop_acquisition()  # for safety
+        self.ref['cam'].start_acquisition()  # in case the camera is sending a false trigger
+        time.sleep(1)
+        self.ref['cam'].stop_acquisition()
+
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        # # prepare the camera
+        # self.num_frames = self.num_z_planes * self.num_laserlines
+        # self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
         # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
