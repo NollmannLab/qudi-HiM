@@ -159,6 +159,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             logger.setLevel(logging.INFO)
             logger.addHandler(handler)
 
+            # save the metadata
+            metadata = self.get_metadata()
+            self.save_metadata_file(metadata, os.path.join(self.directory, 'hubble_metadata.yaml'))
+
+            # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
+            # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
+            # issue is only happening for the very first acquisition.
+            self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(10, self.exposure, None, None, None)
+            self.ref['cam'].stop_acquisition()  # for safety
+            self.ref['cam'].start_acquisition() # in case the camera is sending a false trigger
+            sleep(1)
+            self.ref['cam'].stop_acquisition()
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+
             # close the default session and start the FTL session on the fpga using the user parameters
             self.ref['laser'].close_default_session()
             # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
@@ -168,10 +183,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
             self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                                   self.num_laserlines, self.exposure)
-
-            # prepare the camera
-            self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
-            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
             # set the active_roi to none to avoid having two active rois displayed
             # self.ref['roi'].active_roi = None
@@ -218,7 +229,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
 
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
         self.log.warning('Preparing camera for acquisition ...')
         self.ref['cam'].start_acquisition()
 
@@ -512,22 +522,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
                     'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['lightsource']
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i]['intensity']
-        return metadata
-
-    def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
-        """
-        metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
-                    'Z_STEP': (self.z_step, 'scan step length (um)'),
-                    'Z_TOTAL': (self.z_step * self.num_z_planes, 'scan total length (um)'),
-                    'CHANNELS': (self.num_laserlines, 'number laserlines')}
-        for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['lightsource'], f'laser line {i+1}')
-            metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i]['intensity'], f'laser intensity {i+1}')
+            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
         return metadata
 
     def save_metadata_file(self, metadata, path):
@@ -618,17 +614,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # fit the surface with a paraboloid
         A = np.array([x_calibration*0+1, x_calibration, y_calibration, x_calibration**2, y_calibration**2,
-                      x_calibration*y_calibration]).T
+                      x_calibration*y_calibration, x_calibration**3, y_calibration**3, x_calibration**2*y_calibration,
+                      y_calibration**2*x_calibration]).T
         B = z_calibration
         coeff, r, _, s = np.linalg.lstsq(A, B, rcond=None)
 
         # compare the fit with the calibration
         z_fit = coeff[0]*(x_calibration*0+1) + coeff[1]*x_calibration + coeff[2]*y_calibration +\
-            coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration
+            coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration + \
+            coeff[6] * x_calibration**3 + coeff[7] * y_calibration**3 + coeff[8] * x_calibration**2 * y_calibration + \
+            coeff[9] * x_calibration * y_calibration**2
         z_compare = z_calibration - z_fit
 
         # plot the results to inspect if the values were reproducible
         roi = np.linspace(1, len(x_calibration), len(x_calibration))
+        plt.clf()
         plt.errorbar(roi, z_calibration, yerr=z_std)
         plt.plot(roi, z_fit)
         plt.xlabel('ROI number')

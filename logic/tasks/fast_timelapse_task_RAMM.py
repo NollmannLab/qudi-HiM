@@ -120,7 +120,7 @@ class SaveDataWorker(QtCore.QRunnable):
     :return: str complete_path = complete path indicating the folder and the name of the file
         """
 
-        file_name = f'TL_roi_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{file_format}'
+        file_name = f'TL_{str(roi).zfill(3)}_ch_{str(channel).zfill(3)}_step_{str(counter).zfill(3)}.{file_format}'
         directory_path = os.path.join(directory, 'channel_'+str(channel), str(roi))
 
         # check if folder exists, if not: create it
@@ -257,6 +257,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # create a directory in which all the data will be saved
             self.directory = self.create_directory(self.save_path)
 
+            # save the metadata
+            metadata = self.get_metadata()
+            self.save_metadata_file(metadata, os.path.join(self.directory, 'FTL_metadata.yaml'))
+
             # defines the log file
             log_path = os.path.join(self.directory, 'log_info.log')
             formatter = logging.Formatter('%(message)s')
@@ -265,6 +269,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             logger = logging.getLogger('Task_logging')
             logger.setLevel(logging.INFO)
             logger.addHandler(handler)
+
+            # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
+            # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
+            # issue is only happening for the very first acquisition.
+            self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+            self.ref['cam'].stop_acquisition()  # for safety
+            self.ref['cam'].start_acquisition() # in case the camera is sending a false trigger
+            sleep(1)
+            self.ref['cam'].stop_acquisition()
 
             # close the default session and start the FTL session on the fpga using the user parameters
             self.ref['laser'].close_default_session()
@@ -275,10 +289,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
             self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                                   self.num_laserlines, self.exposure)
-
-            # prepare the camera
-            self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
-            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
             # set the active_roi to none to avoid having two active rois displayed
             # self.ref['roi'].active_roi = None
@@ -328,7 +338,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
+        # self.ref['cam'].stop_acquisition()  # for safety
         self.ref['cam'].start_acquisition()
 
         # --------------------------------------------------------------------------------------------------------------
@@ -555,22 +565,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
                     'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i]['lightsource']
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i]['intensity']
-        return metadata
-
-    def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
-        """
-        metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
-                    'Z_STEP': (self.z_step, 'scan step length (um)'),
-                    'Z_TOTAL': (self.z_step * self.num_z_planes, 'scan total length (um)'),
-                    'CHANNELS': (self.num_laserlines, 'number laserlines')}
-        for i in range(self.num_laserlines):
-            metadata[f'LINE{i+1}'] = (self.imaging_sequence[i]['lightsource'], f'laser line {i+1}')
-            metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i]['intensity'], f'laser intensity {i+1}')
+            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
         return metadata
 
     def save_metadata_file(self, metadata, path):
@@ -656,6 +652,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # plot the results
         x = np.linspace(1, self.num_roi - 1, self.num_roi - 1)
+        plt.clf()
         plt.errorbar(x, dz_med, yerr=dz_std)
         plt.xlabel('ROI number')
         plt.ylabel('dZ (in µm)')
