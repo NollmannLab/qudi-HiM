@@ -254,7 +254,7 @@ class FocusLogic(GenericLogic):
         """
         if direct:
             self._piezo.move_abs({self._axis: position})
-            sleep(0.03)
+            sleep(0.045)
         else:
             self.piezo_ramp(position)
 
