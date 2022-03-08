@@ -645,7 +645,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             x_roi[n], y_roi[n], _ = self.ref['roi'].get_roi_position(roi)
 
         z_roi = coeff[0]*(x_roi*0+1) + coeff[1]*x_roi + coeff[2]*y_roi + coeff[3]*x_roi**2 + coeff[4]*y_roi**2 \
-            + coeff[5]*x_roi*y_roi
+            + coeff[5]*x_roi*y_roi + coeff[6]*x_roi**3 + coeff[7]*y_roi**3 + coeff[8]*x_roi**2*y_roi \
+            + coeff[9]*x_roi*y_roi**2
+        
         for n in range(self.num_roi):
             if n > 0:
                 dz[n] = z_roi[n] - z_roi[n-1]
