@@ -62,26 +62,27 @@ class AutofocusLogic(GenericLogic):
     camera = Connector(interface='CameraInterface')
 
     # camera attributes
-    _exposure = ConfigOption('exposure', 0.001, missing='warn')
-    _camera_acquiring = False
-    _threshold = None  # for compatibility with focus logic, not used
+    _exposure: float = ConfigOption('exposure', 0.001, missing='warn')
+    _camera_acquiring: bool = False
+    _threshold: float = 0  # for compatibility with focus logic, not used
 
     # autofocus attributes
-    _default_focus_offset = ConfigOption('focus_offset', 0, missing='warn')
-    _ref_axis = ConfigOption('autofocus_ref_axis', 'X', missing='warn')
-    _autofocus_stable = False
-    _autofocus_iterations = 0
-    _focus_offset = 0 # Set to zero until the calibration is performed
+    _default_focus_offset: float = ConfigOption('focus_offset', 0, missing='warn')
+    _ref_axis: str = ConfigOption('autofocus_ref_axis', 'X', missing='warn')
+    _autofocus_stable: bool = False
+    _autofocus_iterations: int = 0
+    _focus_offset: float = 0 # Set to zero until the calibration is performed
 
     # autofocus parameters for stabilization
     _num_points_fit = ConfigOption('num_points_fit', 10, missing='warn')
     _stable_threshold = ConfigOption('stabilization_threshold', 1, missing='warn')
+    _target_tolerance = ConfigOption('target_tolerance', 50, missing='warn')
 
     # pid attributes
-    _pid_frequency = 0.2  # in s, frequency for the autofocus PID update
-    _P_gain = ConfigOption('proportional_gain', 0, missing='warn')
-    _I_gain = ConfigOption('integration_gain', 0, missing='warn')
-    _setpoint = None
+    _pid_frequency: float = 0  # in s, frequency of autofocus PID (to make sure there is a new measure for the FPGA)
+    _P_gain: float = ConfigOption('proportional_gain', 0, missing='warn')
+    _I_gain: float = ConfigOption('integration_gain', 0, missing='warn')
+    _setpoint: float = 0
 
     # signals
     sigOffsetDefined = QtCore.Signal()
@@ -92,8 +93,8 @@ class AutofocusLogic(GenericLogic):
         self._fpga = None
         self._stage = None
         self._camera = None
-        self._last_pid_output_values = []
-        self.X_stabilization = []
+        self._last_pid_output_values: list = []
+        self.X_stabilization: list = []
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -148,7 +149,7 @@ class AutofocusLogic(GenericLogic):
 
     def init_pid(self):
         """ Initialize the pid for the autofocus, and reset the number of autofocus iterations.
-        :return: None
+        @return: None
         """
         # self.qpd_reset()
         self._fpga.init_pid(self._P_gain, self._I_gain, self._setpoint, self._ref_axis)
@@ -159,17 +160,16 @@ class AutofocusLogic(GenericLogic):
 
     def define_pid_setpoint(self):
         """ Initialize the pid setpoint and save it as a class attribute.
-        :return float: setpoint
+        @return float: setpoint
         """
         self.qpd_reset()
         self._setpoint = self.read_detector_signal()
         return self._setpoint
 
-    def read_pid_output(self, do_stabilization_check):
+    def read_pid_output(self, do_stabilization_check, stop_at_target):
         """ Read the pid output signal in order to adjust the position of the objective.
-        :param: bool do_stabilization_check: if True, the last 10 pid output values are stored and fitted.
-        :return float: pid output:
-                or tuple (float, bool): pid_output, autofocus stable?
+        @param: bool do_stabilization_check: if True, the last 10 pid output values are stored and fitted.
+        @return tuple (float, bool): pid_output, stop autofocus?
         """
         pid_output = self._fpga.read_pid()
 
@@ -179,16 +179,18 @@ class AutofocusLogic(GenericLogic):
                 (self._last_pid_output_values[1:self._num_points_fit], [pid_output]))
             # self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
             return pid_output, self.check_stabilization()
+        elif stop_at_target:
+            return pid_output, np.abs(self._setpoint - self.read_detector_signal()) < self._target_tolerance
         else:
-            return pid_output
+            return pid_output, False
 
     def check_stabilization(self):
         """ Check for the stabilization of the focus. If at least 10 values of pid readout are present, a linear fit
         is performed. If the slope is sufficiently low, the autofocus is considered as stable. The class attribute
         self._autofocus_stable is updated by this function.
-        :return: bool: is the autofocus stable ?
+        @return: bool: is the autofocus stable ?
         """
-        if self._autofocus_iterations > self._num_points_fit:  # 10
+        if self._autofocus_iterations > self._num_points_fit:
             # p = Poly.fit(np.linspace(0, 4, num=5), self._last_pid_output_values, deg=1)
             # slope = (p(4) - p(0))/10
             p = Poly.fit(self.X_stabilization, self._last_pid_output_values, deg=1)
@@ -387,7 +389,7 @@ class AutofocusLogic(GenericLogic):
     def set_worker_frequency(self):
         """ Update the worker frequency according to the iteration time of the fpga, and store it as a class attribute
         self._pid_frequency
-        :return: None
+        @return: None
         """
         qpd = self._fpga.read_qpd()
         self._pid_frequency = qpd[4] / 1000 + 0.01

@@ -48,8 +48,8 @@ class WorkerSignals(QtCore.QObject):
 
 
 class AutofocusWorker(QtCore.QRunnable):
-    """ Worker thread to monitor the autofocus signal (QPD or camera) and adjust the piezo position when autofocus in ON.
-    The worker handles only the waiting time between signal readout. """
+    """ Worker thread to monitor the autofocus signal (QPD or camera) and adjust the piezo position when autofocus in
+    ON.The worker handles only the waiting time between signal readout. """
     def __init__(self, dt, *args, **kwargs):
         super(AutofocusWorker, self).__init__(*args, **kwargs)
         self.signals = WorkerSignals()
@@ -102,10 +102,11 @@ class FocusLogic(GenericLogic):
     autofocus = Connector(interface='AutofocusLogic')
 
     # config options
-    _init_position = ConfigOption('init_position', 10, missing='warn')
+    _init_position: float = ConfigOption('init_position', 10, missing='warn')
     _readout = ConfigOption('readout_device', missing='error')
-    _rescue_autofocus_possible = ConfigOption('rescue_autofocus_possible', False, missing='warn')
-    experiments = ConfigOption('experiments', [], missing='warn')
+    _rescue_autofocus_possible: bool = ConfigOption('rescue_autofocus_possible', False, missing='warn')
+    _min_piezo_step: float = ConfigOption('minimum_piezo_displacement_autofocus', 0.02, missing='warn')
+    experiments: list = ConfigOption('experiments', [], missing='warn')
 
     # signals
     sigStepChanged = QtCore.Signal(float)
@@ -125,29 +126,29 @@ class FocusLogic(GenericLogic):
     sigEnableFocusActions = QtCore.Signal()
 
     # piezo attributes
-    _step = 0.01
-    _max_step = 0
-    _axis = None
+    _step: float = 0.01  # in µm
+    _max_step: int = 0
+    _axis: str = ""
 
     # display element state attributes
-    timetrace_enabled = False
-    timetrace_update_time = 0.1  # in s
-    live_display_enabled = False  # camera image
-    live_update_time = 0.2  # in s
+    timetrace_enabled: bool = False
+    timetrace_update_time: float = 0.1  # in s
+    live_display_enabled: bool = False  # camera image
+    live_update_time: float = 0.2  # in s
 
     # autofocus attributes
-    _calibration_range = 2  # Autofocus calibration range in µm
-    _slope = None
-    _precision = None
-    _z0 = None
-    _dt = None
-    _calibrated = False
-    _setpoint_defined = False
-    _autofocus_lost = False
-    _stage_is_positioned = False
+    _calibration_range: int = float  # Autofocus calibration range in µm
+    _slope: float = None
+    _precision: float = None
+    _z0: float = None
+    _dt: float = None
+    _calibrated: bool = False
+    _setpoint_defined: bool = False
+    _autofocus_lost: bool = False
+    _stage_is_positioned: bool = False
 
-    autofocus_enabled = False
-    piezo_correction_running = False
+    autofocus_enabled: bool = False
+    piezo_correction_running: bool = False
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -169,8 +170,8 @@ class FocusLogic(GenericLogic):
         self._piezo = self.piezo()
         self._axis = self._piezo._axis_label
         self._max_step = self._piezo.get_constraints()[self._axis]['max_step']
-        self._min_z = self._piezo.get_constraints()[self._axis]['pos_min']
-        self._max_z = self._piezo.get_constraints()[self._axis]['pos_max']
+        self._min_z: float = self._piezo.get_constraints()[self._axis]['pos_min']
+        self._max_z: float = self._piezo.get_constraints()[self._axis]['pos_max']
         self.init_piezo()
 
         # intialize the first field of the combox
@@ -254,7 +255,7 @@ class FocusLogic(GenericLogic):
         """
         if direct:
             self._piezo.move_abs({self._axis: position})
-            sleep(0.045)
+            sleep(0.035)
         else:
             self.piezo_ramp(position)
 
@@ -282,7 +283,7 @@ class FocusLogic(GenericLogic):
             self.move_down(-last_step)
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Methods for testing tne piezo stability
+# Methods for testing the piezo stability
 # ----------------------------------------------------------------------------------------------------------------------
 
     def test_reading_position_error(self, n_repeat, dt):
@@ -409,8 +410,8 @@ class FocusLogic(GenericLogic):
 # Method specific for camera based readout -----------------------------------------------------------------------------
     def update_threshold(self, threshold):
         """ Set the user defined threshold used to calculate the threshold image of the raw data.
-        :param: int threshold: value above which values are set to maximum of the scale.
-        :return: None
+        @param: int threshold: value above which values are set to maximum of the scale.
+        @return: None
         """
         self._autofocus_logic._threshold = threshold
 
@@ -418,22 +419,25 @@ class FocusLogic(GenericLogic):
     def read_detector_signal(self):
         """ According to the method used for the autofocus, returns either the QPD signal or the centroid position
         of the IR reflection measured on the camera.
-        :return: float detector signal
+        @return: float detector signal
         """
         return self._autofocus_logic.read_detector_signal()
 
     def check_autofocus(self):
         """ Check if there is signal detected for the autofocus. Depending on the method it can be a non-zero signal
         detected by the QPD or the camera. This methods updates the class attribute _autofocus_lost.
-        :return: None
+        @return: None
         """
         self._autofocus_lost = not self._autofocus_logic.autofocus_check_signal()
 
-# Calibration of the autofocus -----------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# Autofocus calibration
+# ----------------------------------------------------------------------------------------------------------------------
+
     def calibrate_focus_stabilization(self):
         """ Calibrate the focus stabilization by performing a quick 2 µm ramp with the piezo and measuring the
         autofocus signal (either camera or QPD) for each position.
-        :return: None
+        @return: None
         """
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.start_camera_live()
@@ -465,7 +469,7 @@ class FocusLogic(GenericLogic):
         self._calibrated = True
 
         self.go_to_position(z0, direct=True)
-        #sleep(0.5)  # wait until position is stable
+        # sleep(0.5)  # wait until position is stable
 
         # measure the precision of the autofocus
         iterations = 30
@@ -478,8 +482,8 @@ class FocusLogic(GenericLogic):
 
     def measure_precision(self, num_iterations):
         """ Helper function during calibration: measure the position num_iterations-times and calculate the FWHM.
-        :param: int num_iterations: number of measurements to perform
-        :return: float precision
+        @param: int num_iterations: number of measurements to perform
+        @return: float precision
         """
         centroids = np.empty([num_iterations])
         for i in range(num_iterations):
@@ -490,27 +494,31 @@ class FocusLogic(GenericLogic):
 
     def define_autofocus_setpoint(self):
         """ From the present piezo position, read the detector signal and keep the value as reference for the pid.
-        :return: None
+        @return: None
         """
         setpoint = self._autofocus_logic.define_pid_setpoint()
         self._setpoint_defined = True
         self.sigSetpointDefined.emit(setpoint)
 
-# Running the autofocus ------------------------------------------------------------------------------------------------
-    def start_autofocus(self, stop_when_stable=False, search_focus=False):
+# ----------------------------------------------------------------------------------------------------------------------
+# Autofocus
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def start_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ This method starts the autofocus. This can only be done if the piezo was calibrated and a setpoint defined.
         A check is also performed in order to make sure there is enough signal detected.
 
-        :param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
+        @param stop_at_target: if True, the autofocus stops when close enough to the target setpoint
+        @param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
                                         (little variation during 10 iterations).
                                         default is False: autofocus running continuously until stopped by user.
-        :param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
+        @param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
                                 on the lower interface of the sample's glass slide called the start_autofocus routine.
                                 If True, it ensures that the focus is moved back to the sample surface after stabilizing
                                 the focus.
                                 Only use search_focus = True in combination with stop_when_stable = True,
                                 otherwise it has no effect.
-        :return: None
+        @return: None
         """
         # check if autofocus can be started
         if not self._calibrated:
@@ -532,7 +540,8 @@ class FocusLogic(GenericLogic):
             if self.rescue:
                 success = self.rescue_autofocus()
                 if success:
-                    self.start_autofocus(stop_when_stable=stop_when_stable, search_focus=search_focus)
+                    self.start_autofocus(stop_when_stable=stop_when_stable, stop_at_target=stop_at_target,
+                                         search_focus=search_focus)
                     return
                 else:
                     self.autofocus_enabled = False
@@ -553,24 +562,28 @@ class FocusLogic(GenericLogic):
         self._dt = self._autofocus_logic._pid_frequency
 
         worker = AutofocusWorker(self._dt)
-        worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable, search_focus=search_focus))
+        worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+                                                   stop_at_target=stop_at_target,
+                                                   search_focus=search_focus))
         self.threadpool.start(worker)
 
-    def run_autofocus(self, stop_when_stable=False, search_focus=False):
+    def run_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ Based on the pid output, the position of the piezo is corrected in real time. In order to avoid
         unnecessary movement of the piezo, the corrections are only applied when an absolute displacement >100nm is
         required.
 
-        :param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
+        @param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
                                         (little variation during 10 iterations).
                                         default is False: autofocus running continuously until stopped by user.
-        :param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
+        @param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
                                 on the lower interface of the sample's glass slide called the start_autofocus routine.
                                 If True, it ensures that the focus is moved back to the sample surface after stabilizing
                                 the focus.
                                 Only use search_focus = True in combination with stop_when_stable = True,
                                 otherwise it has no effect.
-        :return: None
+        @param stop_at_target: if True, the autofocus stops when close enough to the target setpoint
+        @return: None
+
         """
         self.check_autofocus()  # updates self._autofocus_lost
 
@@ -582,7 +595,9 @@ class FocusLogic(GenericLogic):
                     # to verify: add here stop autofocus ?
                     success = self.rescue_autofocus()
                     if success:
-                        self.start_autofocus(stop_when_stable=stop_when_stable, search_focus=search_focus)
+                        self.start_autofocus(stop_when_stable=stop_when_stable,
+                                             stop_at_target=stop_at_target,
+                                             search_focus=search_focus)
                         return
                     else:
                         self.autofocus_enabled = False
@@ -595,16 +610,25 @@ class FocusLogic(GenericLogic):
                     return
 
             if stop_when_stable:
-                pid, stable = self._autofocus_logic.read_pid_output(True)
-                if stable:
+                pid, stop_autofocus = self._autofocus_logic.read_pid_output(True, False)
+                if stop_autofocus:
                     self.log.info('focus is stable')
                     self.autofocus_enabled = False
                     self.sigAutofocusStopped.emit()
                     if search_focus:
                         self.search_focus_finished()
                     return
+            if stop_at_target:
+                pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, True)
+                if stop_autofocus:
+                    self.log.info('target position found')
+                    self.autofocus_enabled = False
+                    self.sigAutofocusStopped.emit()
+                    if search_focus:
+                        self.search_focus_finished()
+                    return
             else:
-                pid = self._autofocus_logic.read_pid_output(False)
+                pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, False)
 
             # calculate the necessary movement of piezo dz
             z = self._z0 + pid / self._slope
@@ -612,11 +636,8 @@ class FocusLogic(GenericLogic):
             # print(f'z is {z}, dz is {dz}')
 
             if self._min_z + 1 < z < self._max_z - 1:
-                if dz > 0.1:
+                if dz > self._min_piezo_step and not stop_autofocus:
                     self.go_to_position(z, direct=True)
-                else:
-                    pass
-
             else:
                 self.log.warning('piezo target position out of constraints')
                 self.autofocus_enabled = False
@@ -627,6 +648,7 @@ class FocusLogic(GenericLogic):
 
             worker = AutofocusWorker(self._dt)
             worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+                                                       stop_at_target=stop_at_target,
                                                        search_focus=search_focus))
             self.threadpool.start(worker)
 
@@ -647,7 +669,6 @@ class FocusLogic(GenericLogic):
         """ Calibrate the offset between the sample position and a reference on the bottom of the coverslip. This method
         is inspired from the LSM-Zeiss microscope and is used when the sample (such as embryos) is interfering too much
         with the IR signal and makes the regular focus stabilization unstable.
-        :return: None
         """
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
@@ -656,8 +677,7 @@ class FocusLogic(GenericLogic):
         """ From the gui, it is possible to manually indicate which offset and setpoint should be used for the
         autofocus. This is particularly useful in case the program crashed and the user wants to reuse the same
         parameters.
-        :param: float offset & float setpoint values previously saved by the user
-        :return: None
+        @param: float offset & float setpoint values previously saved by the user
         """
         # Define the offset value and display it on the main window
         self.sigOffsetCalibration.emit(offset)
@@ -670,7 +690,7 @@ class FocusLogic(GenericLogic):
     def rescue_autofocus(self):
         """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
         The stage moves along the z axis until the signal is found.
-        :return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
+        @return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
         """
         return self._autofocus_logic.rescue_autofocus()
 
@@ -679,7 +699,6 @@ class FocusLogic(GenericLogic):
         stage is started while autofocus is on, so that piezo will follow back into the central range (to 25 um).
         This method is intended for a use in long automated tasks.
         The autofocus method with readout on a reference plane is used.
-        :return: None
         """
         self.piezo_correction_running = True
         self.stop_autofocus()
@@ -718,7 +737,6 @@ class FocusLogic(GenericLogic):
         """ Slot called by the signal sigStageMoved from the autofocus_logic. Handles the stopping of the autofocus
         and resets the indicator variable. Moves also the stage back to the sample surface plane, as the piezo position
         correction method moved it to the reference interface.
-        :return: None
         """
         self.stop_autofocus()
         # move stage back to surface plane
@@ -734,7 +752,6 @@ class FocusLogic(GenericLogic):
         This method is callable from the user interface. A variation is made for systems with 2-axes stages:
         an offset of 0 is considered so that the focus is searched on the usual surface, not at a reference plane.
         This has the same effect as using the start_autofocus method with stop_when_stable=True.
-        :return: None
         """
         if self._calibrated and self._setpoint_defined:
             self._stage_is_positioned = False  # set this flag as indicator that the search focus procedure is running
@@ -743,7 +760,7 @@ class FocusLogic(GenericLogic):
                 self._autofocus_logic.stage_move_z(offset)
                 self._autofocus_logic.stage_wait_for_idle()
                 sleep(1)
-            self.start_autofocus(stop_when_stable=True, search_focus=True)
+            self.start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=True)
         else:
             self.log.warn('Search focus can not be used. Calibration or setpoint missing.')
             self.sigFocusFound.emit()  # signal is sent although focus not found, just to reset toolbutton state
@@ -751,7 +768,6 @@ class FocusLogic(GenericLogic):
     def search_focus_finished(self):
         """ Ensure the return of the 3-axes stage to the surface plane after finding focus based on the signal on
         a reference plane.
-        :return: None
         """
         offset = self._autofocus_logic._focus_offset
         if offset != 0:
@@ -774,3 +790,81 @@ class FocusLogic(GenericLogic):
         """ This method resets all focus related toolbar actions on GUI to callable state, for example after Tasks. """
         self.sigEnableFocusActions.emit()
         sleep(0.5)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper methods to test autofocus stability and reproducibility
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def test_autofocus(self):
+        """ Helper function use to test the autofocus and quantify its reproducibility.
+        """
+        n_repeats = 10
+        z_range = [2, 1, 0.5]
+        stop_when_stable = True
+        stop_at_target = False
+
+        # launch autofocus in order to start at the right position
+        self.perform_autofocus_test(stop_when_stable, stop_at_target)
+
+        # measure the piezo position
+        z0 = self.get_position()
+
+        # perform the test
+        for dz in z_range:
+            duration = np.zeros((n_repeats, 2))
+            precision_z = np.zeros((n_repeats, 2))
+            precision_setpoint = np.zeros((n_repeats, 2))
+
+            for test in range(n_repeats):
+                # perform stabilization after a positive dz
+                self.go_to_position(z0+dz, direct=True)
+                t0 = time()
+                self.perform_autofocus_test(stop_when_stable, stop_at_target)
+                duration[test, 0] = time() - t0
+                precision_z[test, 0] = self.get_position() - z0
+                precision_setpoint[test, 0] = self._autofocus_logic.read_detector_signal() -\
+                                              self._autofocus_logic._setpoint
+
+                # perform stabilization after a negative dz
+                self.go_to_position(z0-dz, direct=True)
+                t0 = time()
+                self.perform_autofocus_test(stop_when_stable, stop_at_target)
+                duration[test, 1] = time() - t0
+                precision_z[test, 1] = self.get_position() - z0
+                precision_setpoint[test, 1] = self._autofocus_logic.read_detector_signal() -\
+                                              self._autofocus_logic._setpoint
+
+            mean_dt = np.mean(duration, axis=0)
+            std_dt = np.std(duration, axis=0)
+            mean_dz = np.mean(precision_z, axis=0)
+            std_dz = np.std(precision_z, axis=0)
+            mean_d_setpoint = np.mean(precision_setpoint, axis=0)
+            std_d_setpoint = np.std(precision_setpoint, axis=0)
+
+            print(f'For a displacement of +{dz}, the mean stabilization time = {mean_dt[0]} +/- {std_dt[0]}')
+            print(f'The variation in piezo position = {mean_dz[0]} +/- {std_dz[0]}')
+            print(f'The variation with respect to setpoint = {mean_d_setpoint[0]} +/- {std_d_setpoint[0]}')
+            print(f'For a displacement of -{dz}, the mean stabilization time = {mean_dt[1]} +/- {std_dt[1]}')
+            print(f'The variation in piezo position = {mean_dz[1]} +/- {std_dz[1]}')
+            print(f'The variation with respect to setpoint = {mean_d_setpoint[1]} +/- {std_d_setpoint[1]}')
+
+    def perform_autofocus_test(self, stop_when_stable, stop_at_target):
+        """ Launch an autofocus routine. The stabilization will stop as soon as the focus is found, according to the
+        parameters defined during the calibration.
+
+        @param stop_when_stable: bool - indicates whether the autofocus should stop when stable
+        @param stop_at_target: bool - indicates whether the autofocus should stop as soon as the setpoint is reached
+        """
+        self.start_autofocus(stop_when_stable=stop_when_stable,
+                             stop_at_target=stop_at_target,
+                             search_focus=False)
+        busy = self.autofocus_enabled
+        counter = 0
+        while busy:
+            counter += 1
+            sleep(0.05)
+            busy = self.autofocus_enabled
+            if counter > 500:
+                break
+
+
