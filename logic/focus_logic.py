@@ -129,6 +129,8 @@ class FocusLogic(GenericLogic):
     _step: float = 0.01  # in µm
     _max_step: int = 0
     _axis: str = ""
+    _min_z: float = 0
+    _max_z: float = 0
 
     # display element state attributes
     timetrace_enabled: bool = False
@@ -156,9 +158,6 @@ class FocusLogic(GenericLogic):
         self.threadpool = QtCore.QThreadPool()
         self._piezo = None
         self._autofocus_logic = None
-        self._axis = None
-        self._min_z = None
-        self._max_z = None
 
         # uncomment if needed:
         # self.threadlock = Mutex()
@@ -170,8 +169,8 @@ class FocusLogic(GenericLogic):
         self._piezo = self.piezo()
         self._axis = self._piezo._axis_label
         self._max_step = self._piezo.get_constraints()[self._axis]['max_step']
-        self._min_z: float = self._piezo.get_constraints()[self._axis]['pos_min']
-        self._max_z: float = self._piezo.get_constraints()[self._axis]['pos_max']
+        self._min_z = self._piezo.get_constraints()[self._axis]['pos_min']
+        self._max_z = self._piezo.get_constraints()[self._axis]['pos_max']
         self.init_piezo()
 
         # intialize the first field of the combox
@@ -795,13 +794,21 @@ class FocusLogic(GenericLogic):
 # Helper methods to test autofocus stability and reproducibility
 # ----------------------------------------------------------------------------------------------------------------------
 
-    def test_autofocus(self):
+    def test_autofocus(self, n_repeats, dz_range, stop_when_stable, stop_at_target, min_piezo_step, target_tolerance):
         """ Helper function use to test the autofocus and quantify its reproducibility.
+        @param min_piezo_step: float - indicate the minimum displacement for the piezo when autofocus is working
+        @param target_tolerance: int - indicate the absolute tolerance for the autofocus (with respect to the setpoint)
+        @param n_repeats: int - number of times the measure is going to be repeated for each z position
+        @param dz_range: list - absolute displacements to be tested. Values will be positive and negative.
+        @param stop_when_stable: bool - indicate whether the autofocus should stop when stable
+        @param stop_at_target: bool - indicate whether the autofocus should stop when close to target setpoint
         """
-        n_repeats = 10
-        z_range = [2, 1, 0.5]
-        stop_when_stable = True
-        stop_at_target = False
+        # n_repeats = 10
+        # z_range = [2, 1, 0.5]
+        # stop_when_stable = True
+        # stop_at_target = False
+        self._min_piezo_step = min_piezo_step
+        self._autofocus_logic._target_tolerance = target_tolerance
 
         # launch autofocus in order to start at the right position
         self.perform_autofocus_test(stop_when_stable, stop_at_target)
@@ -810,7 +817,7 @@ class FocusLogic(GenericLogic):
         z0 = self.get_position()
 
         # perform the test
-        for dz in z_range:
+        for dz in dz_range:
             duration = np.zeros((n_repeats, 2))
             precision_z = np.zeros((n_repeats, 2))
             precision_setpoint = np.zeros((n_repeats, 2))
