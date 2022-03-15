@@ -253,7 +253,7 @@ class AutofocusLogic(GenericLogic):
 
         self.stage_move_z(-z_range/2)
         self.stage_wait_for_idle()
-        #max_qpd_pos = self.read_detector_signal()
+        # max_qpd_pos = self.read_detector_signal()
         n_step = int(z_range/z_step)
 
         for n in range(n_step):
@@ -307,12 +307,12 @@ class AutofocusLogic(GenericLogic):
 
         while not self.autofocus_check_signal() and z_range <= 80:
 
-            print("Search range is dz={}µm".format(z_range))
-            self.stage_move_z(-z_range/2)
+            print(f"Search range is dz={z_range}µm")
+            self.stage_move_z(z_range/2)  # positive value =  the objective is going down
             self.stage_wait_for_idle()
 
             for z in range(z_range):
-                self.stage_move_z(z_step)
+                self.stage_move_z(-z_step)
                 self.stage_wait_for_idle()
                 # sleep(0.1)
 
@@ -322,7 +322,7 @@ class AutofocusLogic(GenericLogic):
                     return success
 
             if not self.autofocus_check_signal():
-                self.stage_move_z(-z_range/2)
+                self.stage_move_z(z_range/2)
                 self.stage_wait_for_idle()
                 z_range += 20
         print('rescue finished ')
@@ -340,7 +340,7 @@ class AutofocusLogic(GenericLogic):
         :return: None
         """
         self._stage.wait_for_idle()
-        pos = self._stage.get_pos()
+        # pos = self._stage.get_pos()
         # print("stage position : {}".format(pos))
 
     def do_position_correction(self, step):

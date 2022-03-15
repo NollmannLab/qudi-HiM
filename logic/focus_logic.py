@@ -139,11 +139,11 @@ class FocusLogic(GenericLogic):
     live_update_time: float = 0.2  # in s
 
     # autofocus attributes
-    _calibration_range: int = float  # Autofocus calibration range in µm
-    _slope: float = None
-    _precision: float = None
-    _z0: float = None
-    _dt: float = None
+    _calibration_range: float = 2  # Autofocus calibration range in µm
+    _slope: float = 0
+    _precision: float = 0
+    _z0: float = 0
+    _dt: float = 0
     _calibrated: bool = False
     _setpoint_defined: bool = False
     _autofocus_lost: bool = False
@@ -822,24 +822,29 @@ class FocusLogic(GenericLogic):
             precision_z = np.zeros((n_repeats, 2))
             precision_setpoint = np.zeros((n_repeats, 2))
 
+            print(f'Performing test for range dz = {dz}um')
+
             for test in range(n_repeats):
+
+                print(f'repeat #{test}')
+
                 # perform stabilization after a positive dz
                 self.go_to_position(z0+dz, direct=True)
                 t0 = time()
                 self.perform_autofocus_test(stop_when_stable, stop_at_target)
                 duration[test, 0] = time() - t0
-                precision_z[test, 0] = self.get_position() - z0
-                precision_setpoint[test, 0] = self._autofocus_logic.read_detector_signal() -\
-                                              self._autofocus_logic._setpoint
+                precision_z[test, 0] = np.abs(self.get_position() - z0)
+                precision_setpoint[test, 0] = np.abs(self._autofocus_logic.read_detector_signal() -
+                                                     self._autofocus_logic._setpoint)
 
                 # perform stabilization after a negative dz
                 self.go_to_position(z0-dz, direct=True)
                 t0 = time()
                 self.perform_autofocus_test(stop_when_stable, stop_at_target)
                 duration[test, 1] = time() - t0
-                precision_z[test, 1] = self.get_position() - z0
-                precision_setpoint[test, 1] = self._autofocus_logic.read_detector_signal() -\
-                                              self._autofocus_logic._setpoint
+                precision_z[test, 1] = np.abs(self.get_position() - z0)
+                precision_setpoint[test, 1] = np.abs(self._autofocus_logic.read_detector_signal() -\
+                                                     self._autofocus_logic._setpoint)
 
             mean_dt = np.mean(duration, axis=0)
             std_dt = np.std(duration, axis=0)
