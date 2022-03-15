@@ -244,7 +244,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # set the ASI stage in trigger mode and set the stage velocity
         self.ref['roi'].set_stage_led_mode('Triggered')
-        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3, 'z': 3})
+        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3, 'z': .5})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -411,6 +411,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # set the ASI stage in internal mode
         self.ref['roi'].set_stage_led_mode('Internal')
+        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3, 'z': 3})
 
         # enable gui actions
         # roi gui
@@ -605,7 +606,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # self.ref['roi'].stage_wait_for_idle()
 
             # autofocus
-            self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+            self.ref['focus'].start_autofocus(stop_when_stable=False, stop_at_target=True, search_focus=False)
 
             # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
             # stable is set to false)
@@ -683,7 +684,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Perform the focus stabilization for the first ROI.
         """
         # autofocus
-        self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+        self.ref['focus'].start_autofocus(stop_when_stable=False, stop_at_target=True, search_focus=False)
 
         # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
         # stable is set to false)
