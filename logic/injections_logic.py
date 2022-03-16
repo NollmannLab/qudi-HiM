@@ -6,7 +6,7 @@ This module contains the logic to configure an injection sequence.
 
 An extension to Qudi.
 
-@author: F. Barho
+@author: F. Barho - later modifications JB. Fiche
 
 Created on Tue Mars 2 2021
 -----------------------------------------------------------------------------------
@@ -29,6 +29,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import yaml
+import re
 from qtpy import QtCore
 from logic.generic_logic import GenericLogic
 from core.configoption import ConfigOption
@@ -324,33 +325,97 @@ class InjectionsLogic(GenericLogic):
         """ This method allows to write the data from the models and from the buffer dict and probe position dict
         to a file. For readability, hybridization and photobleaching sequence model entries are converted into a
         dictionary format.
-        :param: str path: full path
+        @param: str path: full path
         """
-        # prepare the list entries in dictionary format for good readability in the file
-        hybridization_list = []
-        photobleaching_list = []
 
-        for entry_num, item in enumerate(self.hybridization_injection_sequence_model.items, 1):
-            if item[1] is not None:
-                product = str.split(item[1], ':')[0]  # write just the product name, not the corresponding valve pos
-            else:
-                product = None
-            entry = self.make_dict_entry(entry_num, item[0], product, item[2], item[3], item[4])
-            hybridization_list.append(entry)
+        # check consistency in injection sequences
+        if self.check_injection_sequence_consistency():
 
-        for entry_num, item in enumerate(self.photobleaching_injection_sequence_model.items, 1):
-            if item[1] is not None:
-                product = str.split(item[1], ':')[0]
-            else:
-                product = None
-            entry = self.make_dict_entry(entry_num, item[0], product, item[2], item[3], item[4])
-            photobleaching_list.append(entry)
+            # prepare the list entries in dictionary format for good readability in the file
+            hybridization_list = []
+            photobleaching_list = []
 
-        # write a complete file containing buffer_dict, probe_dict, hybridization_list and photobleaching_list
-        with open(path, 'w') as file:
-            dict_file = {'buffer': self.buffer_dict, 'probes': self.probe_dict, 'hybridization list': hybridization_list, 'photobleaching list': photobleaching_list}
-            yaml.safe_dump(dict_file, file, default_flow_style=False)  # , sort_keys=False
-            self.log.info('Injections saved to {}'.format(path))
+            for entry_num, item in enumerate(self.hybridization_injection_sequence_model.items, 1):
+                if item[1] is not None:
+                    product = str.split(item[1], ':')[0]  # write just the product name, not the corresponding valve pos
+                else:
+                    product = None
+                entry = self.make_dict_entry(entry_num, item[0], product, item[2], item[3], item[4])
+                hybridization_list.append(entry)
+
+            for entry_num, item in enumerate(self.photobleaching_injection_sequence_model.items, 1):
+                if item[1] is not None:
+                    product = str.split(item[1], ':')[0]
+                else:
+                    product = None
+                entry = self.make_dict_entry(entry_num, item[0], product, item[2], item[3], item[4])
+                photobleaching_list.append(entry)
+
+            # write a complete file containing buffer_dict, probe_dict, hybridization_list and photobleaching_list
+            with open(path, 'w') as file:
+                dict_file = {'buffer': self.buffer_dict, 'probes': self.probe_dict, 'hybridization list': hybridization_list, 'photobleaching list': photobleaching_list}
+                yaml.safe_dump(dict_file, file, default_flow_style=False)  # , sort_keys=False
+                self.log.info('Injections saved to {}'.format(path))
+
+    def check_injection_sequence_consistency(self):
+        """ check whether the injection method is consistent (the buffers indicated in the injections sequences should
+        match all the buffers saved in the buffer dictionary). Also, check at least one probe is indicated.
+
+        @return: bool - False if an error was found in the injections sequence.
+        """
+        save_parameters = True
+        # check consistency between buffers list and injection procedures
+        if not self.probe_dict:
+            self.log.error('The injections parameters cannot be saved. At least one probe is required.')
+            save_parameters = False
+
+        # convert the buffer dictionary into a list
+        buffer_list = []
+        for value in self.buffer_dict.values():
+            buffer_list.append(value)
+
+        # test if all the buffers indicated in the hybridization sequence are valid
+        colon_r = re.compile('\w+:')
+        for step in self.hybridization_injection_sequence_model.items:
+            injection_buffer = step[1]
+            # if this step is an incubation, skip it
+            if injection_buffer is None:
+                continue
+            # when creating from scratch the sequence, all buffers are saved as 'buffer : valve'. However, when loading
+            # a sequence from a file, the position of the valve is not indicated anymore. To avoid error, we search
+            # first for the presence of ":" and if it is found, we keep only the name of the buffer.
+            find_colon = colon_r.findall(injection_buffer)
+            if find_colon:
+                injection_buffer = find_colon[0]
+            # check if the injection_buffer is in the buffer dictionary
+            r = re.compile(injection_buffer + '*')
+            if not list(filter(r.match, buffer_list)):
+                self.log.error(f'There is an error in the hybridization sequence. \
+                                        {injection_buffer} is not defined in the buffer list')
+                save_parameters = False
+                break
+
+        # test if all the buffers indicated in the photobleaching sequence are valid
+        for step in self.photobleaching_injection_sequence_model.items:
+            injection_buffer = step[1]
+            # if this step is an incubation, skip it
+            if injection_buffer is None:
+                continue
+            # when creating from scratch the sequence, all buffers are saved as 'buffer : valve'. However, when loading
+            # a sequence from a file, the position of the valve is not indicated anymore. To avoid error, we search
+            # first for the presence of ":" and if it is found, we keep only the name of the buffer.
+            find_colon = colon_r.findall(injection_buffer)
+            if find_colon:
+                injection_buffer = find_colon[0]
+            # check if the injection_buffer is in the buffer dictionary
+            r = re.compile(injection_buffer + '*')
+            if not list(filter(r.match, buffer_list)):
+                self.log.error(f'There is an error in the photobleaching sequence. \
+                                        {injection_buffer} is not defined in the buffer list')
+                save_parameters = False
+                break
+
+        return save_parameters
 
     @staticmethod
     def make_dict_entry(step_num, procedure, product, volume, flowrate, time=None):
