@@ -41,7 +41,7 @@ from qtpy import QtCore
 from tifffile import TiffWriter
 from functools import wraps
 from time import time, sleep
-from scipy.interpolate import interp1d, bisplev, bisplrep
+from scipy.interpolate import interp1d
 
 
 # Defines the decorator function for the log
@@ -112,7 +112,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines: int = 0
         self.dz: list = []
         self.calibration_path: str = ""
-        self.hubble_calibration_step: int = 4  # should it be in the config file?
+        self.hubble_calibration_step: int = 2  # should it be in the config file?
         self.hubble_init_time: float = time()
 
         print('Task {0} added!'.format(self.name))
@@ -213,7 +213,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if not self.aborted:
                     # self.dz = self.fit_surface(roi_x_positions, roi_y_positions, roi_z_positions)
                     # self.dz = self.interpolate_surface(roi_x_positions, roi_y_positions, roi_z_positions)
-                    self.dz = self.no_fit(roi_x_positions, roi_y_positions, roi_z_positions)
+                    self.dz = self.no_fit(roi_z_positions)
 
             else:
                 with open(self.calibration_path, 'r') as file:
@@ -583,7 +583,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     aborted = True
                     break
                 else:
-                    self.ref['focus'].start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=False)
+                    self.ref['focus'].start_autofocus(stop_when_stable=False, stop_at_target=True, search_focus=False)
 
                     # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
                     # stable is set to false)
@@ -616,65 +616,65 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return roi_x, roi_y, roi_start_z, aborted
 
-    def interpolate_surface(self, roi_x_positions, roi_y_positions, roi_z_positions):
-        """ Compile the axial positions data to calculate the average value and save the graph.
+    # def interpolate_surface(self, roi_x_positions, roi_y_positions, roi_z_positions):
+    #     """ Compile the axial positions data to calculate the average value and save the graph.
+    #
+    #     @param ndarray roi_x_positions: array containing all the x position of each selected ROI, for each repetition
+    #     @param ndarray roi_y_positions: array containing all the y position of each selected ROI, for each repetition
+    #     @param ndarray roi_z_positions: array containing all the axial focus position of each ROI, for each repetition
+    #     @return ndarray dz: array containing the average axial displacement between successive ROIs
+    #     """
+    #     # compute the sample surface
+    #     x_calibration = np.median(roi_x_positions, axis=0)
+    #     y_calibration = np.median(roi_y_positions, axis=0)
+    #     z_calibration = np.median(roi_z_positions, axis=0)
+    #     z_std = np.std(roi_z_positions, axis=0)
+    #
+    #     # interpolate the surface
+    #     # f = bisplrep(x_calibration, y_calibration, z_calibration, s=0)
+    #     roi_calibration = np.linspace(1, self.num_roi, len(x_calibration))
+    #     f = interp1d(roi_calibration, z_calibration, kind='cubic')
+    #
+    #     # compare the interpolation with the calibration
+    #     z_interpolate = f(roi_calibration)
+    #     z_compare = z_calibration - z_interpolate
+    #
+    #     # plot the results to inspect if the values were reproducible
+    #     roi = np.linspace(1, len(x_calibration), len(x_calibration))
+    #     plt.clf()
+    #     plt.errorbar(roi, z_calibration, yerr=z_std)
+    #     plt.plot(roi, z_interpolate)
+    #     plt.xlabel('ROI number')
+    #     plt.ylabel('z (in µm)')
+    #     plt.legend({'fit', 'calibration'})
+    #     figure_path = os.path.join(self.directory, f'tilt_surface_calibration.png')
+    #     plt.savefig(figure_path)
+    #
+    #     # calculate the dz values based on the fit
+    #     x_roi = np.zeros((self.num_roi,))
+    #     y_roi = np.zeros((self.num_roi,))
+    #     z_roi = np.zeros((self.num_roi,))
+    #     dz = np.zeros((self.num_roi,))
+    #     for n, roi in enumerate(self.roi_names):
+    #         # x_roi[n], y_roi[n], _ = self.ref['roi'].get_roi_position(roi)
+    #         z_roi[n] = f(n+1)
+    #
+    #     for n in range(self.num_roi):
+    #         if n > 0:
+    #             dz[n] = z_roi[n] - z_roi[n-1]
+    #         else:
+    #             dz[n] = 0
+    #
+    #     # save the x,y,z values and the fit results in a specific file
+    #     data_dict = {'x': x_calibration.tolist(), 'y': y_calibration.tolist(), 'z': z_calibration.tolist(),
+    #                  'dz': dz.tolist(), 'z_std': z_std.tolist(), 'z_compare': z_compare.tolist()}
+    #     tilt_path = os.path.join(self.directory, f'tilt_surface_calibration.yml')
+    #     with open(tilt_path, 'w') as outfile:
+    #         yaml.safe_dump(data_dict, outfile, default_flow_style=False)
+    #
+    #     return dz
 
-        @param ndarray roi_x_positions: array containing all the x position of each selected ROI, for each repetition
-        @param ndarray roi_y_positions: array containing all the y position of each selected ROI, for each repetition
-        @param ndarray roi_z_positions: array containing all the axial focus position of each ROI, for each repetition
-        @return ndarray dz: array containing the average axial displacement between successive ROIs
-        """
-        # compute the sample surface
-        x_calibration = np.median(roi_x_positions, axis=0)
-        y_calibration = np.median(roi_y_positions, axis=0)
-        z_calibration = np.median(roi_z_positions, axis=0)
-        z_std = np.std(roi_z_positions, axis=0)
-
-        # interpolate the surface
-        # f = bisplrep(x_calibration, y_calibration, z_calibration, s=0)
-        roi_calibration = np.linspace(1, self.num_roi, len(x_calibration))
-        f = interp1d(roi_calibration, z_calibration, kind='cubic')
-
-        # compare the interpolation with the calibration
-        z_interpolate = f(roi_calibration)
-        z_compare = z_calibration - z_interpolate
-
-        # plot the results to inspect if the values were reproducible
-        roi = np.linspace(1, len(x_calibration), len(x_calibration))
-        plt.clf()
-        plt.errorbar(roi, z_calibration, yerr=z_std)
-        plt.plot(roi, z_interpolate)
-        plt.xlabel('ROI number')
-        plt.ylabel('z (in µm)')
-        plt.legend({'fit', 'calibration'})
-        figure_path = os.path.join(self.directory, f'tilt_surface_calibration.png')
-        plt.savefig(figure_path)
-
-        # calculate the dz values based on the fit
-        x_roi = np.zeros((self.num_roi,))
-        y_roi = np.zeros((self.num_roi,))
-        z_roi = np.zeros((self.num_roi,))
-        dz = np.zeros((self.num_roi,))
-        for n, roi in enumerate(self.roi_names):
-            # x_roi[n], y_roi[n], _ = self.ref['roi'].get_roi_position(roi)
-            z_roi[n] = f(n+1)
-
-        for n in range(self.num_roi):
-            if n > 0:
-                dz[n] = z_roi[n] - z_roi[n-1]
-            else:
-                dz[n] = 0
-
-        # save the x,y,z values and the fit results in a specific file
-        data_dict = {'x': x_calibration.tolist(), 'y': y_calibration.tolist(), 'z': z_calibration.tolist(),
-                     'dz': dz.tolist(), 'z_std': z_std.tolist(), 'z_compare': z_compare.tolist()}
-        tilt_path = os.path.join(self.directory, f'tilt_surface_calibration.yml')
-        with open(tilt_path, 'w') as outfile:
-            yaml.safe_dump(data_dict, outfile, default_flow_style=False)
-
-        return dz
-
-    def no_fit(self, roi_x_positions, roi_y_positions, roi_z_positions):
+    def no_fit(self, roi_z_positions):
         dz = np.zeros((self.num_roi,))
         for n in range(self.num_roi):
             if n > 0:
@@ -703,7 +703,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                       y_calibration**2*x_calibration]).T
         # A = np.array([x_calibration*0+1, x_calibration, y_calibration, x_calibration**2, y_calibration**2,
         #               x_calibration*y_calibration]).T
-        # A = np.array([x_calibration*0+1, x_calibration, y_calibration, x_calibration**2, y_calibration**2]).T
         B = z_calibration
         coeff, r, _, s = np.linalg.lstsq(A, B, rcond=None)
 
@@ -714,8 +713,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             coeff[9] * x_calibration * y_calibration**2
         # z_fit = coeff[0]*(x_calibration*0+1) + coeff[1]*x_calibration + coeff[2]*y_calibration +\
         #     coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2 + coeff[5]*x_calibration*y_calibration
-        # z_fit = coeff[0]*(x_calibration*0+1) + coeff[1]*x_calibration + coeff[2]*y_calibration +\
-        #     coeff[3]*x_calibration**2 + coeff[4]*y_calibration**2
         z_compare = z_calibration - z_fit
 
         # plot the results to inspect if the values were reproducible
@@ -741,8 +738,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             + coeff[9]*x_roi*y_roi**2
         # z_roi = coeff[0]*(x_roi*0+1) + coeff[1]*x_roi + coeff[2]*y_roi + coeff[3]*x_roi**2 + coeff[4]*y_roi**2 \
         #     + coeff[5]*x_roi*y_roi
-        # z_roi = coeff[0]*(x_roi*0+1) + coeff[1]*x_roi + coeff[2]*y_roi + coeff[3]*x_roi**2 + coeff[4]*y_roi**2
-
 
         for n in range(self.num_roi):
             if n > 0:
@@ -780,7 +775,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Perform the focus stabilization for the first ROI.
         """
         # autofocus
-        self.ref['focus'].start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=False)
+        self.ref['focus'].start_autofocus(stop_when_stable=False, stop_at_target=True, search_focus=False)
 
         # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
         # stable is set to false)
