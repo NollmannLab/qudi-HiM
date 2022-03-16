@@ -76,7 +76,7 @@ class AutofocusLogic(GenericLogic):
     # autofocus parameters for stabilization
     _num_points_fit = ConfigOption('num_points_fit', 10, missing='warn')
     _stable_threshold = ConfigOption('stabilization_threshold', 1, missing='warn')
-    _target_tolerance = ConfigOption('target_tolerance', 50, missing='warn')
+    _target_tolerance = ConfigOption('target_tolerance', 10, missing='warn')
 
     # pid attributes
     _pid_frequency: float = 0  # in s, frequency of autofocus PID (to make sure there is a new measure for the FPGA)
