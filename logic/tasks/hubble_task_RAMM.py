@@ -193,9 +193,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             print(f'calibration file path: {self.calibration_path}')
 
             if not self.calibration_path:
-                roi_x_positions = np.zeros((self.n_dz_calibration_cycles, self.num_roi//self.hubble_calibration_step+1))
-                roi_y_positions = np.zeros((self.n_dz_calibration_cycles, self.num_roi//self.hubble_calibration_step+1))
-                roi_z_positions = np.zeros((self.n_dz_calibration_cycles, self.num_roi//self.hubble_calibration_step+1))
+                roi_x_positions = np.zeros(
+                    (self.n_dz_calibration_cycles, np.ceil(self.num_roi / self.hubble_calibration_step).astype('int')))
+                roi_y_positions = np.zeros(
+                    (self.n_dz_calibration_cycles, np.ceil(self.num_roi / self.hubble_calibration_step).astype('int')))
+                roi_z_positions = np.zeros(
+                    (self.n_dz_calibration_cycles, np.ceil(self.num_roi / self.hubble_calibration_step).astype('int')))
 
                 # for each roi, the autofocus positioning is performed. The process is repeated n_dz_calibration_cycles
                 # times, in order to get a good average position.
@@ -211,9 +214,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # calculate the average variation of axial displacement between two successive rois
                 if not self.aborted:
-                    # self.dz = self.fit_surface(roi_x_positions, roi_y_positions, roi_z_positions)
+                    self.dz = self.fit_surface(roi_x_positions, roi_y_positions, roi_z_positions)
                     # self.dz = self.interpolate_surface(roi_x_positions, roi_y_positions, roi_z_positions)
-                    self.dz = self.no_fit(roi_z_positions)
+                    # self.dz = self.no_fit(roi_z_positions)
 
             else:
                 with open(self.calibration_path, 'r') as file:
@@ -272,6 +275,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # go back to the first ROI and the initial piezo position
         self.move_to_roi(self.roi_names[0], False)
+        sleep(0.1)
         self.ref['focus'].go_to_position(z_absolute_position[0], direct=True)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -527,9 +531,26 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
+
+        # Retrieve the geometry of the mosaic
+        for n, roi in enumerate(self.roi_names):
+            if n == 0:
+                _, y0, _ = self.ref['roi'].get_roi_position(roi)
+            else:
+                _, y, _ = self.ref['roi'].get_roi_position(roi)
+                if y0 != y:
+                    mosaic_y = np.round(self.num_roi / n)
+                    mosaic_x = n
+                    break
+
         metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
                     'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
-                    'Number laserlines': self.num_laserlines}
+                    'Number laserlines': self.num_laserlines,
+                    'Calibration step (in rois)': self.hubble_calibration_step,
+                    'Number of repeats measurements for calibration': self.n_dz_calibration_cycles,
+                    'Number of rois': self.num_roi,
+                    'Mosaic_geometry_x': int(mosaic_x),
+                    'Mosaic_geometry_y': int(mosaic_y)}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
@@ -559,9 +580,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                       roi_x, roi_y : 2D positions of the stage for each selected ROI
         """
 
-        roi_start_z = np.zeros((self.num_roi // self.hubble_calibration_step + 1,))
-        roi_x = np.zeros((self.num_roi // self.hubble_calibration_step + 1,))
-        roi_y = np.zeros((self.num_roi // self.hubble_calibration_step + 1,))
+        roi_start_z = np.zeros((np.ceil(self.num_roi / self.hubble_calibration_step).astype('int'),))
+        roi_x = np.zeros((np.ceil(self.num_roi / self.hubble_calibration_step).astype('int'),))
+        roi_y = np.zeros((np.ceil(self.num_roi / self.hubble_calibration_step).astype('int'),))
         aborted = False
 
         for n, item in enumerate(self.roi_names):
@@ -585,8 +606,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 else:
                     self.ref['focus'].start_autofocus(stop_when_stable=False, stop_at_target=True, search_focus=False)
 
-                    # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it is
-                    # stable is set to false)
+                    # ensure that focus is stable here (autofocus_enabled is True when autofocus is started and once it
+                    # is stable is set to false)
                     busy = self.ref['focus'].autofocus_enabled
                     counter = 0
                     while busy:
@@ -676,6 +697,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def no_fit(self, roi_z_positions):
         dz = np.zeros((self.num_roi,))
+        roi_z_positions = np.median(roi_z_positions, axis=0)
         for n in range(self.num_roi):
             if n > 0:
                 dz[n] = roi_z_positions[n] - roi_z_positions[n-1]
@@ -823,7 +845,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         z_positions = np.zeros((self.num_roi,))
         z_positions[0] = self.ref['focus'].get_position()
         for n_roi in range(self.num_roi - 1):
-            z_positions[n_roi+1] = z_positions[n_roi] + self.dz[n_roi]
+            z_positions[n_roi+1] = z_positions[n_roi] + self.dz[n_roi+1]
 
         return z_positions
 

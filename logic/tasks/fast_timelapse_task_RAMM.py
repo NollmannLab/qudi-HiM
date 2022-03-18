@@ -197,7 +197,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict: dict = {}
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
         self.user_config_path: str = self.config['path_to_user_config']
-        self.n_dz_calibration_cycles: int = 4
+        self.n_dz_calibration_cycles: int = 1
         self.sample_name: str = ""
         self.exposure: dict = {}
         self.centered_focal_plane: bool = False
@@ -562,9 +562,25 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
+        # Retrieve the geometry of the mosaic
+        for n, roi in enumerate(self.roi_names):
+            if n == 0:
+                _, y0, _ = self.ref['roi'].get_roi_position(roi)
+            else:
+                _, y, _ = self.ref['roi'].get_roi_position(roi)
+                if y0 != y:
+                    mosaic_y = np.round(self.num_roi / n)
+                    mosaic_x = n
+                    break
+
         metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
                     'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
-                    'Number laserlines': self.num_laserlines}
+                    'Number laserlines': self.num_laserlines,
+                    'Number of repeats measurements for calibration': self.n_dz_calibration_cycles,
+                    'Number of rois': self.num_roi,
+                    'Mosaic_geometry_x': int(mosaic_x),
+                    'Mosaic_geometry_y': int(mosaic_y)}
+
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
