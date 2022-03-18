@@ -181,7 +181,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.aborted = True
 
         # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': 0.1, 'y': 0.1})
+        self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -720,7 +720,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('restarted default fpga session')
 
         # reset stage velocity to default
-        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
+        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3})  # 5.74592
 
         # enable gui actions
         # roi gui
