@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Qudi-HiM User Guide &mdash; qudi-HiM qudi-HiM_v1.0 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  <script id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Qudi-HiM Developer Guide" href="../qudi_cbs_developer/Qudi-HiM_Developer_Guide.html" />
+    <link rel="prev" title="Welcome to qudi-HiM’s documentation!" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> qudi-HiM
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">User guide:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Qudi-HiM User Guide</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#starting-qudi-him">Starting Qudi-HiM</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#linux">Linux:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#windows">Windows:</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#the-manager-module">The Manager Module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#loading-modules">Loading modules</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#qudi-him-gui-modules">Qudi-HiM GUI modules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#general-organization-of-qudi-him-gui-modules">General organization of Qudi-HiM GUI modules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#basic-imaging-gui">Basic Imaging GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#options-menu">Options menu:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#imaging-toolbar">Imaging toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#lightsource-toolbar">Lightsource toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#camera-dockwidget">Camera dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#lightsource-dockwidget">Lightsource dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#filter-dockwidget">Filter dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#camera-status-dockwidget">Camera status dockwidget</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id1"></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#focus-tools-gui">Focus Tools GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#settings-menu">Settings menu:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#manual-focus-toolbar">Manual focus toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#autofocus-toolbar">Autofocus toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#manual-focus-dockwidget">Manual focus dockwidget</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#timetrace-dockwidget">Timetrace dockwidget</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#autofocus-dockwidget">Autofocus dockwidget</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#camera-image-display-dockwidget">Camera image display dockwidget</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#roi-selector-gui">ROI Selector GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id2">Options menu:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#roi-toolbar">ROI toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#roi-list-toolbar">ROI list toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#stage-toolbar">Stage toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#main-window-area">Main window area:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#fluidics-gui">Fluidics GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#positioning-toolbar">Positioning toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flowcontrol-toolbar">Flowcontrol toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#valve-settings-dockwidget">Valve settings dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#flowcontrol-dockwidget">Flowcontrol dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#positioning-dockwidget">Positioning dockwidget:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#injections-gui">Injections GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#file-toolbar">File toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#buffer-and-probes-dockwidget">Buffer and probes dockwidget:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#injections-dockwidget">Injections dockwidget:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#experiment-configurator-gui">Experiment Configurator GUI</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id3">File toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id4">Main window area:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#taskrunner">Taskrunner</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#toolbar">Toolbar:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id5">Main window area:</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#preparing-and-running-a-hi-m-experiment-on-ramm-setup">Preparing and running a Hi-M experiment on RAMM setup</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#step-1-nuclei-staining-and-fiducial-hybridization">Step 1: Nuclei staining and fiducial hybridization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#check-connected-drives">0. Check connected drives</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#hardware">1.0. Hardware</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#visualizing-the-sample">1.1. Visualizing the sample</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#select-rois">1.2. Select ROIs</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#define-the-probe-position-1">1.3. Define the probe position 1</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#define-the-injection-sequence-dapi">1.4.  Define the injection sequence (DAPI)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#configure-the-experiment-dapi-injections">1.5. Configure the experiment - DAPI injections</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#running-the-dapi-injection-sequence">1.6. Running the DAPI injection sequence</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#configuring-the-background-fluorescence-bleaching-experiment">1.6.1. Configuring the background fluorescence bleaching experiment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#running-the-background-fluorescence-bleaching-experiment">1.6.2 Running the background fluorescence bleaching experiment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#configure-the-experiment-imaging-of-all-rois-z-scans">1.7. Configure the experiment - Imaging of all ROIs (z scans)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#calibrate-the-autofocus">1.8. Calibrate the autofocus</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#running-the-imaging-of-all-rois-experiment">1.9. Running the imaging of all ROIs experiment</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#step-2-rt-hybridization-cycles">Step 2: RT hybridization cycles</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#define-the-injection-sequence-rts">2.1. Define the injection sequence (RTs)</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#configure-the-hi-m-experiment">2.2. Configure the Hi-M experiment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#running-the-hi-m-experiment">2.3 Running the Hi-M experiment</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#finishing-the-experiment">2.4 Finishing the experiment</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p class="caption"><span class="caption-text">Developer guide:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../qudi_cbs_developer/Qudi-HiM_Developer_Guide.html">Qudi-HiM Developer Guide</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Hardware guides:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../qudi-cbs_hardware/Airyscan_hardware.html">Hardware for the confocal - airyscan HiM setup :</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../qudi-cbs_hardware/MFM_hardware.html">Hardware for the MFM (work in progress) :</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../qudi-cbs_hardware/PALM_hardware.html">Hardware for the PALM microscope :</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../qudi-cbs_hardware/RAMM_hardware.html">Hardware for the RAMM - HiM microscope :</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">qudi-HiM</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Qudi-HiM User Guide</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/qudi-cbs_userguide/Qudi-HiM_UserGuide.md.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <div class="section" id="qudi-him-user-guide">
+<h1>Qudi-HiM User Guide<a class="headerlink" href="#qudi-him-user-guide" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="starting-qudi-him">
+<h2>Starting Qudi-HiM<a class="headerlink" href="#starting-qudi-him" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="linux">
+<h3>Linux:<a class="headerlink" href="#linux" title="Permalink to this headline">¶</a></h3>
+<p>Open a terminal and activate the conda environment named qudi:</p>
+<p><code class="docutils literal notranslate"><span class="pre">conda</span> <span class="pre">activate</span> <span class="pre">qudi</span></code></p>
+<p>Navigate to the folder where qudi-HiM has been cloned:</p>
+<p><code class="docutils literal notranslate"><span class="pre">cd</span> <span class="pre">/home/user/qudi-him</span></code></p>
+<p>Run the start.py script:</p>
+<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">start.py</span></code></p>
+</div>
+<div class="section" id="windows">
+<h3>Windows:<a class="headerlink" href="#windows" title="Permalink to this headline">¶</a></h3>
+<p>Double-click on the desktop shortcut (Diamond shaped symbol and name Qudi-cbs).</p>
+<p>[alternative way if desktop shortcut is not available: Start a Python IDE, for example PyCharm. Open the project folder qudi-cbs. This ensures that you are running the right conda environment and Python interpreter version. Open the file .\qudi-cbs\start.py and execute it.]</p>
+</div>
+</div>
+<div class="section" id="the-manager-module">
+<h2>The Manager Module<a class="headerlink" href="#the-manager-module" title="Permalink to this headline">¶</a></h2>
+<p>On start, the manager GUI opens. It contains three sub-windows: The module manager in the upper left part, an interactive Python console in the upper right part and the logger in the lower part.</p>
+<p>The module manager gives access to all modules available for the experimental setup you are using. Modules are organized into three categories, corresponding each to a tab in the module manager section: GUI, Logic, and Hardware. You will mainly be concerned with GUI modules and eventually hardware modules in case it is preferred to check which devices are connected.</p>
+<p>The logger keeps track of the events happening during program execution. Info messages are displayed in green, warnings in yellow and errors in red. Errors are additionally displayed in a pop-up message box. When successfully loading new modules, and in case of important successful user actions, an info message is displayed. Warnings typically appear when a user action is not available on the setup, or if a non-critical configuration value is missing.</p>
+<p><img alt="" src="../_images/managergui.png" /></p>
+<div class="section" id="loading-modules">
+<h3>Loading modules<a class="headerlink" href="#loading-modules" title="Permalink to this headline">¶</a></h3>
+<p>The module manager allows to load the modules that one wants to use. As default, modules are not loaded on start.</p>
+<p>Before loading a module, make sure that the devices are switched on, otherwise module loading will fail and you will be informed by an error message. (But you can start the computer and the software Qudi-HiM before switching on the devices, there is no particular order to respect.)</p>
+<p>To load the module, click on the corresponding button in the upper left section of the manager GUI. All dependencies of your module will also be loaded, i.e. if you load the Basic Imaging GUI, required hardware modules such as the camera module will also be activated.</p>
+</div>
+</div>
+<div class="section" id="qudi-him-gui-modules">
+<h2>Qudi-HiM GUI modules<a class="headerlink" href="#qudi-him-gui-modules" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="general-organization-of-qudi-him-gui-modules">
+<h3>General organization of Qudi-HiM GUI modules<a class="headerlink" href="#general-organization-of-qudi-him-gui-modules" title="Permalink to this headline">¶</a></h3>
+<p>Most Qudi-HiM GUI modules contain the following elements: The menubar with at least the entries ‘Menu’ or ‘File’ and ‘View’, eventually an ‘Options’ menu, toolbars containing action buttons for the most important user interactions, and the main area which is typically organized into so-called dockwidgets. Dockwidgets are subwindows can be detached and moved around, or they can be hidden if they are not useful for your current experiment. To make them again visible once they have been closed, use the ‘View’ menu and check the hidden dockwidget. If you hide a dockwidget, the other ones will scale up to fill the available space on your screen. This can notably be helpful to enlarge camera images. Actions in the <em>Menu</em> (<em>File</em>) and the <em>View</em> menu will not be described individually for each module, as they are nearly the same for all modules.</p>
+</div>
+<div class="section" id="basic-imaging-gui">
+<h3>Basic Imaging GUI<a class="headerlink" href="#basic-imaging-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module contains the basic tools for sample visualization, such as camera image and settings, camera status control, control of the light sources, and of the filters, if applicable. Image data (single image or video) can be saved using the different tools on this GUI.</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>PALM</p></li>
+<li><p>RAMM</p></li>
+<li><p>Airy-scan (<em>only for the laser control</em>)</p></li>
+</ul>
+<p>Required devices:</p>
+<ul class="simple">
+<li><p>Camera</p></li>
+<li><p>Laser controller (DAQ or FPGA)</p></li>
+<li><p>Filterwheel or information about single multiband filter</p></li>
+<li><p>optional: White light source controller</p></li>
+</ul>
+<p>The following table gives an overview of the connected devices.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setup</p></th>
+<th class="head"><p>Camera</p></th>
+<th class="head"><p>Laser controller</p></th>
+<th class="head"><p>Filterwheel</p></th>
+<th class="head"><p>White light source controller</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>PALM</p></td>
+<td><p>Andor iXon Ultra emCCD camera</p></td>
+<td><p>National Instruments DAQ m series 6259</p></td>
+<td><p>Thorlabs 6 position filterwheel / <br />Thorlabs 6 position fast filterwheel</p></td>
+<td><p>-</p></td>
+</tr>
+<tr class="row-odd"><td><p>RAMM</p></td>
+<td><p>Hamamatsu Flash sCMOS camera</p></td>
+<td><p>National Instruments FPGA</p></td>
+<td><p>Quad band filter <br />(placeholder implementation)</p></td>
+<td><p>ASI Motor stage 2000</p></td>
+</tr>
+<tr class="row-even"><td><p>Airyscan</p></td>
+<td><p>Camera controlled by ZEN</p></td>
+<td><p>Celesta Lumencor</p></td>
+<td><p>Not yet installed</p></td>
+<td><p>Controlled by ZEN</p></td>
+</tr>
+</tbody>
+</table>
+<p>The following actions are available the Basic Imaging module:</p>
+<div class="section" id="options-menu">
+<h4>Options menu:<a class="headerlink" href="#options-menu" title="Permalink to this headline">¶</a></h4>
+<ul>
+<li><p>Camera settings:</p>
+<ul>
+<li><p>Exposure time</p></li>
+<li><p>Gain if applicable (only for emCCD)</p></li>
+<li><p>Temperature if applicable (only for emCCD)</p></li>
+<li><p>Frame transfer mode if applicable (only for emCCD)</p>
+<p>Validate new values by clicking on the <strong>OK</strong> button of the dialog box. Closing the dialog via the <strong>Cancel</strong> button or the <strong>Close shortcut</strong> in the upper right corner will reset the precedent settings.</p>
+</li>
+</ul>
+</li>
+<li><p>Image rotation settings: Check / Uncheck one of the proposed options:</p>
+<ul class="simple">
+<li><p>rotation 90 degrees clockwise</p></li>
+<li><p>rotation 90 degrees counter clockwise</p></li>
+<li><p>rotation 180 degrees.
+Checking one of these options will automatically uncheck the formerly checked one so that starting point for the rotation is always the default image orientation.</p></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="imaging-toolbar">
+<h4>Imaging toolbar:<a class="headerlink" href="#imaging-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul>
+<li><p><em>Snap</em>: Take a single image to be displayed directly. Data is not saved.</p></li>
+<li><p><em>Live / Stop live</em>: Start a live visualization of the camera image. Data is only displayed, not saved.</p></li>
+<li><p><em>Save last image</em>: Save the currently displayed image if acquisition is stopped, or the most recent one in the camera memory during live mode.
+The save path is defined by the elements default path and sample name on the GUI: default_path/current_date_as_YYYY_mm_dd/sample_name/num_Image/image.tif
+Acquisition parameters are saved as default_path/current_date_as_YYYY_mm_dd/sample_name/num_Image/parameters.txt</p></li>
+<li><p><em>Save video</em>: Open a dialog box to define settings for a video acquisition.</p>
+<ul>
+<li><p>A complete save path is proposed based on the default save path and the sample name on the GUI, but can be modified.</p></li>
+<li><p>File formats tiff and fits are available. For tiff formats, the acquisition parameters are saved in a separate txt file. For fits, acquisition parameters are included as metadata in the header of the fits image data file.</p></li>
+<li><p>Select the number of frames to save or a total acquisition time. For the latter, the corresponding (integer) number of frames will be calculated automatically.</p></li>
+<li><p>Display during acquisition can be activated using the enable display checkbox.</p>
+<p>Validate this dialog with <strong>OK</strong> to start saving the video. <strong>Cancel</strong> or click on the <strong>close shortcut</strong> resets default values. Image data and acquisition parameters are saved to default_path/current_date_as_YYYY_mm_dd/sample_name/num_Movie/movie.tif or .fits and  default_path/current_date_as_YYYY_mm_dd/sample_name/num_Movie/parameters.txt if image data is saved in tiff format.
+[depending on the setup, data transfer is handled differently: data is spooled to disk during acquisition on PALM setup which allows to acquire sequences with many frames.]</p>
+</li>
+</ul>
+</li>
+<li><p><em>Quickstart video</em>: This is a shortcut that can be used instead of opening the <em>Save video</em> dialog and validating with OK. The parameters from the last validated video acquisition are reused. Data is saved with an incremental prefix.</p></li>
+<li><p><em>Set sensor region/ Reset sensor region to default</em>: Reduce the total sensor size to a region of interest to speed up imaging and reduce the amount of data. / Reestablish default sensor size.</p></li>
+</ul>
+</div>
+<div class="section" id="lightsource-toolbar">
+<h4>Lightsource toolbar:<a class="headerlink" href="#lightsource-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Laser on / off</em>: Switch the laser output on / off, applying the intensity in per cent of maximum intensity defined in the fields next to the wavelength label in the lightsource dockwidget (see below).</p></li>
+<li><p><em>Zero all</em>: Set all intensities to zero.</p></li>
+<li><p><em>Brightfield on / off</em> (not available on PALM setup): Switch the white light source on / off, using the intensity in per cent of maximum intensity defined next to the brightfield label in the lightsource dockwidget.</p></li>
+</ul>
+</div>
+<div class="section" id="camera-dockwidget">
+<h4>Camera dockwidget:<a class="headerlink" href="#camera-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>This principal dockwidget displays current camera settings and the camera image with intensity scale bar. Editable fields are the default path and the sample name. To modify the camera settings, use the options menu –&gt; camera settings dialog. You can pan and zoom into the camera image. To reset the default size, hover the cursor close to the lower left corner of the camera image, a symbol ‘A’ will appear.</p>
+</div>
+<div class="section" id="lightsource-dockwidget">
+<h4>Lightsource dockwidget:<a class="headerlink" href="#lightsource-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>Use the fields to define the intensity in percent of maximum intensity that will be output to the corresponding lightsource when using <em>Laser on</em> or <em>Brightfield on</em> buttons in the laser toolbar. If laser / white lightsource is already on, modifying the intensity has an immediate effect. One should observe a change in brightness when changing the intensity value.</p>
+</div>
+<div class="section" id="filter-dockwidget">
+<h4>Filter dockwidget:<a class="headerlink" href="#filter-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>Select an emission filter from the dropdown menu to move it into the beam path. Depending on your selection, some lightsources in the laser dockwidget might be forbidden and will be disabled. The logger on Qudi’s manager GUI will inform you that the filter has been changed. The filter selection dropdown menu is disabled when lasers are on. Click first the <em>Laser Off</em> button to make it again available.</p>
+</div>
+<div class="section" id="camera-status-dockwidget">
+<h4>Camera status dockwidget<a class="headerlink" href="#camera-status-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>The displayed fields inform you about the camera status, such as is the camera ready for an acquisition, is the mechanical shutter open if applicable, is the cooler on if applicable, and the sensor temperature if applicable. Update of these fields is not automatic. Click the <em>Status Check</em> button to update the information.</p>
+</div>
+<div class="section" id="id1">
+<h4><img alt="" src="../_images/basic_gui.png" /><a class="headerlink" href="#id1" title="Permalink to this headline">¶</a></h4>
+</div>
+</div>
+<div class="section" id="focus-tools-gui">
+<h3>Focus Tools GUI<a class="headerlink" href="#focus-tools-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module contains the tools to focus your camera image displayed in the Imaging GUI window. Focus can be set manually or by using the autofocus tools. The autofocus needs a calibration before it is possible to use it. Autofocus functionality is implemented using different instrumentation on the experimental setups.</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>PALM</p></li>
+<li><p>RAMM</p></li>
+</ul>
+<p>Required devices:</p>
+<ul class="simple">
+<li><p>Piezo controller</p></li>
+<li><p>Camera (control of the NIR laser reflection)</p></li>
+<li><p>optional: FPGA</p></li>
+<li><p>optional: 3 axes stage</p></li>
+</ul>
+<p>The following table gives an overview of the connected devices.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setup</p></th>
+<th class="head"><p>Piezo controller</p></th>
+<th class="head"><p>Camera</p></th>
+<th class="head"><p>FPGA</p></th>
+<th class="head"><p>3 axes stage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>PALM</p></td>
+<td><p>Physik Instrumente PIFOC</p></td>
+<td><p>Thorlabs DCx</p></td>
+<td><p>-</p></td>
+<td><p>-</p></td>
+</tr>
+<tr class="row-odd"><td><p>RAMM</p></td>
+<td><p>MCL Nanodrive</p></td>
+<td><p>Thorlabs DCx</p></td>
+<td><p>NI-FPGA</p></td>
+<td><p>ASI Motor stage 2000</p></td>
+</tr>
+</tbody>
+</table>
+<p>The following actions are available:</p>
+<div class="section" id="settings-menu">
+<h4>Settings menu:<a class="headerlink" href="#settings-menu" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>PID settings: Open a dialog to modify the parameters for the proportional-integral-differential (PID) stabilization of the focus position.</p></li>
+<li><p>Offset settings : Open a dialog box to indicate previous values for the offset and the autofocus setpoint. This option is only available for the RAMM and should be used only as a <strong>rescuing option for the autofocus parameters after a crash</strong>.</p></li>
+</ul>
+</div>
+<div class="section" id="manual-focus-toolbar">
+<h4>Manual focus toolbar:<a class="headerlink" href="#manual-focus-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Reinitialize</em>: Move the piezo stage gradually to the initial position defined in the setup specific configuration file. The movement can be monitored by the displayed z position in the manual focus dockwidget or in the timetrace, if activated.</p></li>
+<li><p><em>Start tracking / Stop tracking</em>: Activate or deactivate the timetrace. This allows to track the current position of the piezo stage over time, if activated.</p></li>
+</ul>
+</div>
+<div class="section" id="autofocus-toolbar">
+<h4>Autofocus toolbar:<a class="headerlink" href="#autofocus-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul>
+<li><p><em>Start live display / Stop live display</em>: Start / stop the displaying of the camera image that detects the reflection of the IR laser. If the focus is approximately set, a bright spot should appear in this image. On PALM setup, the autofocus settings are based on the measurement of the position of the IR laser spot. On RAMM setup, it is only a visual help for the user. The autofocus setting is done using the reflection of the IR laser on a quadrant photodiode (QPD).  The QPD signal is measured and processed by the FPGA.</p>
+<p>The following buttons are disabled until an autofocus calibration was performed (see below in the description of Autofocus dockwidget)</p>
+</li>
+<li><p><em>Start focus stabilization / Stop focus stabilization</em>: Start a feedback loop to maintain the focus while moving the sample using the translation stage. The piezo position is regulated to maintain the setpoint that needs to be defined before this mode can be used. In case of too rapid movement the signal can be lost. The logger in Qudi’s manager GUI will inform you if the signal was lost, and the <em>Stop focus stabilization</em> button will automatically set back to its default state (<em>Start focus stabilization</em>)</p></li>
+<li><p><em>Search focus</em>: Start the autofocus feedback loop until the setpoint is reached and the signal is stable. The process will then automatically stop. As an example, running the <em>Search focus</em> functionality while being out of focus will bring the image back in the focus. Depending on the setup, the signal is found differently: If a 3 axes stage is available, a reference plane at a distance <em>offset</em> below the sample surface can be used to find the autofocus signal. This is useful if the sample surface strongly perturb the IR reflexion. This offset needs first to be defined. The <em>Search focus</em> button is then available and will start a vertical displacement of the 3 axes stage. Once the signal is found, the stage moves back to bring the sample surface into focus. For 2 axes stages, offset defaults to 0.</p></li>
+</ul>
+</div>
+<div class="section" id="manual-focus-dockwidget">
+<h4>Manual focus dockwidget<a class="headerlink" href="#manual-focus-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>This dockwidget contains a field to enter the step by which the piezo stage will be moved when clicking the up / down buttons. Maximum step size is limited to 1 um. A display area shows the current position of the piezo. Instead of clicking on the up / down buttons, arrow up / arrow down on the keyboard can be used as shortcut and can be hold down permanently. Make sure that the Focus tools window is the active one when using the keyboard shortcuts.</p>
+</div>
+<div class="section" id="timetrace-dockwidget">
+<h4>Timetrace dockwidget<a class="headerlink" href="#timetrace-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>This area displays the piezo position over time. Use the corresponding action button in the manual focus toolbar to start the timetrace. The y axis will automatically scale to the range of movement.</p>
+</div>
+<div class="section" id="autofocus-dockwidget">
+<h4>Autofocus dockwidget<a class="headerlink" href="#autofocus-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>The <strong>launch calibration</strong> button in the autofocus dockwidget allows to perform the necessary calibration before the autofocus can be used. The piezo is performing a 2 µm ramp around its initial position with 100 nm step. The IR laser reflection signal is measured for each position of the piezo and a linear fit is performed. When calibrated, the slope of the linear fit is displayed next to the corresponding label, and the precision is calculated and displayed on the GUI.</p>
+<p>When clicking the <strong>setpoint</strong> button in the autofocus dockwidget, the X/Y position of the IR reflection measured by the QPD is stored in memory and will be used as reference for the autofocus. For the camera based method, the centroid position of the IR reflection will be used instead.</p>
+<p>The <strong>find offset</strong> button allows to calibrate the z axis offset if the reference signal is measured at the lower surface of the sample holder glass slide. This method is adapted for samples that strongly perturb the IR reflection signal. This autofocus mode is used locally when the target position is reached, not while navigating the sample surface in the xy plane. The offset calibration is available only on experimental setups with a 3 axis translation stage. The calculated offset from this calibration corresponds to the thickness between the current plane in the sample and the bottom surface of the glass slide. Offset defaults to 0 on systems with a 2 axes stage.</p>
+</div>
+<div class="section" id="camera-image-display-dockwidget">
+<h4>Camera image display dockwidget<a class="headerlink" href="#camera-image-display-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>This dockwidget contains the display of the camera that measures the signal from the reflection of the IR laser. Use the action button <strong>Start live display</strong> in the autofocus toolbar to start displaying the camera image. Optionally, a thresholded image of the original one is shown (hidden by default on setups where the autofocus is controlled by the signal on the QPD and the camera only serves as visual support). The threshold value can be modified by changing the value in the threshold spinbox.</p>
+<p><img alt="" src="../_images/focus_gui.png" /></p>
+</div>
+</div>
+<div class="section" id="roi-selector-gui">
+<h3>ROI Selector GUI<a class="headerlink" href="#roi-selector-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module allows to navigate the sample with the translation stage and create lists of regions of interest (ROIs). An overview of all defined ROIs with their position in the xy plane is shown, together with the current stage position.</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>PALM</p></li>
+<li><p>RAMM</p></li>
+<li><p>Airyscan</p></li>
+</ul>
+<p>Required devices:</p>
+<ul class="simple">
+<li><p>Motorized stage (2- or 3- axes)</p></li>
+</ul>
+<p>The following table gives an overview of the connected devices.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setup</p></th>
+<th class="head"><p>Motorized stage</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>PALM</p></td>
+<td><p>ASI MS 2000 - xy axes</p></td>
+</tr>
+<tr class="row-odd"><td><p>RAMM</p></td>
+<td><p>ASI MS 2000 - xyz axes</p></td>
+</tr>
+<tr class="row-even"><td><p>Airyscan</p></td>
+<td><p>ASI MS 2000 - xy axes</p></td>
+</tr>
+</tbody>
+</table>
+<p>The following actions are available:</p>
+<div class="section" id="id2">
+<h4>Options menu:<a class="headerlink" href="#id2" title="Permalink to this headline">¶</a></h4>
+<ul>
+<li><p>Mosaic scan: A settings dialog allows to define of a grid of adjacent ROIs.</p>
+<ul>
+<li><p>The current stage position or user defined coordinates of the stage can be used as origin of the grid. This origin corresponds to the center position of the grid.</p></li>
+<li><p>A predefined number of ROIs is created, use the radio button to select the number which is required.</p></li>
+<li><p>If there are already some ROIs defined in the current list (see below), the mosaic can either be added to this list, or a new list is started (which will discard the former one if it has not yet been saved).</p>
+<p>Validate the dialog with <strong>OK</strong> to create the mosaic, or click <strong>Cancel</strong> or the <strong>Close shortcut</strong> in the upper right corner of the dialog to discard your mosaic settings.</p>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="roi-toolbar">
+<h4>ROI toolbar:<a class="headerlink" href="#roi-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>New ROI</em>: Add a ROI at the current stage position. It will be appended to the content of the Active ROI dropdown menu on the right-hand side of the main window and will be the currently active one.</p></li>
+<li><p><em>Go to ROI</em>: Move the stage to the active ROI which can be selected from the Active ROI dropdown menu.</p></li>
+<li><p><em>Delete ROI</em>: This action deletes the currently active ROI (i.e. the one selected in the Active ROI dropdown menu). The first ROI in the list will become the new active ROI.</p></li>
+<li><p><em>Add interpolation</em>: This is an easy way of defining many ROIs over a larger area in one click. The current ROI list needs to contain at least two ROIs. The interpolation will fill all the space between them, or the space between the extremal x y coordinates if there are more than two ROIs, with as many ROIs as needed to cover this area. If a large area has already been explored, use this function with caution because many ROIs are generated. Updating the ROI overview display might be slow.</p></li>
+</ul>
+</div>
+<div class="section" id="roi-list-toolbar">
+<h4>ROI list toolbar:<a class="headerlink" href="#roi-list-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Start new ROI list</em>: A new list is created, discarding all ROIs of the previous list (which are definitely lost if the list has not yet been saved). A default name roilist_YYYYmmdd_hhmm_ss_uniquenumber is proposed. The default name can be modified.</p></li>
+<li><p><em>Save ROI list</em>: The current list is saved to the destination specified in the field <em>Save path</em> on the GUI, where a default location is proposed. The default location can be modified, but it is recommended to use it or append a private folder for your lists to this common save path. The logger on the Qudi manager GUI will inform you that the list has been saved.</p></li>
+<li><p><em>Load ROI list</em>: Open a dialog to select an already saved ROI list, looking in the default location. Choose a file that has been generated by the ROI selector GUI to make sure that it contains all necessary information to display it.</p></li>
+<li><p><em>Discard all ROI</em>: Clear all ROIs from the current list but keeping the current name of the list.</p></li>
+</ul>
+</div>
+<div class="section" id="stage-toolbar">
+<h4>Stage toolbar:<a class="headerlink" href="#stage-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Tracking mode / Tracking mode off</em>: Activate / Deactivate position tracking of the stage. The stage marker displayed in the ROI overview area will start moving around according to the physically performed movement of the ASI stage, if activated.</p></li>
+</ul>
+</div>
+<div class="section" id="main-window-area">
+<h4>Main window area:<a class="headerlink" href="#main-window-area" title="Permalink to this headline">¶</a></h4>
+<p>The main window area contains the ROI overview area (ROI map) indicating the positions of the already defined ROIs as white markers, respectively green marker for the active ROI. The stage position is also indicated by a cyan-colored marker. Below the ROI map, indicators of the center positions of the current ROI and the stage are shown, an a distance measurement from the cursor position on the ROI map to the center of the active ROI is displayed. On the upper right part of the main window, editable fields for the default save path, the ROI list name, the size of the ROI marker (which by default corresponds approximately to the field of view on your setup) are available. The dropdown menu contains a list of all defined ROIs. To activate one of them, select it from this dropdown.</p>
+<p>A typical workflow using the ROI selector GUI would be the following:</p>
+<ul class="simple">
+<li><p>Start a new ROI list</p></li>
+<li><p>Switch on the stage tracking mode</p></li>
+<li><p>Navigate around on your sample using the ASI stage joystick and add ROIs to your list or delete the ones you don’t need</p></li>
+<li><p>Verify ROI list name and save path</p></li>
+<li><p>Save the list</p></li>
+<li><p>Switch off the stage tracking mode</p></li>
+</ul>
+<p><strong>future improvements planned for this module: overlay with compressed images if already acquired to construct a large overview map</strong></p>
+<p><img alt="" src="../_images/roi_gui.png" /></p>
+</div>
+</div>
+<div class="section" id="fluidics-gui">
+<h3>Fluidics GUI<a class="headerlink" href="#fluidics-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module allows to manually handle all devices that are needed to control the injection of buffers and probes. It is also required to validate several settings in this module before an automated experiment (<em>Task</em>) can be performed.</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>RAMM</p></li>
+<li><p>Airyscan</p></li>
+</ul>
+<p>Required devices:</p>
+<ul class="simple">
+<li><p>Valve positioner</p></li>
+<li><p>Flowrate sensor</p></li>
+<li><p>Pump for injections</p></li>
+<li><p>3 axes translation stage (for the positioning of the needle in probes)</p></li>
+<li><p>Pump for needle rinsing</p></li>
+</ul>
+<p>The following table gives an overview of the connected devices.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setup</p></th>
+<th class="head"><p>Valve positioner</p></th>
+<th class="head"><p>Flowrate sensor</p></th>
+<th class="head"><p>Pump for injections</p></th>
+<th class="head"><p>3 axis translation stage</p></th>
+<th class="head"><p>Pump for needle rinsing</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>RAMM</p></td>
+<td><p>Hamilton Modular Valve Positioner (x 3 in daisy chain)</p></td>
+<td><p>Fluigent Flowrate sensor <br /></p></td>
+<td><p>Fluigent MFCS-EZ<br /></p></td>
+<td><p>PI stage (x y z axes)</p></td>
+<td><p>Peristaltic pump controlled by NI-DAQ</p></td>
+</tr>
+<tr class="row-odd"><td><p>Airyscan</p></td>
+<td><p>Hamilton Modular Valve Positioner (x 2 in daisy chain)</p></td>
+<td><p>Fluigent Flowrate sensor</p></td>
+<td><p>Peristaltic pump controlled by Measurement Computing DAQ</p></td>
+<td><p>PI stage (r phi z axes)</p></td>
+<td><p>Peristaltic pump controlled by Measurement Computing DAQ</p></td>
+</tr>
+</tbody>
+</table>
+<p>On start of the fluidics module, validate the reminder message box to remove the needle cover (if done).</p>
+<p>The following actions are available:</p>
+<div class="section" id="positioning-toolbar">
+<h4>Positioning toolbar:<a class="headerlink" href="#positioning-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul>
+<li><p><em>Move stage / Stop moving</em>: Move the 3 axis stage with the injection needle to the specified coordinates.</p>
+<ul class="simple">
+<li><p>Movement is first done to the z safety position, then in the xy plane, and, once reached, back to specified z coordinate.
+The allowed range of z positions for manual positioning is limited to the range above the safety position which is predefined for your setup to avoid moving the needle down while not being above a hole in the probe tray. Accessing the probes is only possible by the <em>Go to Target</em> action for safety.</p></li>
+<li><p>During movement, the button is in a checked state and displays the message <em>Stop moving</em>. Clicking it again interrupts the movement smoothly. The current coordinates at stop are displayed in the positioning dockwidget area.</p></li>
+</ul>
+</li>
+<li><p><em>Set Position 1</em>: Open a dialog to set the xyz coordinates corresponding to the position no. 1 on the probe tray.</p>
+<p>Proposed default values correspond to 2 ul Eppendorff tubes. Modify and/ or validate the values by clicking the <strong>OK</strong> button in the dialog. If the <strong>Cancel</strong> button or the <strong>Close shortcut</strong> is clicked, position 1 is not set or is not updated if it was already set previously.</p>
+</li>
+<li><p><em>Go to Target</em>: This button is available after position 1 has been defined. Allows to navigate to a target position by indicating the number on the probe tray. The target position is indicated in the corresponding field on the positioning dockwidget. As with the move stage button (see above), a smooth stop of the stage can be done while the stage is moving.</p></li>
+</ul>
+</div>
+<div class="section" id="flowcontrol-toolbar">
+<h4>Flowcontrol toolbar:<a class="headerlink" href="#flowcontrol-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Set pressure</em>: Apply the pressure value defined in the corresponding field on the flowcontrol dockwidget.</p></li>
+<li><p><em>Start flowrate measurement / Stop flowrate measurement</em>: When activated, the current pressure value (which can differ from the setpoint due to inertia) and  the current flowrate are regularly measured and displayed on the GUI as values and also graphically over time. The graph displays the last 100 acquired pressure and flowrate values. Click this button again to stop the update of the displayed values and stop the graph. When restarting the measurement mode, old values displayed in the graph are discarded.</p></li>
+<li><p><em>Start volume measurement / Stop volume measurement</em>: By clicking this button, a volume count can be started when injecting a buffer or probe using the Fluidics user interface. Additionally, the time in seconds since start of the volume count mode is displayed. The user must take care to start the volume count at a convenient moment, for example after setting the valves to allow an injection or after applying a pressure. Such an injection will not automatically stop. In case an injection with more precise control is desired, the fluidics task should be preferred.</p></li>
+<li><p><em>Start rinsing / Stop rinsing</em>: Valves are set to the positions required to rinse the needle, if not yet done by the user. Then, the peristaltic pump which pumps a liquid through the needle used for probe injection is activated. A duration for the rinsing process can be predefined using the corresponding field on the GUI. The pump will then stop after this duration. It is also possible to stop the rinsing manually by clicking again the <em>Stop rinsing</em> button.
+<strong>Valve setting not yet operational on both setups</strong></p></li>
+</ul>
+</div>
+<div class="section" id="valve-settings-dockwidget">
+<h4>Valve settings dockwidget:<a class="headerlink" href="#valve-settings-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>The dropdown menus for the valve controllers available on the setup allow to manually set the target positions. Select the position from the dropdown to start rotating the valve controller to the specified position. The logger on Qudi’s manager GUI will inform you of the valve thats position has been changed.</p>
+</div>
+<div class="section" id="flowcontrol-dockwidget">
+<h4>Flowcontrol dockwidget:<a class="headerlink" href="#flowcontrol-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>This dockwidget contains an editable field for the pressure setpoint. The fields labeled pressure and flowrate correspond to measured values. To update their content, activate the flowrate measurement mode by clicking the Start Flowrate Measurement button in the flowcontrol toolbar. The graph displayed the last stored pressure and flowrate measurment values. The volume and time since start fields on the GUI indicate the total volume after starting the volume measurement mode, and the corresponding time. The rinsing duration can be predefined by editing the corresponding field on the GUI.</p>
+</div>
+<div class="section" id="positioning-dockwidget">
+<h4>Positioning dockwidget:<a class="headerlink" href="#positioning-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>Positioning of the injection needle can be done by either specifying the target xyz-coordinates setpoint, and then starting the movement to this location by clicking the <em>Move stage</em> button in the positioning toolbar. However, the z movement is limited for safety. The alternative and safer way is to specify the target probe position on the probe tray. For this, it is required to define the position 1 using the <em>Set Position 1</em> button in the positioning toolbar. After this calibration, a target position can be selected and the movement can be started by clicking the <em>Go to Target</em> toolbutton.</p>
+<p><img alt="" src="../_images/fluidics_gui.png" /></p>
+</div>
+</div>
+<div class="section" id="injections-gui">
+<h3>Injections GUI<a class="headerlink" href="#injections-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module allows to define an injection sequence for hybridization and photobleaching processes, used either in the fluidics task or in the Hi-M task (see taskrunner module below).</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>RAMM</p></li>
+<li><p>Airyscan</p></li>
+</ul>
+<p>Required devices: None</p>
+<p>The following actions are available:</p>
+<div class="section" id="file-toolbar">
+<h4>File toolbar:<a class="headerlink" href="#file-toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Load injections</em>:</p>
+<ul>
+<li><p>Opens a dialog that allows to select a file containing already defined hybridization and / or photobleaching sequences, including the definitions which buffers are connected on which valve outlets and the probe names with their respective position.</p></li>
+<li><p>The default location where injection files are saved is proposed by the dialog but you can navigate to a personal folder containing your lists if applicable. Once the file loaded, you can edit all information and save it under a new or the same name (see next point).</p></li>
+</ul>
+</li>
+<li><p><em>Save injections</em>:</p>
+<ul>
+<li><p>Opens a dialog that allows you to create or select a file where you want to save your configured injection sequences. The logger in the Qudi manager GUI will inform you that your file has been saved.</p></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="buffer-and-probes-dockwidget">
+<h4>Buffer and probes dockwidget:<a class="headerlink" href="#buffer-and-probes-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>Before defining the injection sequence, it is required to add the buffers that will be available for the injection. For this, add a valid name in the field <em>Buffer name</em>, select the valve outlet where it is connected and add it to the buffer list. To delete an entry from this list, select it in the display area and click the <em>Delete buffer</em> button underneath the display area. To discard all entries (except the default entry of the valve outlet where the probe is connected on the setup), click the <em>Delete all</em> button. Proceed in an analogous way to define the probes, using the <em>Add probe</em>, <em>Delete probe</em> and <em>Delete all</em> buttons, in the right part of the dockwidget.</p>
+</div>
+<div class="section" id="injections-dockwidget">
+<h4>Injections dockwidget:<a class="headerlink" href="#injections-dockwidget" title="Permalink to this headline">¶</a></h4>
+<p>The injection dockwidget contains the tools to define the hybridization and photobleaching injection sequences. First, select the procedure you want to define from the <em>Procedure dropdown</em> (‘Hybridization’ or ‘Photobleaching’). All the buffers that are defined above in the buffer dockwidget are available in the <em>Product dropdown</em>. Select the product, indicate the desired volume and flowrate and add this entry to the list by clicking the button <em>Add injection step</em>. To add an incubation step, indicate the time and click the <em>Add incubation step</em> button. To discard a single entry from the list, select it and click the <em>Delete hybridization step</em> button. To reset the complete list, click the <em>Delete all</em> button. New entries are always appended to the list, insertion is not possible. Proceed in a similar manner to define the photobleaching sequence. Remember to save your data (see toolbar: Save injections).</p>
+<p><img alt="" src="../_images/injections_gui.png" /></p>
+<p><u><strong>Important for the RAMM</strong></u> :</p>
+<ul class="simple">
+<li><p>Regarding the probes positions numbers, there is no need to start at 1 and/or keep incrementing in ascending order by step of 1. You can indicate the probes positions in the order you want (2,5,11,3, etc.)</p></li>
+<li><p>For the Hybridization manager, you can call <strong>Probes</strong> several times. For the first call, the needle will be at the position indicated in the probe list. Then, for each new call, the needle will move to the next position on the tray. For example, a Fiducial tube is in position #1 and a DAPI tube in position #2. An example of hybridization injection could then be :</p>
+<ul>
+<li><p>Probe,1500ul,150ul/min = the needle is in position #1 and injection of fiducial</p></li>
+<li><p>Injection of wb</p></li>
+<li><p>Probe,1500ul,150ul/min = the needle move to position #2 and injection of DAPI</p></li>
+<li><p>Injection of ssc</p></li>
+<li><p>Injection of ib</p></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+<div class="section" id="experiment-configurator-gui">
+<h3>Experiment Configurator GUI<a class="headerlink" href="#experiment-configurator-gui" title="Permalink to this headline">¶</a></h3>
+<p>This module allows to prepare an experiment that can then be started using the Taskrunner (see next section). The aim is to indicate all relevant user parameters that are needed to perform an experiment.</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>PALM</p></li>
+<li><p>RAMM</p></li>
+<li><p>Airyscan</p></li>
+</ul>
+<p>Required devices:</p>
+<p>The same as for Basic Imaging GUI (so that the currently set values can easily be retrieved):</p>
+<ul class="simple">
+<li><p>Camera</p></li>
+<li><p>Laser controller (DAQ or FPGA)</p></li>
+<li><p>Filterwheel or information about single multiband filter</p></li>
+</ul>
+<p>The following table gives an overview of the connected devices.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Setup</p></th>
+<th class="head"><p>Camera</p></th>
+<th class="head"><p>Laser controller</p></th>
+<th class="head"><p>Filterwheel</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>PALM</p></td>
+<td><p>Andor iXon Ultra emCCD camera</p></td>
+<td><p>National Instruments DAQ m series 6259</p></td>
+<td><p>Thorlabs 6 position filterwheel</p></td>
+</tr>
+<tr class="row-odd"><td><p>RAMM</p></td>
+<td><p>Hamamatsu Flash sCMOS camera</p></td>
+<td><p>National Instruments FPGA</p></td>
+<td><p>Quad band filter <br />(placeholder implementation)</p></td>
+</tr>
+<tr class="row-even"><td><p>Airyscan</p></td>
+<td><p>-<br /></p></td>
+<td><p>-<br /></p></td>
+<td><p>Quad band filter <br />(placeholder implemetation)</p></td>
+</tr>
+</tbody>
+</table>
+<p>The following actions are available:</p>
+<div class="section" id="id3">
+<h4>File toolbar:<a class="headerlink" href="#id3" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Save configuration</em>: After selecting your experiment type and defining all required entries (see below), this button allows to save the configuration to a default location where the Taskrunner (see next section) will retrieve its information to perform an experiment. In case a necessary entry is missing, the logger in the Qudi manager GUI will warn you about the missing value. The configuration cannot be saved unless all required data is available.</p></li>
+<li><p><em>Save copy</em>: Allows to select a destination and filename to save a backup of your current experiment configuration.</p></li>
+<li><p><em>Load configuration</em>: Open a dialog to select an already saved experimental configuration file, either from the default files or one of your backup files. The corresponding experiment type is automatically selected and the adapted configuration form is displayed. If not all needed parameters can be found in your file, the corresponding fields are empty after loading.</p></li>
+<li><p><em>Clear all</em>: Reset all fields in the experiment configuration form to default values.</p></li>
+</ul>
+</div>
+<div class="section" id="id4">
+<h4>Main window area:<a class="headerlink" href="#id4" title="Permalink to this headline">¶</a></h4>
+<p>The main window area contains on start of this module a dropdown menu with all available experiments for your setup. Select the one that you want to configure. A form opens up that contains all required information needed to perform the corresponding experiment. You can retrieve current settings from the devices by clicking on the <strong>Get current value</strong> buttons next to the fields, if applicable.</p>
+<p>To define an imaging sequence, select the light source from the dropdown menu below the imaging list area, define the intensity in percent of the  intensity and add this entry to the list. The entries will be listed in the order in which they are inserted. To delete a single entry, select it in the list and click the <strong>Delete entry</strong> button. To discard the entire list, click the <strong>Delete all</strong> button.</p>
+<p>For timelapse experiments (available on PALM and RAMM setup), the entries in the imaging sequence consist of the lightsource, the intensity, the number of planes in a z stack, the spacing in a z stack, and eventually the emission filter for the lightsource. This allows to perform stacks with different parameters for different laserlines.</p>
+<p>If you define an imaging experiment using a z stack, you have the option to start at the current plane or to place this current plane in the middle of the scan (option <strong>Centered focal plane</strong> checked).</p>
+<p>To retrieve the full path to your ROI list and / or an injection sequence, use the corresponding <strong>Load list</strong> buttons, which will open up a file selection dialog proposing the default location for the file type in question. In case of Hi-M experiments, it is also possible to indicate the path to the associated data after the DAPI injection. This can be used for interactive data visualization in the experiment tracker app.</p>
+<p>The following image illustrates the Experiment Configurator GUI for the Hi-M experiment, the subsequent one for the Timelapse experiment.</p>
+<p><img alt="" src="../_images/exp_config_gui_him.png" /></p>
+<p><img alt="" src="../_images/exp_config_gui_tl.png" /></p>
+</div>
+</div>
+<div class="section" id="taskrunner">
+<h3>Taskrunner<a class="headerlink" href="#taskrunner" title="Permalink to this headline">¶</a></h3>
+<p>This module allows to run experiments available on your experimental setup. All experiments require a parameter file that needs first be configured using the Experiment configurator module (see section above).</p>
+<p>Available on:</p>
+<ul class="simple">
+<li><p>PALM</p></li>
+<li><p>RAMM</p></li>
+<li><p>Airyscan</p></li>
+</ul>
+<p>Required devices:</p>
+<p>Depending on your experiment. Unconnected devices will produce an error when loading this module, i.e. some experiments will not be loaded in the list of available ones. You can nevertheless run all other experiments that were loaded completely.</p>
+<p>The following actions are available:</p>
+<div class="section" id="toolbar">
+<h4>Toolbar:<a class="headerlink" href="#toolbar" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p><em>Start</em>: Start the selected experiment / Resume the experiment if it is paused</p></li>
+<li><p><em>Pause</em>: Pause the selected experiment</p></li>
+<li><p><em>Stop</em>: Stop the experiment, it can not be resumed</p></li>
+<li><p><em>Abort</em>: Bring the experiment to an emergency stop. This button should only be used in Fluidics and Hi-M tasks, where the waiting time until the next iteration may be long. All other experiments can reasonably well be stopped using the <em>Stop</em> button. It may happen that a warning message appears after aborting an experiment.</p></li>
+</ul>
+</div>
+<div class="section" id="id5">
+<h4>Main window area:<a class="headerlink" href="#id5" title="Permalink to this headline">¶</a></h4>
+<p>The main window area displays a table with the available experiments (called ‘Tasks’ in Qudi).</p>
+<p>To start a task, select its name in the first column of the table. The action button <strong>Start</strong> in the toolbar will then become available. If no experiment is selected, the action buttons are not callable, because the program requires the information which task shall be started and this is only guaranteed if there is one (and only one) selected. Make sure you have defined your user parameters for the experiment you want to perform previously using the experiment configurator GUI (cf. previous section). To double check, you can reload the file in the experiment configurator or open it with a text editor of your choice. If everything is correctly defined, start the experiment.</p>
+<p>Experiments can be paused or stopped. For this, click again on the name of the experiment in the first column of the displayed table. When the selected experiment is already running, the <strong>Pause</strong> and <strong>Stop</strong> button in the toolbar will be available. Note however, that these actions do not take effect immediately but only after finishing the current step in your experiment. One step is typically defined as the smallest complete unit that will be repeated in an experiment, so it can be quite short in simple experiments, but may also correspond to one cycle in the case of an Hi-M experiment. The stop button is hence not an emergency stop. When paused, the experiment can be resumed from the step it reached when transitioning to pause.</p>
+<p>It is important to select the experiment on which you want to act by clicking on the entry in the displayed table, as it is in principle possible to perform different experiments in parallel (though in practice not applicable because this will lead to conflicts regarding the hardware). So you must give the information which experiment you are addressing.</p>
+<p>The second column in the table of available experiments displays their current state (such as starting, running, paused, resuming, finishing, stopped). In the current version, the update of the state is not immediate due to a bug in the underlying update mechanism. To trigger the actualization, hover the cursor over the GUI.  The third and forth column (Pre/Post actions, Pauses) are relevant in the original Qudi software but not in this implementation as experiments will not run in parallel. The column ‘Needs modules’ lists dependencies of the experiment, which is rather relevant for developers. The last column ‘is ok’ indicates if an experiment is correctly loaded and can be performed.</p>
+<p><img alt="" src="../_images/taskrunner_gui.png" /></p>
+<p>The following table lists all available experiments by their names in the Taskrunner and the corresponding name in the Experiment configurator. Moreover, the default file path for the experiment parameters are shown. Parameters can only be loaded from these default files. Before starting an experiment, it is important to verify that this default file contains your parameters.</p>
+<table class="colwidths-auto docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Experiment name in Taskrunner</p></th>
+<th class="head"><p>Setup</p></th>
+<th class="head"><p>Experiment name in Experiment Configurator</p></th>
+<th class="head"><p>Corresponding experimental configuration file</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>MulticolorImagingTask</p></td>
+<td><p>PALM</p></td>
+<td><p>Multicolor Imaging PALM</p></td>
+<td><p>C:\Users\admin\qudi_files\qudi_task_config_files\multicolor_imaging_task_PALM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>MuticolorScanTask</p></td>
+<td><p>PALM</p></td>
+<td><p>Muticolor Scan PALM</p></td>
+<td><p>C:\Users\admin\qudi_files\qudi_task_config_files\multicolor_scan_task_PALM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>ROIMulticolorScanTask</p></td>
+<td><p>PALM</p></td>
+<td><p>ROI multicolor scan PALM</p></td>
+<td><p>C:\Users\admin\qudi_files\qudi_task_config_files\ROI_multicolor_scan_task_PALM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>TimelapseTask</p></td>
+<td><p>PALM</p></td>
+<td><p>Timelapse PALM</p></td>
+<td><p>C:\Users\admin\qudi_files\qudi_task_config_files\timelapse_task_PALM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>—————————–</p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>MulticolorScanTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Multicolor scan RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\multicolor_scan_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>ROIMulticolorScanTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>ROI multicolor scan RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\ROI_multicolor_scan_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>FluidicsTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Fluidics RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\fluidics_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>HiMTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Hi-M RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\hi_m_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>PhotobleachingTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Photobleaching RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\photobleaching_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>TimelapseTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Timelapse RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\timelapse_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>FastTimelapseTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Fast timelapse RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\fast_timelapse_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>HubbleTask</p></td>
+<td><p>RAMM</p></td>
+<td><p>Hubble RAMM</p></td>
+<td><p>C:\Users\sCMOS-1\qudi_files\qudi_task_config_files\hubble_task_RAMM.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>—————————-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>Multicolor Scan Task Dummy</p></td>
+<td><p>-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>Hi-M Task Dummy</p></td>
+<td><p>-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>Timelapse Task Dummy</p></td>
+<td><p>-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>Fast Timelapse Task Dummy</p></td>
+<td><p>-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p>—————————-</p></td>
+<td><p></p></td>
+<td><p></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p>MulticolorScanTask</p></td>
+<td><p>Airyscan</p></td>
+<td><p>Multicolor scan AIRYSCAN</p></td>
+<td><p>C:/Users/MFM/qudi_files/qudi_task_config_files/multicolor_scan_task_AIRYSCAN.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>ROIMulticolorScanTask</p></td>
+<td><p>Airyscan</p></td>
+<td><p>ROI multicolor scan AIRYSCAN</p></td>
+<td><p>C:/Users/MFM/qudi_files/qudi_task_config_files/roi_multicolor_scan_task_AIRYSCAN.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>Fluidics Task Airyscan</p></td>
+<td><p>Airyscan</p></td>
+<td><p>Fluidics Airyscan</p></td>
+<td><p>C:/Users/MFM/qudi_files/qudi_task_config_files/fluidics_task_AIRYSCAN.yml</p></td>
+</tr>
+<tr class="row-even"><td><p>Hi-M Task Airyscan</p></td>
+<td><p>Airyscan</p></td>
+<td><p>Hi-M Airyscan</p></td>
+<td><p>C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml</p></td>
+</tr>
+<tr class="row-odd"><td><p>Hi-M Task Airyscan for confocal</p></td>
+<td><p>Airyscan</p></td>
+<td><p>Hi-M Airyscan Confocal</p></td>
+<td><p>C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<div class="section" id="preparing-and-running-a-hi-m-experiment-on-ramm-setup">
+<h2>Preparing and running a Hi-M experiment on RAMM setup<a class="headerlink" href="#preparing-and-running-a-hi-m-experiment-on-ramm-setup" title="Permalink to this headline">¶</a></h2>
+<p>In this section, the preparation and execution of a Hi-M experiment is described. In case of doubt on how to use the functionalities of a module, refer to the detailed description above.</p>
+<p>For the Hi-M experiment, you will use all GUIs that are available on the setup. You can either leave all GUI windows open once you have finished your actions on them, or close them using the Menu -&gt; Close action or by clicking the Close shortcut in the upper right corner. The modules are still available and your settings are not lost. They are in an idle state and can simply be brought to the foreground by clicking again on their associated button in Qudi’s manager GUI.</p>
+<div class="section" id="step-1-nuclei-staining-and-fiducial-hybridization">
+<h3>Step 1: Nuclei staining and fiducial hybridization<a class="headerlink" href="#step-1-nuclei-staining-and-fiducial-hybridization" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="check-connected-drives">
+<h4>0. Check connected drives<a class="headerlink" href="#check-connected-drives" title="Permalink to this headline">¶</a></h4>
+<p>If image data is to be saved on a data storage server, make sure that the server is mounted.</p>
+</div>
+<div class="section" id="hardware">
+<h4>1.0. Hardware<a class="headerlink" href="#hardware" title="Permalink to this headline">¶</a></h4>
+<p>Start all devices as usual.</p>
+</div>
+<div class="section" id="visualizing-the-sample">
+<h4>1.1. Visualizing the sample<a class="headerlink" href="#visualizing-the-sample" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the Focus Tools GUI, so that the piezo is initialized.</p></li>
+<li><p>Load the Basic Imaging GUI.</p></li>
+<li><p>Start the camera live mode.</p></li>
+<li><p>Set an intensity value for the lightsource you want to use (in % of max intensity) and activate it by clicking on <strong>Laser On</strong> or <strong>Brightfield On</strong>.</p></li>
+<li><p>Position your sample and set the focus, using the joystick and z positioning wheel of the ASI stage.</p></li>
+<li><p>Eventually adapt the exposure time of the camera.</p></li>
+</ul>
+</div>
+<div class="section" id="select-rois">
+<h4>1.2. Select ROIs<a class="headerlink" href="#select-rois" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the ROI selector GUI.</p></li>
+<li><p>Start a new ROI list.</p></li>
+<li><p>Start the tracking mode that will allow to follow the stage movement.</p></li>
+<li><p>Explore your sample using the ASI stage joystick and define ROIs on interesting spots by clicking the New ROI button.</p></li>
+<li><p>Save the list when completed, by clicking Save ROI list.</p></li>
+<li><p>Note the name of the list (or it can be found by the timestamp if the default name is used). Its complete path will be needed later to configure the experiment.</p></li>
+</ul>
+</div>
+<div class="section" id="define-the-probe-position-1">
+<h4>1.3. Define the probe position 1<a class="headerlink" href="#define-the-probe-position-1" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the Fluidics GUI.</p></li>
+<li><p>Define probe position 1 by clicking the <strong>Set Position 1</strong> button.</p></li>
+<li><p>The dialog window proposes the default values for 2 ml Eppendorff tubes. Modify this, if applicable, and/or validate the values.</p></li>
+</ul>
+</div>
+<div class="section" id="define-the-injection-sequence-dapi">
+<h4>1.4.  Define the injection sequence (DAPI)<a class="headerlink" href="#define-the-injection-sequence-dapi" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the Injections GUI.</p></li>
+<li><p>Define which buffer is connected on which valve position of the 8 way buffer valve, by adding entries to the Buffer list.</p></li>
+<li><p>Define the probe name and its position by adding entries to the Probe list.</p></li>
+<li><p>Define the hybridization sequence: Select the procedure ‘Hybridization’ (default). Select the product from the dropdown menu, specify volume and flowrate and add it by clicking the <strong>Add injection step</strong> button. To add an incubation time, specify the time and click the <strong>Add incubation step</strong> button.</p></li>
+<li><p>When finished, save your injection sequence by clicking the <strong>Save injections</strong> button in the toolbar. Specify the filename and save. Note the name of your injections file, it will be needed later to configure the experiment.</p></li>
+</ul>
+<p>Instead of defining buffers, probes and the injection sequences from scratch, you can also load an already saved procedure from file. Verify that the buffers are connected at the same positions as specified in your loaded file, modify if necessary.</p>
+</div>
+<div class="section" id="configure-the-experiment-dapi-injections">
+<h4>1.5. Configure the experiment - DAPI injections<a class="headerlink" href="#configure-the-experiment-dapi-injections" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the Experiment configurator GUI.</p></li>
+<li><p>Select the Fluidics experiment from the dropdown menu. The form will adapt to ask you for all required parameters for this experiment. You only need to specify the path to the defined fluidics sequence.</p></li>
+<li><p>Click the <strong>Load injections list</strong> button and select your file defined in the previous step. (Or an old file if you are sure that it contains the correct specifications.)</p></li>
+<li><p>Save your experiment configuration by clicking the corresponding button in the toolbar.
+This will overwrite a default file read by the taskrunner (see next step). Make sure that you saved your configuration, otherwise you will be running the injection sequence that a previous user has saved.</p></li>
+</ul>
+</div>
+<div class="section" id="running-the-dapi-injection-sequence">
+<h4>1.6. Running the DAPI injection sequence<a class="headerlink" href="#running-the-dapi-injection-sequence" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Load the taskrunner.</p></li>
+<li><p>Select the FluidicsTask by clicking on the name of the experiment in the first column of the displayed table. The <strong>Start</strong> button in the toolbar is now in a callable state.</p></li>
+<li><p>Start your experiment.</p></li>
+<li><p>You can use the Fluidics GUI to monitor the current flow parameters (pressure, flowrate).</p></li>
+</ul>
+<p>If the experiment needs to be paused or stopped, select again the FluidicsTask in the list and click the <strong>Pause</strong> or <strong>Stop</strong> button.</p>
+<p>The second column in the table of available experiments displays their current state (such as starting, running, paused, resuming, finishing, stopped). In the current version, the update of the state is not immediate due to a bug in the underlying update mechanism. To trigger the actualization, hover the cursor over the GUI.</p>
+<hr class="docutils" />
+<p>Optional steps in between step 6 and 7</p>
+</div>
+<div class="section" id="configuring-the-background-fluorescence-bleaching-experiment">
+<h4>1.6.1. Configuring the background fluorescence bleaching experiment<a class="headerlink" href="#configuring-the-background-fluorescence-bleaching-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the Experiment configurator GUI.</p></li>
+<li><p>Select the Photobleaching experiment from the dropdown menu.</p></li>
+<li><p>Specify all required parameters and save the configuration.</p></li>
+</ul>
+</div>
+<div class="section" id="running-the-background-fluorescence-bleaching-experiment">
+<h4>1.6.2 Running the background fluorescence bleaching experiment<a class="headerlink" href="#running-the-background-fluorescence-bleaching-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the taskrunner.</p></li>
+<li><p>Select the Photobleaching experiment and start it.</p></li>
+<li><p>You can open the ROI selector GUI to monitor the current stage position. This is automatically done. Do not start the tracking mode.</p></li>
+</ul>
+</div>
+<hr class="docutils" />
+<div class="section" id="configure-the-experiment-imaging-of-all-rois-z-scans">
+<h4>1.7. Configure the experiment - Imaging of all ROIs (z scans)<a class="headerlink" href="#configure-the-experiment-imaging-of-all-rois-z-scans" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the Experiment configurator GUI</p></li>
+<li><p>Select the experiment ROI multicolor scan from the list.</p></li>
+<li><p>Specify all parameters in the form. You can retrieve current settings by clicking the <strong>Get current value</strong> buttons.</p></li>
+<li><p>Save your configuration.</p></li>
+<li><p>Instead of defining all parameters, you may also want to load a previous configuration you have already used, and update the fields that have changed. For this, click the <strong>Load configuration</strong> button and select a file.</p></li>
+</ul>
+</div>
+<div class="section" id="calibrate-the-autofocus">
+<h4>1.8. Calibrate the autofocus<a class="headerlink" href="#calibrate-the-autofocus" title="Permalink to this headline">¶</a></h4>
+<p>It is now needed to open the shutter of the 785 nm laser.</p>
+<ul class="simple">
+<li><p>Using the Focus Tools GUI:</p></li>
+<li><p>[Eventually start the timetrace of the piezo position.]</p></li>
+<li><p>Start the camera live mode that will show the IR laser signal. If the focus is approximately set, you should see a bright spot in the camera image.</p></li>
+<li><p>Focus on a reference plane in the sample, either using the focus <strong>Up</strong> / <strong>Down</strong> buttons or the z positioning of the ASI stage, using as visual feedback the live image in Basic Imaging GUI.</p></li>
+<li><p>[Verify that the piezo position is in a reasonable range, for example between 5 and 70 um]</p></li>
+<li><p>Move the stage to perform the calibration near the sample but not on it in case it is a sample that perturbs the IR reflection.</p></li>
+<li><p>Launch the autofocus calibration</p></li>
+<li><p>The autofocus setting will be done using the reflection on the lower glass slide - air interface. For this, calibrate the offset by clicking the <strong>Find offset</strong> button.</p></li>
+</ul>
+</div>
+<div class="section" id="running-the-imaging-of-all-rois-experiment">
+<h4>1.9. Running the imaging of all ROIs experiment<a class="headerlink" href="#running-the-imaging-of-all-rois-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the taskrunner.</p></li>
+<li><p>Select the ROIMulticolorScanTask and start it by clicking on the start button in the toolbar.</p></li>
+</ul>
+<p>You can monitor the position the stage is currently at, using the ROI selector GUI (without using the tracking mode). The logger in the Qudi manager GUI will inform you when data has been acquired and saved.</p>
+<p>If you want to follow the experiment progress with Bokeh, make sure to manually update the permissions of the folder where the data are saved. To so so :</p>
+<ul class="simple">
+<li><p>click right on the folder and go to properties</p></li>
+<li><p>NFS attributes</p></li>
+<li><p>check Group/W and Other/W</p></li>
+<li><p>apply</p></li>
+</ul>
+</div>
+</div>
+<div class="section" id="step-2-rt-hybridization-cycles">
+<h3>Step 2: RT hybridization cycles<a class="headerlink" href="#step-2-rt-hybridization-cycles" title="Permalink to this headline">¶</a></h3>
+<div class="section" id="define-the-injection-sequence-rts">
+<h4>2.1. Define the injection sequence (RTs)<a class="headerlink" href="#define-the-injection-sequence-rts" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the Injections GUI.</p></li>
+<li><p>Define the buffers in case they have changed</p></li>
+<li><p>Define the list of used RTs.</p></li>
+<li><p>Define the sequences for hybridization and photobleaching. (Refer to step 1.5 above for more details.)</p></li>
+<li><p>Save your injection sequence and note the filename which will be used in the configuration of the experiment.</p></li>
+</ul>
+</div>
+<div class="section" id="configure-the-hi-m-experiment">
+<h4>2.2. Configure the Hi-M experiment<a class="headerlink" href="#configure-the-hi-m-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the experiment configurator GUI</p></li>
+<li><p>Select the Hi-M experiment from the list and enter or verify all required fields.</p></li>
+<li><p>Save your configuration.</p></li>
+</ul>
+</div>
+<div class="section" id="running-the-hi-m-experiment">
+<h4>2.3 Running the Hi-M experiment<a class="headerlink" href="#running-the-hi-m-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Open the Taskrunner.</p></li>
+<li><p>Select the HiMTask from the list of available experiments and start it.</p></li>
+</ul>
+<p>Your image data is saved by default to E:\DATA\currentdate_in_format_YYYY_mm_dd\002_him_samplename\005_ROI\scan_002_RT7_005_ROI.fileformat. (example numbers for second experiment, RT7, ROI 005, to be replaced by the corresponding numbers for this step).<br />
+(E:\DATA can be replaced by the save path that you manually define in your experiment configuration, but the remainder of the folder hierarchy is maintained.)</p>
+<p>You can directly access your already acquired image data at this path in tiff for fits format, as specified in your experiment configuration, and open it with ImageJ while your experiment continues.</p>
+</div>
+<div class="section" id="finishing-the-experiment">
+<h4>2.4 Finishing the experiment<a class="headerlink" href="#finishing-the-experiment" title="Permalink to this headline">¶</a></h4>
+<ul class="simple">
+<li><p>Verify the logger concerning warning and error messages.</p></li>
+<li><p>Verify the log file. It is in the same folder as the image data (subfolder Hi_m_log).</p></li>
+<li><p>Verify the saved data.</p></li>
+<li><p>Close Qudi software.</p></li>
+<li><p>Shut down all devices as usual.</p></li>
+</ul>
+</div>
+</div>
+</div>
+</div>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="Welcome to qudi-HiM’s documentation!" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="../qudi_cbs_developer/Qudi-HiM_Developer_Guide.html" class="btn btn-neutral float-right" title="Qudi-HiM Developer Guide" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, F.Barho, JB.Fiche, M.Nollmann.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
