@@ -169,7 +169,7 @@ class FocusGUI(GUIBase):
         if self._focus_logic._readout == 'camera':
             self._mw.find_offset_PushButton.hide()
             self._mw.offset_lineEdit.hide()
-            self._mw.offset_unit_label.hide()
+            self._mw.offset_label.hide()
 
         # Initialize the combobox and the pushbutton used for the autofocus calibration
         self._mw.select_experiment_ComboBox.addItems(self._focus_logic.experiments)
@@ -436,7 +436,7 @@ class FocusGUI(GUIBase):
         if experiment == 'Hi-M RAMM' or experiment == 'ROI multicolor scan RAMM':
             self._mw.find_offset_PushButton.setEnabled(True)
             self._mw.setpoint_PushButton.setEnabled(False)
-        elif experiment == 'Manual':
+        elif experiment == 'Manual' or experiment == 'ROI multicolor scan PALM' or experiment == 'Timelapse PALM':
             self._mw.find_offset_PushButton.setEnabled(True)
             self._mw.setpoint_PushButton.setEnabled(True)
         elif experiment == 'Timelapse RAMM' or experiment == 'Fast timelapse RAMM' or experiment == 'Hubble RAMM':
