@@ -169,15 +169,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 num_z_planes = self.imaging_sequence[i]['num_z_planes']
                 z_step = self.imaging_sequence[i]['z_step']
 
-                self.ref['focus'].start_search_focus()
-                # need to ensure that focus is stable here:
-                ready = self.ref['focus']._stage_is_positioned  # maybe use (not self.ref['focus'].autofocus_enabled) instead
+                self.ref['focus'].start_autofocus(stop_when_stable=True, search_focus=False)
+                # ensure that focus is stable here
+                # autofocus_enabled is True when autofocus is started and once it is stable is set to false
+                busy = self.ref['focus'].autofocus_enabled
                 counter = 0
-                while not ready:
+                while busy:
                     counter += 1
                     time.sleep(0.1)
-                    ready = self.ref['focus']._stage_is_positioned
-                    if counter > 50:
+                    busy = self.ref['focus'].autofocus_enabled
+                    if counter > 100:
                         break
 
                 initial_position = self.ref['focus'].get_position()
