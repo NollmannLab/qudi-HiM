@@ -281,6 +281,12 @@ class ExpConfigLogic(GenericLogic):
                                    'roi_list_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'ROI multicolor scan Airyscan confocal':
+                if not filename:
+                    filename = 'ROI_multicolor_scan_task_AIRYSCAN_confocal.yml'
+                keys_to_extract = ['sample_name', 'roi_list_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fluidics RAMM':
                 if not filename:
                     filename = 'fluidics_task_RAMM.yml'
