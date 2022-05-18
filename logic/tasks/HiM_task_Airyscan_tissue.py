@@ -109,6 +109,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.prefix: str = ""
         self.probe_dict: dict = {}
         self.probe_valve_number: int = self.config['probe_valve_number']
+        self.zen_ref_images_path: str = ""
+        self.zen_saving_path: str = ""
+        self.ref_images: list = []
+        self.correlation_score: list = []
+        self.save_path_content_before: list = []
+        self.root = None
 
     def startTask(self):
         """ """
@@ -155,16 +161,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
 
-        # check the reference image for the autofocus - sort them in the right acquisition order - define the
-        # correlation list where the data will be saved
-        ref_folder = r'W:\jb\2022-05-18\RT.czi\RT_AcquisitionBlock1.czi'
-        self.data_folder = r'W:\jb\2022-05-18'
-        self.ref_im_list = self.sort_czi_path_list(ref_folder)
+        # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
+        # list
+        ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
+        for n_im, im_name in enumerate(ref_im_name_list):
+            ref_image = imread(im_name)
+            ref_image = ref_image[0, 0, :, :, 0]
+            self.ref_images[n_im] = ref_image
+
+        # define the correlation list where the data will be saved
         self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
 
         # check the images in the save folder
-        self.im_path_file_before = glob(os.path.join(self.data_folder, '**', '*_AcquisitionBlock1_pt*.czi'),
-                                        recursive=True)
+        self.save_path_content_before = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                             recursive=True)
 
         # create the tkinter root window and hide it
         self.root = tk.Tk()
@@ -414,53 +424,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 sleep(0.1)
                 self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
-                # switch ON the 477nm channel
-                # self.ref['daq'].write_to_ao_channel(5, 3)
-
                 # wait for ZEN trigger indicating the task is completed
                 trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
                 while trigger == 0 and not self.aborted:
                     sleep(.1)
                     trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
-                # switch OFF the 477nm channel
-                # self.ref['daq'].write_to_ao_channel(0, 3)
-
                 # check the autofocus image is in focus. This is performed in a few steps :
                 #   1- wait for a new autofocus output image to be saved by ZEN
-                #   2- read the new image
-                #   3- since the calculation can be heavy, the images are binned from 2048x2048 to 512x512
-                #   4- for the reference image, only the central part (256*256) is used. That way the calculation is
-                #      faster and we are less sensitive to translation variation during the experiment
-                #   5- the correlation score is then calculated and saved
-                #   6- if the correlation score is too low, the experiment is put in hold
-                file_saved = False
-                while not file_saved:
-                    im_path_file_after = glob(os.path.join(self.data_folder, '**', '*_AcquisitionBlock1_pt*.czi'),
-                                              recursive=True)
-                    new_autofocus_image_path = list(set(im_path_file_after) - set(self.im_path_file_before))
-                    if len(new_autofocus_image_path) > 1:
-                        sleep(0.5)
-                    else:
-                        print(new_autofocus_image_path)
-                        file_saved = True
+                #   2- calculate the correlation score is then calculated and saved
+                #   3- if the correlation score is too low, the experiment is put in hold
+                new_autofocus_image_path = self.check_for_new_autofocus_images()
 
-                ref_image = imread(self.ref_im_list[n_roi])
-                ref_image = ref_image[0, 0, :, :, 0]
+                ref_image = self.ref_images[n_roi]
                 new_image = imread(new_autofocus_image_path[0])
-                new_image = new_image[0, 0, :, :, 0]
-
-                shape = (512, 4, 512, 4)
-                ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
-                new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
-                ref_image_bin_roi = ref_image_bin[128:384, 128:384]
-
-                correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
-                correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
-                correlation_score = np.max(correlation_new)/np.max(correlation_ref)
+                correlation_score = self.calculate_correlation_score(self, ref_image, new_image[0, 0, :, :, 0])
                 self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
 
-                if correlation_score < 0.95:
+                if correlation_score < 0.9:
                     answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
                     if not answer:
                         self.aborted = True
@@ -469,7 +450,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         messagebox.showinfo("Proceed with experiment", "The experiment will move to the next ROI...")
 
                 print(f'correlation for image #{n_roi} : {correlation_score}')
-                self.im_path_file_before = im_path_file_after
 
                 # ------------------------------------------------------------------------------------------------------
                 # imaging sequence
@@ -696,6 +676,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.save_path = self.user_param_dict['save_path']
                 self.injections_path = self.user_param_dict['injections_path']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
+                self.zen_ref_images_path = self.user_param_dict['zen_ref_images_path']
+                self.zen_saving_path = self.user_param_dict['zen_saving_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -794,11 +776,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             emission_state[laser_dict[key]['channel']] = 1
             lumencor_channel_sequence.append(emission_state.tolist())
 
-        ## Temporary modifications for test
-        ## --------------------------------
-        intensity_dict['laser3'] = 2
-        print(f'intensity_dict = {intensity_dict}')
-        ## --------------------------------
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
         self.lumencor_channel_sequence = lumencor_channel_sequence
@@ -921,8 +898,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # autofocus check helper functions
     # ------------------------------------------------------------------------------------------------------------------
 
-    def sort_czi_path_list(self, folder):
+    @staticmethod
+    def sort_czi_path_list(folder):
+        """ Specific function sorting the name of the czi file in "human" order, that is in the order of acquisition.
 
+        @param folder: folder where to look for the czi files
+        @return: list the content of the folder in the acquisition order
+        """
         path_list = glob(os.path.join(folder, '*.czi'))
         file_list = [os.path.basename(path) for path in path_list]
 
@@ -937,3 +919,46 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             sorted_path_list[n] = path_list[idx]
 
         return sorted_path_list
+
+    def check_for_new_autofocus_images(self):
+        """ Check whether a new autofocus image was saved by ZEN by comparing the content of the folder before and after
+        launching the autofocus procedure. When the autofocus procedure is performed, two new files are added : a
+        temporary file and an empty image. When the procedure is completed, the temporary file is destroyed.
+
+        @return: the path pointing toward the newly acquired autofocus images
+        """
+        # analyze the content of the folder until a new autofocus image is detected
+        while len(new_autofocus_image_path) > 1:
+            save_path_content_after = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                           recursive=True)
+            new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
+            sleep(0.5)
+
+        # update the content of the folder for the next acquisition
+        self.save_path_content_before = save_path_content_after
+
+        return new_autofocus_image_path
+
+    @staticmethod
+    def calculate_correlation_score(ref_image, new_image):
+        """ Compute a correlation score (1 = perfectly correlated - 0 = no correlation) between two images
+
+        @param ref_image: reference image (specific of the roi)
+        @param new_image: newly acquired autofocus image
+        @return: correlation score
+        """
+        # bin the two images from 2048x2048 to 512x512
+        shape = (512, 4, 512, 4)
+        ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
+        new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
+
+        # select the central portion of the reference image. The idea is to use a smaller image to compute the
+        # correlation faster but also to be less sensitive to any translational variations between the two images.
+        ref_image_bin_roi = ref_image_bin[128:384, 128:384]
+
+        # calculate the correlation between the two images and compute a score (with respect to the reference)
+        correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
+        correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
+        correlation_score = np.max(correlation_new) / np.max(correlation_ref)
+
+        return correlation_score
