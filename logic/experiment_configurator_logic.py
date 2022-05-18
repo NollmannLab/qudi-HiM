@@ -182,8 +182,9 @@ class ExpConfigLogic(GenericLogic):
     def init_default_config_dict(self):
         """ Initialize the entries of the dictionary with some default values,
         to set entries to the form displayed on the GUI on startup.
+        NB : since the following entries are defined by default, they will not be mandatory for saving the form.
         """
-        self.config_dict = {}
+        # self.config_dict = {}
         self.config_dict['dapi'] = False
         self.config_dict['rna'] = False
         self.config_dict['transfer_data'] = False
@@ -199,7 +200,9 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
-        self.config_dict['dapi_path'] = ''  # not necessary, it can be empty and needs to be initialized as empty string
+        self.config_dict['dapi_path'] = ''
+        # self.config_dict['zen_ref_images_path'] = ''
+        # self.config_dict['zen_saving_path'] = ''
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
         self.config_dict['axial_calibration_path'] = ''
@@ -224,6 +227,8 @@ class ExpConfigLogic(GenericLogic):
                 self.log.error(f'Error {e}.')
 
         config_dict = {}
+
+        print(f'Experiment = {experiment}')
 
         try:
             if experiment == 'Multicolor imaging PALM':
@@ -301,6 +306,13 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_AIRYSCAN.yml'
                     keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
                                        'injections_path', 'dapi_path']
+                    config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hi-M Airyscan Lumencor Tissue':
+                if not filename:
+                    filename = 'hi_m_task_AIRYSCAN_tissue.yml'
+                    keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
+                                       'injections_path', 'dapi_path', 'zen_ref_images_path', 'zen_saving_path']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Confocal':
@@ -593,6 +605,24 @@ class ExpConfigLogic(GenericLogic):
         :param: str path: complete path to the folder containing the dapi data
         :return: None"""
         self.config_dict['dapi_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_zen_ref_images_path(self, path):
+        """ Updates the dictionary entry 'zen_ref_images_path' (path to the folder containing the reference images used
+        to test the quality of the autofocus during a Hi-M experiment).
+        :param: str path: complete path to the folder containing the reference images
+        :return: None"""
+        self.config_dict['zen_ref_images_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_zen_saving_path(self, path):
+        """ Updates the dictionary entry 'zen_saving_path' (path to the folder where the data will be saved during a
+        Hi-M experiment).
+        :param: str path: complete path to the folder where the data will be saved
+        :return: None"""
+        self.config_dict['zen_saving_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)

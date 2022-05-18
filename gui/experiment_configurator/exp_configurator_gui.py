@@ -133,6 +133,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.roi_list_path_LineEdit.textChanged.connect(self._exp_logic.update_roi_path)
         self._mw.injections_list_LineEdit.textChanged.connect(self._exp_logic.update_injections_path)
         self._mw.dapi_data_LineEdit.textChanged.connect(self._exp_logic.update_dapi_path)
+        self._mw.reference_images_lineEdit.textChanged.connect(self._exp_logic.update_zen_ref_images_path)
+        self._mw.Zen_saving_folder_lineEdit.textChanged.connect(self._exp_logic.update_zen_saving_path)
         self._mw.illumination_time_DSpinBox.valueChanged.connect(self._exp_logic.update_illumination_time)
         self._mw.num_iterations_SpinBox.valueChanged.connect(self._exp_logic.update_num_iterations)
         self._mw.time_step_SpinBox.valueChanged.connect(self._exp_logic.update_time_step)
@@ -153,6 +155,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.load_roi_PushButton.clicked.connect(self.load_roi_list_clicked)
         self._mw.load_injections_PushButton.clicked.connect(self.load_injections_clicked)
         self._mw.load_dapi_PushButton.clicked.connect(self.load_dapi_path_clicked)
+        self._mw.reference_images_pushButton.clicked.connect(self.load_ref_images_path_clicked)
+        self._mw.Zen_saving_folder_pushButton.clicked.connect(self.load_zen_saving_path_clicked)
         self._mw.load_dz_calibration_pushButton.clicked.connect(self.load_axial_calibration_path_clicked)
 
         # signals to logic
@@ -232,6 +236,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.save_remote_path_Label.setVisible(False)
@@ -254,6 +259,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.save_remote_path_Label.setVisible(False)
@@ -276,6 +282,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -303,6 +310,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(False)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -330,6 +338,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.injections_list_Label.setVisible(False)
@@ -358,6 +367,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.dapi_CheckBox.setVisible(True)
@@ -393,6 +403,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.dapi_CheckBox.setVisible(True)
@@ -428,6 +439,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.roi_list_path_Label.setVisible(False)
@@ -453,6 +465,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -460,6 +473,37 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+
+        elif experiment == 'Hi-M Airyscan Lumencor Tissue':
+            # chose the right the listview model
+            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+            self._exp_logic.is_timelapse_ramm = False
+            self._exp_logic.is_timelapse_palm = False
+
+            self._mw.formWidget.setVisible(True)
+            self.set_visibility_general_settings(True)
+            self.set_visibility_camera_settings(False)
+            self.set_visibility_filter_settings(False)
+            self.set_visibility_imaging_settings(True)
+            self.set_visibility_save_settings(True)
+            self.set_visibility_scan_settings(True)
+            self.set_visibility_documents_settings(True)
+            self.set_visibility_prebleaching_settings(False)
+            self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(True)
+
+            # additional visibility settings
+            self._mw.gain_Label.setVisible(False)
+            self._mw.gain_SpinBox.setVisible(False)
+            self._mw.get_gain_PushButton.setVisible(False)
+            self._mw.num_frames_Label.setVisible(False)
+            self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.save_remote_path_Label.setVisible(False)
+            self._mw.save_network_path_LineEdit.setVisible(False)
+            self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.z_step_Label.setVisible(False)
+            self._mw.z_step_DSpinBox.setVisible(False)
+            self._mw.centered_focal_plane_CheckBox.setVisible(False)
 
         elif experiment == 'Hi-M Airyscan Lumencor':
             # chose the right the listview model
@@ -477,6 +521,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -507,6 +552,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility settings
             self._mw.gain_Label.setVisible(False)
@@ -534,6 +580,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(True)
             self.set_visibility_timelapse_settings(False)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.injections_list_Label.setVisible(False)
@@ -560,6 +607,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(True)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.gain_Label.setVisible(False)
@@ -598,6 +646,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(True)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.gain_Label.setVisible(False)
@@ -638,6 +687,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(True)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.gain_Label.setVisible(False)
@@ -677,6 +727,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
             self.set_visibility_timelapse_settings(True)
+            self.set_visibility_ZEN_security_settings(False)
 
             # additional visibility modifications
             self._mw.num_frames_Label.setVisible(False)
@@ -806,6 +857,17 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.axial_calibration_path_lineEdit.setVisible(visible)
         self._mw.load_dz_calibration_pushButton.setVisible(visible)
 
+    def set_visibility_ZEN_security_settings(self, visible):
+        """ Show or hide the block with the timelapse settings widgets.
+        :param bool visible: show widgets = True, hide widgets = False """
+        self._mw.Autofocus_security_Label.setVisible(visible)
+        self._mw.reference_image_folder_Label.setVisible(visible)
+        self._mw.Zen_saving_folder_Label.setVisible(visible)
+        self._mw.reference_images_lineEdit.setVisible(visible)
+        self._mw.Zen_saving_folder_lineEdit.setVisible(visible)
+        self._mw.reference_images_pushButton.setVisible(visible)
+        self._mw.Zen_saving_folder_pushButton.setVisible(visible)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of the toolbuttons
 # ----------------------------------------------------------------------------------------------------------------------
@@ -828,7 +890,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         path = os.path.join(self.default_location, 'qudi_task_config_files')
         experiment = self._mw.select_experiment_ComboBox.currentText()
-        this_file = QtWidgets.QFileDialog.getSaveFileName(self._mw, 'Save copy of experiental configuration',
+        this_file = QtWidgets.QFileDialog.getSaveFileName(self._mw, 'Save copy of experimental configuration',
                                                           path, 'yml files (*.yml)')[0]
         path, filename = os.path.split(this_file)
         if this_file:
@@ -914,12 +976,31 @@ class ExpConfiguratorGUI(GUIBase):
         the associated dapi data, needed for data visualization and processing for experiment tracker app and / or
         simultaneous data analysis during a Hi-M experiment.
         """
-        # data_directory = os.path.join(self.default_location, 'qudi_injection_parameters')
         this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
                                                           'Open DAPI directory',
                                                           '/home')  # to be changed using a correct path stem
         if this_dir:
             self._mw.dapi_data_LineEdit.setText(this_dir)
+
+    def load_ref_images_path_clicked(self):
+        """ Callback of reference_images pushbutton. Opens a dialog to select the complete path to the folder with
+        the reference images, needed for the procedure checking the autofocus for the airyscan microscope.
+        """
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
+                                                          'Open directory where reference images are saved',
+                                                          '/home')  # to be changed using a correct path stem
+        if this_dir:
+            self._mw.reference_images_lineEdit.setText(this_dir)
+
+    def load_zen_saving_path_clicked(self):
+        """ Callback of reference_images pushbutton. Opens a dialog to select the complete path to the folder where the
+        data will be saved, needed for the procedure checking the autofocus for the airyscan microscope.
+        """
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
+                                                          'Open directory where data are saved',
+                                                          '/home')  # to be changed using a correct path stem
+        if this_dir:
+            self._mw.Zen_saving_folder_lineEdit.setText(this_dir)
 
     def load_axial_calibration_path_clicked(self):
         """ Callback of load axial calibration path pushbutton. Opens a dialog to select the complete path to the folder
@@ -956,6 +1037,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.roi_list_path_LineEdit.setText(self._exp_logic.config_dict.get('roi_list_path', ''))
         self._mw.injections_list_LineEdit.setText(self._exp_logic.config_dict.get('injections_path', ''))
         self._mw.dapi_data_LineEdit.setText(self._exp_logic.config_dict.get('dapi_path', ''))
+        self._mw.reference_images_lineEdit.setText(self._exp_logic.config_dict.get('zen_ref_images_path', ''))
+        self._mw.Zen_saving_folder_lineEdit.setText(self._exp_logic.config_dict.get('zen_saving_path', ''))
         self._mw.illumination_time_DSpinBox.setValue(self._exp_logic.config_dict.get('illumination_time', 0.0))
         self._mw.num_iterations_SpinBox.setValue(self._exp_logic.config_dict.get('num_iterations', 0))
         self._mw.time_step_SpinBox.setValue(self._exp_logic.config_dict.get('time_step', 0))
