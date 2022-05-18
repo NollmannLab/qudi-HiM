@@ -4,13 +4,13 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains a task to perform a multicolor scan on RAMM setup iterating over a list of ROIs.
+This module contains a task to perform a multicolor scan on the Airyscan setup iterating over a list of ROIs.
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
 in each plane of the stack.)
 
-@author: F. Barho, JB. Fiche
+@author: JB. Fiche
 
-Created on Wed March 30 2021
+Created on Mon May 16 2022
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify

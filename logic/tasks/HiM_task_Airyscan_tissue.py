@@ -5,11 +5,12 @@ Qudi-CBS
 An extension to Qudi.
 
 This module contains the Hi-M Experiment for the Airyscan experimental setup using epifluorescence configuration.
-(For confocal configuration, use HiM_task_Airyscan_confocal.)
+(For confocal configuration, use HiM_task_Airyscan_confocal.) It is a modification of the HiM task created for the
+Airyscan microscope and used for epi-fluorescence
 
-@author: F. Barho, JB. Fiche
+@author: JB. Fiche
 
-Created on Thu Aug 26 2021
+Created on Mon May 16 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
