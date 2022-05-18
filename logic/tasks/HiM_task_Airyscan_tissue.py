@@ -165,10 +165,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
         # list
         ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
-        for n_im, im_name in enumerate(ref_im_name_list):
+        for im_name in ref_im_name_list:
             ref_image = imread(im_name)
             ref_image = ref_image[0, 0, :, :, 0]
-            self.ref_images[n_im] = ref_image
+            self.ref_images.append(ref_image)
 
         # define the correlation list where the data will be saved
         self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
@@ -439,7 +439,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 ref_image = self.ref_images[n_roi]
                 new_image = imread(new_autofocus_image_path[0])
-                correlation_score = self.calculate_correlation_score(self, ref_image, new_image[0, 0, :, :, 0])
+                correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
                 self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
 
                 if correlation_score < 0.9:
@@ -929,11 +929,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         @return: the path pointing toward the newly acquired autofocus images
         """
         # analyze the content of the folder until a new autofocus image is detected
-        while len(new_autofocus_image_path) > 1:
+        new_image_found = False
+        while not new_image_found:
             save_path_content_after = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
                                            recursive=True)
             new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
-            sleep(0.5)
+            if len(new_autofocus_image_path) > 1:
+                sleep(0.5)
+            else:
+                new_image_found = True
 
         # update the content of the folder for the next acquisition
         self.save_path_content_before = save_path_content_after

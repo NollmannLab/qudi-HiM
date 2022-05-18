@@ -1024,7 +1024,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
                                                           'Open directory where reference images are saved',
-                                                          '/home')  # to be changed using a correct path stem
+                                                          r'W:')  # to be changed using a correct path stem
         if this_dir:
             self._mw.reference_images_lineEdit.setText(this_dir)
 
@@ -1034,7 +1034,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
                                                           'Open directory where data are saved',
-                                                          '/home')  # to be changed using a correct path stem
+                                                          r"W:")  # to be changed using a correct path stem
         if this_dir:
             self._mw.Zen_saving_folder_lineEdit.setText(this_dir)
 
