@@ -48,7 +48,8 @@ from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from tkinter import messagebox
 
-class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
+
+class Task(InterruptableTask):
     """ This task performs a Hi-M experiment on the Airyscan setup in epifluorescence configuration using the
      lumencor celesta lightsource.
 
