@@ -434,7 +434,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_camera_settings(False)
             self.set_visibility_filter_settings(False)
             self.set_visibility_imaging_settings(False)
-            self.set_visibility_save_settings(False)
+            self.set_visibility_save_settings(True)
             self.set_visibility_scan_settings(False)
             self.set_visibility_documents_settings(True)
             self.set_visibility_prebleaching_settings(False)
@@ -458,6 +458,8 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.fileformat_Label.setVisible(False)
+            self._mw.fileformat_ComboBox.setVisible(False)
 
         elif experiment == 'Fluidics RAMM' or experiment == 'Fluidics Airyscan':
             # chose the right the listview model
@@ -1024,7 +1026,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
                                                           'Open directory where reference images are saved',
-                                                          '/home')  # to be changed using a correct path stem
+                                                          r'W:')  # to be changed using a correct path stem
         if this_dir:
             self._mw.reference_images_lineEdit.setText(this_dir)
 
@@ -1034,7 +1036,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
                                                           'Open directory where data are saved',
-                                                          '/home')  # to be changed using a correct path stem
+                                                          r"W:")  # to be changed using a correct path stem
         if this_dir:
             self._mw.Zen_saving_folder_lineEdit.setText(this_dir)
 

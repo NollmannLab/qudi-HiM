@@ -276,7 +276,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # save the file name
         self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
-        return self.roi_counter < len(self.roi_names)
+        return (self.roi_counter < len(self.roi_names)) and (not self.aborted)
 
     def pauseTask(self):
         """ """

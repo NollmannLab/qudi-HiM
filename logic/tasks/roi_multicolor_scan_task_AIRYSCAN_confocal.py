@@ -36,7 +36,7 @@ from datetime import datetime
 from logic.generic_task import InterruptableTask
 
 
-class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
+class Task(InterruptableTask):
     """ This task iterates over all roi given in a file and acquires a series of planes in z direction
     using a sequence of lightsources for each plane, for each roi.
 
@@ -62,17 +62,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
         print("Path to user config file : {}".format(self.user_config_path))
-        self.sample_name = None
-        self.roi_counter = None
-        self.directory = None
-        self.user_param_dict = {}
-        self.save_path = None
-        self.roi_list_path = None
-        self.roi_names = []
+        self.sample_name: str = ""
+        self.roi_counter: int = 0
+        self.directory: str = ""
+        self.user_param_dict: dict = {}
+        self.save_path: str = ""
+        self.roi_list_path: list = []
+        self.roi_names: list = []
         self.IN7_ZEN = self.config['IN7_ZEN']
         self.OUT7_ZEN = self.config['OUT7_ZEN']
         self.OUT8_ZEN = self.config['OUT8_ZEN']
-        self.prefix = None
+        self.prefix: str = ""
 
     def startTask(self):
         """ """
@@ -95,7 +95,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is compatible with experiment ZEN/HiM_celesta')
+        self.log.warning('This task is ONLY compatible with experiment ZEN/ROI_imaging')
         self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)))
         self.log.warning('Select the autofocus block and hit "Start Experiment"')
         self.log.warning('########################################')
@@ -129,7 +129,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
 
         # define the name of the file according to the roi number and cycle
-        scan_name = self.file_name(self.roi_names[self.roi_counter])
+        # scan_name = self.file_name(self.roi_names[self.roi_counter])
 
         # go to roi
         self.ref['roi'].set_active_roi(name=self.roi_names[self.roi_counter])
@@ -155,9 +155,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
         # save the file name
-        self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
+        # self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
-        return self.roi_counter < len(self.roi_names)
+        return (self.roi_counter < len(self.roi_names)) and (not self.aborted)
 
     def pauseTask(self):
         """ """
@@ -174,10 +174,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # go back to first ROI
         self.ref['roi'].set_active_roi(name=self.roi_names[0])
         self.ref['roi'].go_to_roi_xy()
-
-        # reset the lumencor state
-        self.ref['laser'].lumencor_set_ttl(False)
-        self.ref['laser'].voltage_off()
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
@@ -209,6 +205,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             with open(self.user_config_path, 'r') as stream:
                 self.user_param_dict = yaml.safe_load(stream)
                 self.sample_name = self.user_param_dict['sample_name']
+                self.save_path = self.user_param_dict['save_path']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
 
         except Exception as e:  # add the type of exception
@@ -277,15 +274,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         prefix = str(number_dirs+1).zfill(3)
         # make prefix accessible to include it in the filename generated in the method get_complete_path
         self.prefix = prefix
-
-        # special format if option dapi or rna checked in experiment configurator
-        if self.is_dapi:
-            foldername = f'{prefix}_HiM_{self.sample_name}_DAPI'
-        elif self.is_rna:
-            foldername = f'{prefix}_HiM_{self.sample_name}_RNA'
-        else:
-            foldername = f'{prefix}_Scan_{self.sample_name}'
-
+        foldername = f'{prefix}_Scan_{self.sample_name}'
         path = os.path.join(path_stem_with_date, foldername)
 
         # create the path  # no need to check if it already exists due to incremental prefix
@@ -319,4 +308,31 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         with open(file, 'a+') as outfile:
             outfile.write(movie_name)
             outfile.write("\n")
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # metadata
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def get_metadata(self):
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
+        metadata = {'Sample name': self.sample_name}
+
+        for roi in self.roi_names:
+            pos = self.ref['roi'].get_roi_position(roi)
+            metadata[roi] = f'X = {pos[0]} - Y = {pos[1]}'
+
+        return metadata
+
+    def save_metadata_file(self, metadata, path):
+        """ Save a txt file containing the metadata dictionary.
+
+        :param dict metadata: dictionary containing the metadata
+        :param str path: pathname
+        """
+        with open(path, 'w') as outfile:
+            yaml.safe_dump(metadata, outfile, default_flow_style=False)
+        self.log.info('Saved metadata to {}'.format(path))
 
