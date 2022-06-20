@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>921</width>
+    <width>961</width>
     <height>995</height>
    </rect>
   </property>
@@ -25,7 +25,7 @@
          </property>
         </widget>
        </item>
-       <item row="33" column="2">
+       <item row="36" column="2">
         <widget class="QDoubleSpinBox" name="illumination_time_DSpinBox">
          <property name="decimals">
           <number>1</number>
@@ -90,7 +90,7 @@
          </property>
         </widget>
        </item>
-       <item row="32" column="1">
+       <item row="35" column="1">
         <widget class="QLabel" name="prebleach_settings_Label">
          <property name="font">
           <font>
@@ -292,7 +292,7 @@
          </property>
         </widget>
        </item>
-       <item row="35" column="2">
+       <item row="38" column="2">
         <widget class="QSpinBox" name="num_iterations_SpinBox">
          <property name="maximum">
           <number>1000</number>
@@ -485,7 +485,7 @@
          </property>
         </widget>
        </item>
-       <item row="34" column="1">
+       <item row="37" column="1">
         <widget class="QLabel" name="timelapse_settings_Label">
          <property name="font">
           <font>
@@ -534,7 +534,7 @@
        <item row="9" column="2">
         <widget class="QComboBox" name="filterpos_ComboBox"/>
        </item>
-       <item row="33" column="1">
+       <item row="36" column="1">
         <widget class="QLabel" name="illumination_time_Label">
          <property name="text">
           <string>Illumination time (min)</string>
@@ -554,34 +554,34 @@
          </attribute>
         </widget>
        </item>
-       <item row="35" column="1">
+       <item row="38" column="1">
         <widget class="QLabel" name="num_iterations_Label">
          <property name="text">
           <string>Number of iterations</string>
          </property>
         </widget>
        </item>
-       <item row="36" column="1">
+       <item row="39" column="1">
         <widget class="QLabel" name="time_step_Label">
          <property name="text">
           <string>Time step (s)</string>
          </property>
         </widget>
        </item>
-       <item row="36" column="2">
+       <item row="39" column="2">
         <widget class="QSpinBox" name="time_step_SpinBox"/>
        </item>
-       <item row="37" column="1">
+       <item row="40" column="1">
         <widget class="QLabel" name="dz_calibration_label">
          <property name="text">
           <string>Dz calibration file</string>
          </property>
         </widget>
        </item>
-       <item row="37" column="2" colspan="2">
+       <item row="40" column="2" colspan="2">
         <widget class="QLineEdit" name="axial_calibration_path_lineEdit"/>
        </item>
-       <item row="37" column="4">
+       <item row="40" column="4">
         <widget class="QPushButton" name="load_dz_calibration_pushButton">
          <property name="text">
           <string>Load dz calibration</string>
@@ -612,6 +612,53 @@
          </property>
         </widget>
        </item>
+       <item row="33" column="2" colspan="2">
+        <widget class="QLineEdit" name="reference_images_lineEdit"/>
+       </item>
+       <item row="32" column="1">
+        <widget class="QLabel" name="Autofocus_security_Label">
+         <property name="font">
+          <font>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Autofocus security</string>
+         </property>
+        </widget>
+       </item>
+       <item row="33" column="1">
+        <widget class="QLabel" name="reference_image_folder_Label">
+         <property name="text">
+          <string>Reference images folder</string>
+         </property>
+        </widget>
+       </item>
+       <item row="33" column="4">
+        <widget class="QPushButton" name="reference_images_pushButton">
+         <property name="text">
+          <string>Load reference images path</string>
+         </property>
+        </widget>
+       </item>
+       <item row="34" column="1">
+        <widget class="QLabel" name="Zen_saving_folder_Label">
+         <property name="text">
+          <string>ZEN saving folder</string>
+         </property>
+        </widget>
+       </item>
+       <item row="34" column="2" colspan="2">
+        <widget class="QLineEdit" name="Zen_saving_folder_lineEdit"/>
+       </item>
+       <item row="34" column="4">
+        <widget class="QPushButton" name="Zen_saving_folder_pushButton">
+         <property name="text">
+          <string>Load Zen data saving path</string>
+         </property>
+        </widget>
+       </item>
       </layout>
      </widget>
     </item>
@@ -632,7 +679,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>921</width>
+     <width>961</width>
      <height>20</height>
     </rect>
    </property>

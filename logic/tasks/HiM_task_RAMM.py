@@ -669,7 +669,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
-        return self.probe_counter < len(self.probe_list)
+        return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
     def pauseTask(self):
         """ """

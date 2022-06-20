@@ -4,11 +4,13 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains the Hi-M Experiment for the Airyscan experimental setup using confocal configuration.
+This module contains the Hi-M Experiment for the Airyscan experimental setup using epifluorescence configuration.
+(For confocal configuration, use HiM_task_Airyscan_confocal.) It is a modification of the HiM task created for the
+Airyscan microscope and used for epi-fluorescence
 
-@author: F. Barho, JB. Fiche
+@author: JB. Fiche
 
-Created on Thu Aug 26 2021
+Created on Mon May 16 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -29,37 +31,44 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import yaml
-# import numpy as np
+import numpy as np
 import pandas as pd
 import os
+import re
 import time
+import tkinter as tk
 from time import sleep
 from datetime import datetime
+from scipy.signal import correlate
+from czifile import imread
+from glob import glob
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
-# from logic.task_helper_functions import get_entry_nested_dict
+from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
+from tkinter import messagebox
 
 
-class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
+class Task(InterruptableTask):
     """ This task performs a Hi-M experiment on the Airyscan setup in epifluorescence configuration using the
      lumencor celesta lightsource.
 
     Config example pour copy-paste:
-    HiMTask_confocal:
-        module: 'HiM_task_Airyscan_Confocal'
-        needsmodules:
-            daq : 'daq_logic'
-            roi: 'roi_logic'
-            valves: 'valve_logic'
-            pos: 'positioning_logic'
-            flow: 'flowcontrol_logic'
-        config:
-            path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN_confocal.yml'
-            IN7_ZEN : 0
-            OUT7_ZEN : 1
-            OUT8_ZEN : 3
-            camera_global_exposure : 2
+            HiMTask:
+                module: 'HiM_task_Airyscan'
+                needsmodules:
+                    daq : 'daq_logic'
+                    laser : 'lasercontrol_logic'
+                    roi: 'roi_logic'
+                    valves: 'valve_logic'
+                    pos: 'positioning_logic'
+                    flow: 'flowcontrol_logic'
+                config:
+                    path_to_user_config: 'C:/Users/MFM/qudi_files/qudi_task_config_files/hi_m_task_AIRYSCAN.yml'
+                    IN7_ZEN : 0
+                    OUT7_ZEN : 1
+                    OUT8_ZEN : 3
+                    camera_global_exposure : 2
     """
     # ==================================================================================================================
     # Generic Task methods
@@ -75,12 +84,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_counter: int = 0
         self.user_param_dict: dict = {}
         self.logging: bool = True
+        self.num_z_planes: int = 0
+        self.imaging_sequence: list = []
         self.save_path: str = ""
         self.roi_list_path: str = ""
         self.roi_names: list = []
+        self.num_laserlines: int = 0
+        self.intensity_dict: dict = {}
+        self.ao_channel_sequence: list = []
+        self.lumencor_channel_sequence: list = []
         self.IN7_ZEN: int = self.config['IN7_ZEN']
         self.OUT7_ZEN: int = self.config['OUT7_ZEN']
         self.OUT8_ZEN: int = self.config['OUT8_ZEN']
+        self.camera_global_exposure: float = self.config['camera_global_exposure']
         self.log_folder: str = ""
         self.default_info_path: str = ""
         self.status_dict_path: str = ""
@@ -95,6 +111,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.prefix: str = ""
         self.probe_dict: dict = {}
         self.probe_valve_number: int = self.config['probe_valve_number']
+        self.zen_ref_images_path: str = ""
+        self.zen_saving_path: str = ""
+        self.ref_images: list = []
+        self.correlation_score: list = []
+        self.save_path_content_before: list = []
+        self.root = None
 
     def startTask(self):
         """ """
@@ -118,7 +140,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('HiM experiment is starting ...')
 
         # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
+        self.ref['roi'].set_stage_velocity({'x': .5, 'y': .5})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -126,14 +148,48 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # create the daq channels
         self.ref['daq'].initialize_digital_channel(self.OUT7_ZEN, 'input')
         self.ref['daq'].initialize_digital_channel(self.OUT8_ZEN, 'input')
+        self.ref['daq'].initialize_digital_channel(self.camera_global_exposure, 'input')
         self.ref['daq'].initialize_digital_channel(self.IN7_ZEN, 'output')
+
+        # define the laser intensities as well as the sequence for the daq external trigger.
+        # Set : - all laser lines to OFF and wake the source up
+        #       - all the ao_channels to +5V
+        #       - the celesta laser source in external TTL mode
+        #       - the intensity of each laser line according to the task parameters
+        self.format_imaging_sequence()
+        self.ref['laser'].stop_laser_output()
+        self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
+        self.ref['daq'].initialize_ao_channels()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
+
+        # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
+        # list
+        ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
+        for im_name in ref_im_name_list:
+            ref_image = imread(im_name)
+            ref_image = ref_image[0, 0, :, :, 0]
+            self.ref_images.append(ref_image)
+
+        # define the correlation list where the data will be saved
+        self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
+
+        # check the images in the save folder
+        self.save_path_content_before = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                             recursive=True)
+
+        # create the tkinter root window and hide it
+        self.root = tk.Tk()
+        self.root.withdraw()
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is compatible with experiment ZEN/HiM_confocal')
+        self.log.warning('This task is ONLY compatible with experiment ZEN/HiM_celesta_autofocus_intensity')
         self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(
             len(self.probe_list) * len(self.roi_names)))
-        self.log.warning('Select the acquisition block and hit "Start Experiment"')
+        self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
+        self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
+        self.log.warning('Select the autofocus block and hit "Start Experiment"')
         self.log.warning('########################################')
 
         # wait for the trigger from ZEN indicating that the experiment is starting
@@ -186,7 +242,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-
         # go directly to cleanupTask if position 1 is not defined or ZEN ready trigger not received
         if not self.ref['pos'].origin:
             return False
@@ -205,16 +260,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Started cycle {self.probe_counter}', 'info')
 
             # position the needle in the probe
-            self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter-1][0])
+            needle_pos = self.probe_list[self.probe_counter - 1][0]
+            self.ref['pos'].start_move_to_target(needle_pos)
             while self.ref['pos'].moving is True:
                 sleep(0.1)
 
             # disable again the move stage button
             self.ref['pos'].disable_positioning_actions()
-
-        # keep in memory the position of the needle
-        needle_pos = self.probe_list[self.probe_counter - 1][0]
-        rt_injection = 0
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
@@ -231,6 +283,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the hybridization sequence
+            rt_injection = 0
+
             for step in range(len(self.hybridization_list)):
                 if self.aborted:
                     break
@@ -333,13 +387,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # initialize roi counter and start the while loop over all the roi
-            for roi in self.roi_names:
+            # start the acquisition loop over all the roi
 
+            ref_folder = r'W:\jb\2022-05-11\RT-7.czi\RT-7_AcquisitionBlock1.czi'
+            im_list = glob(os.path.join(ref_folder, '*.czi'))
+            im_list = sorted(im_list)
+            print(im_list)
+
+            for n_roi, roi in enumerate(self.roi_names):
                 if self.aborted:
                     break
 
+                # make sure the celesta laser source is ready
+                self.ref['laser'].lumencor_wakeup()
+
                 # define the name of the file according to the roi number and cycle
+                # roi = self.roi_names[roi_counter]
                 scan_name = self.file_name(roi, probe_name)
 
                 # move to roi ------------------------------------------------------------------------------------------
@@ -348,15 +411,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['roi'].go_to_roi_xy()
                 self.log.info('Moved to {}'.format(roi))
                 self.ref['roi'].stage_wait_for_idle()
+                # roi_counter += 1
 
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi}')
 
                 # --------------------------------------------------------------------------------------------------------------
-                # acquisition block (ZEN)
+                # autofocus (ZEN)
                 # --------------------------------------------------------------------------------------------------------------
 
-                # send trigger to ZEN to start the autofocus search and the acquisition
+                # send trigger to ZEN to start the autofocus search
                 sleep(5)
                 self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
                 sleep(0.1)
@@ -367,6 +431,57 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 while trigger == 0 and not self.aborted:
                     sleep(.1)
                     trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+
+                # check the autofocus image is in focus. This is performed in a few steps :
+                #   1- wait for a new autofocus output image to be saved by ZEN
+                #   2- calculate the correlation score is then calculated and saved
+                #   3- if the correlation score is too low, the experiment is put in hold
+                new_autofocus_image_path = self.check_for_new_autofocus_images()
+
+                ref_image = self.ref_images[n_roi]
+                new_image = imread(new_autofocus_image_path[0])
+                correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
+                self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
+
+                if correlation_score < 0.9:
+                    answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
+                    if not answer:
+                        self.aborted = True
+                        break
+                    else:
+                        messagebox.showinfo("Proceed with experiment", "The experiment will move to the next ROI...")
+
+                print(f'correlation for image #{n_roi} : {correlation_score}')
+
+                # ------------------------------------------------------------------------------------------------------
+                # imaging sequence
+                # ------------------------------------------------------------------------------------------------------
+
+                # launch the acquisition task
+                sleep(5)
+                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+                sleep(0.1)
+                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
+
+                for plane in range(self.num_z_planes):
+                    for i in range(len(self.imaging_sequence)):
+
+                        # daq waiting for global_exposure trigger from the camera --------------------------------------
+                        error = self.wait_for_camera_trigger(1)
+                        if error is True:
+                            return False
+
+                        # switch the selected laser line ON ------------------------------------------------------------
+                        # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
+                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
+                        # daq waiting for global_exposure trigger from the camera to end -------------------------------
+                        error = self.wait_for_camera_trigger(0)
+                        if error is True:
+                            return False
+
+                        # switch the selected laser line OFF -----------------------------------------------------------
+                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
 
                 # save the file name
                 self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
@@ -503,7 +618,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
             # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
-            # position .. (maybe not necessary because all those elements will still be done above)
+            # position, etc. (maybe not necessary because all those elements will still be done above)
+
+        # save correlation score
+        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
+
+        # destroy the tkinter window
+        self.root.destroy()
 
         # reset stage velocity to default
         self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
@@ -517,6 +638,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['valves'].enable_valve_positioning()
         self.ref['flow'].enable_flowcontrol_actions()
         self.ref['pos'].enable_positioning_actions()
+
+        # reset the lumencor state
+        self.ref['laser'].lumencor_set_ttl(False)
+        self.ref['laser'].voltage_off()
 
         total = time.time() - self.start
         print(f'total time with logging = {self.logging}: {total} s')
@@ -537,6 +662,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
 
         user must specify the following dictionary (here with example entries):
+            num_z_planes: 50
+            imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
             roi_list_path: 'pathstem/qudi_files/qudi_roi_lists/roilist_20210101_1128_23_123243.json'
             injections_path: 'pathstem/qudi_files/qudi_injection_parameters/injections_2021_01_01.yml'
             dapi_path: 'E:/imagedata/2021_01_01/001_HiM_MySample_dapi'
@@ -546,8 +673,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.user_param_dict = yaml.safe_load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
+                self.num_z_planes = self.user_param_dict['num_z_planes']
+                self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
                 self.injections_path = self.user_param_dict['injections_path']
+                self.roi_list_path = self.user_param_dict['roi_list_path']
+                self.zen_ref_images_path = self.user_param_dict['zen_ref_images_path']
+                self.zen_saving_path = self.user_param_dict['zen_saving_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -558,6 +690,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.roi_names = self.ref['roi'].roi_names
         # injections
         self.load_injection_parameters()
+        # get the number of laser lines
+        self.num_laserlines = len(self.imaging_sequence)
 
     def load_injection_parameters(self):
         """ Load relevant information from the document containing the injection parameters in a specific format.
@@ -581,6 +715,72 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # communication with ZEN
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def wait_for_camera_trigger(self, value):
+        """ This method contains a loop to wait for the camera exposure starts or stops.
+
+        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        """
+        bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+        counter = 0
+        error = False
+
+        while bit_value != value and error is False and not self.aborted:
+            counter += 1
+            bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+            if counter > 10000:
+                self.log.warning(
+                    'No trigger was detected during the past 60s... experiment is aborted')
+                error = True
+
+        return error
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for imaging cycle with Lumencor
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the daq ttl/ao sequence for the
+        triggers. For controlling the laser source, two solutions are tested :
+        - directly by communicating with the Lumencor, in that case the intensity dictionary is used to predefine the
+        intensity of each laser line, and the list emission_state contains the succession of emission state for the
+        acquisition
+        - by using the Lumencor is external trigger mode. In that case, the intensity dictionary is used the same way
+        but the DAQ is controlling the succession of emission state
+        """
+
+    # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
+        laser_dict = self.ref['laser'].get_laser_dict()
+        intensity_dict = self.ref['laser'].init_intensity_dict()
+        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
+
+    # Load the daq dictionary for ttl ----------------------------------------------------------------------------------
+        daq_dict = self.ref['daq']._daq.get_dict()
+        ao_channel_sequence = []
+        lumencor_channel_sequence = []
+
+    # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
+        for i in range(len(imaging_sequence)):
+            key = imaging_sequence[i][0]
+            intensity_dict[key] = imaging_sequence[i][1]
+            if daq_dict[key]['channel']:
+                ao_channel_sequence.append(daq_dict[key]['channel'])
+            else:
+                self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
+                    laser_dict[key]['wavelength']))
+
+            emission_state = np.zeros((len(laser_dict), ), dtype=int)
+            emission_state[laser_dict[key]['channel']] = 1
+            lumencor_channel_sequence.append(emission_state.tolist())
+
+        self.intensity_dict = intensity_dict
+        self.ao_channel_sequence = ao_channel_sequence
+        self.lumencor_channel_sequence = lumencor_channel_sequence
 
     # ------------------------------------------------------------------------------------------------------------------
     # data for injection tracking
@@ -652,7 +852,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Define the complete name of the image data file.
 
         :param: str roi_number: string identifier of the current ROI for which a complete path shall be created
-        :param: str probe_name: string identifier of the current probe
         :return: str complete_path: such as directory/ROI_001/scan_001_004_ROI.tif (experiment nb. 001, ROI nb. 004)
         """
 
@@ -662,11 +861,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     @staticmethod
     def save_file_name(file, movie_name):
-        """ Save the name of the movie by appending the file for each new acquisition.
-
-        :param: str file: string identifier of the file where the data are saved
-        :param: str movie_name: string identifier of the movie name (indicating the ROI and the probe)
-        """
         with open(file, 'a+') as outfile:
             outfile.write(movie_name)
             outfile.write("\n")
@@ -680,7 +874,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {'Sample name': self.sample_name}
+        metadata = {'Sample name': self.sample_name, 'Scan number of planes (um)': self.num_z_planes,
+                    'Number laserlines': self.num_laserlines}
+        for i in range(self.num_laserlines):
+            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
 
         for roi in self.roi_names:
             pos = self.ref['roi'].get_roi_position(roi)
@@ -698,3 +896,75 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             yaml.safe_dump(metadata, outfile, default_flow_style=False)
         self.log.info('Saved metadata to {}'.format(path))
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # autofocus check helper functions
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def sort_czi_path_list(folder):
+        """ Specific function sorting the name of the czi file in "human" order, that is in the order of acquisition.
+
+        @param folder: folder where to look for the czi files
+        @return: list the content of the folder in the acquisition order
+        """
+        path_list = glob(os.path.join(folder, '*.czi'))
+        file_list = [os.path.basename(path) for path in path_list]
+
+        pt_list = np.zeros((len(file_list),))
+        sorted_path_list = [None] * len(file_list)
+
+        for n, file in enumerate(file_list):
+            digit = re.findall('\d+', file)
+            pt_list[n] = int(digit[-1])
+
+        for n, idx in enumerate(np.argsort(pt_list)):
+            sorted_path_list[n] = path_list[idx]
+
+        return sorted_path_list
+
+    def check_for_new_autofocus_images(self):
+        """ Check whether a new autofocus image was saved by ZEN by comparing the content of the folder before and after
+        launching the autofocus procedure. When the autofocus procedure is performed, two new files are added : a
+        temporary file and an empty image. When the procedure is completed, the temporary file is destroyed.
+
+        @return: the path pointing toward the newly acquired autofocus images
+        """
+        # analyze the content of the folder until a new autofocus image is detected
+        new_image_found = False
+        while not new_image_found:
+            save_path_content_after = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                           recursive=True)
+            new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
+            if len(new_autofocus_image_path) > 1:
+                sleep(0.5)
+            else:
+                new_image_found = True
+
+        # update the content of the folder for the next acquisition
+        self.save_path_content_before = save_path_content_after
+
+        return new_autofocus_image_path
+
+    @staticmethod
+    def calculate_correlation_score(ref_image, new_image):
+        """ Compute a correlation score (1 = perfectly correlated - 0 = no correlation) between two images
+
+        @param ref_image: reference image (specific of the roi)
+        @param new_image: newly acquired autofocus image
+        @return: correlation score
+        """
+        # bin the two images from 2048x2048 to 512x512
+        shape = (512, 4, 512, 4)
+        ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
+        new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
+
+        # select the central portion of the reference image. The idea is to use a smaller image to compute the
+        # correlation faster but also to be less sensitive to any translational variations between the two images.
+        ref_image_bin_roi = ref_image_bin[128:384, 128:384]
+
+        # calculate the correlation between the two images and compute a score (with respect to the reference)
+        correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
+        correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
+        correlation_score = np.max(correlation_new) / np.max(correlation_ref)
+
+        return correlation_score

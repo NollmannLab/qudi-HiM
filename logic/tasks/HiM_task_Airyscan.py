@@ -127,7 +127,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('HiM experiment is starting ...')
 
         # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': .1, 'y': .1})
+        self.ref['roi'].set_stage_velocity({'x': .5, 'y': .5})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -389,11 +389,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 sleep(0.1)
                 self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
+                # switch ON the 477nm channel
+                # self.ref['daq'].write_to_ao_channel(5, 3)
+
                 # wait for ZEN trigger indicating the task is completed
                 trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
                 while trigger == 0 and not self.aborted:
                     sleep(.1)
                     trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+
+                # switch OFF the 477nm channel
+                # self.ref['daq'].write_to_ao_channel(0, 3)
+
+                # check the autofocus image is in focus
+
 
                 # ------------------------------------------------------------------------------------------------------
                 # first imaging sequence
@@ -582,7 +591,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
-        return self.probe_counter < len(self.probe_list)
+        return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
     def pauseTask(self):
         """ """
@@ -760,6 +769,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             emission_state[laser_dict[key]['channel']] = 1
             lumencor_channel_sequence.append(emission_state.tolist())
 
+        ## Temporary modifications for test
+        ## --------------------------------
+        intensity_dict['laser3'] = 2
+        print(f'intensity_dict = {intensity_dict}')
+        ## --------------------------------
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
         self.lumencor_channel_sequence = lumencor_channel_sequence
