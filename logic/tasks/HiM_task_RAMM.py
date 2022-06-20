@@ -96,11 +96,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Generic Task methods
     # ==================================================================================================================
 
-    # TODO :
-    #  defines the type for the variables self.var : type = default
-    #  simplify the code using tips from Thales - in the init defines functions that requires direct communication to
-    #  hardware
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
