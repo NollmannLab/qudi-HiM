@@ -90,6 +90,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensities: list = []
         self.num_laserlines: int = 0
         self.prefix: str = ""
+        self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
 
     def startTask(self):
         """ """
@@ -111,8 +112,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
-        # set stage velocity
+        # set stage velocity and trigger mode
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
+        self.ref['roi'].set_stage_led_mode('Triggered')
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -134,7 +136,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
         # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
@@ -296,8 +299,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].restart_default_session()
         self.log.info('restarted default session')
 
-        # reset stage velocity to default
-        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
+        # reset stage velocity and trigger mode to default
+        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592e
+        self.ref['roi'].set_stage_led_mode('Internal')
 
         # enable gui actions
         # roi gui
@@ -362,11 +366,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # get the list of the roi names
         self.roi_names = self.ref['roi'].roi_names
 
-        # convert the imaging_sequence given by user into format required by the bitfile
-        lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        # count the number of lightsources
         self.num_laserlines = len(self.imaging_sequence)
-        wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        wavelengths = [lightsource_dict[key] for key in wavelengths]
+
+        # convert the imaging_sequence given by user into format required by the bitfile
+        wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
+        for n, key in enumerate(wavelengths):
+            if key == 'Brightfield':
+                wavelengths[n] = 0
+            else:
+                wavelengths[n] = self.lightsource_dict[key]
+
         for i in range(self.num_laserlines, 5):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths

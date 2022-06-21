@@ -84,6 +84,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.wavelengths: list = []
         self.intensities: list = []
         self.focal_plane_position: float = 0
+        self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
 
     def startTask(self):
         """ """
@@ -102,6 +103,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
+        # set the ASI stage in trigger mode
+        self.ref['roi'].set_stage_led_mode('Triggered')
+
         # read all user parameters from config
         self.load_user_parameters()
 
@@ -114,7 +118,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].start_acquisition()
 
         # download the bitfile for the task on the FPGA
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('Task session started')
 
@@ -189,6 +194,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # reset piezo position to the initial one
         self.ref['focus'].go_to_position(self.focal_plane_position)
+
+        # set the ASI stage in internal mode
+        self.ref['roi'].set_stage_led_mode('Internal')
 
         # get acquired data from the camera and save it to file in case the task has not been stopped during acquisition
         if self.step_counter == self.num_z_planes:
@@ -272,11 +280,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
 
-        lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        # count the number of lightsources
         self.num_laserlines = len(self.imaging_sequence)
 
-        wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        wavelengths = [lightsource_dict[key] for key in wavelengths]
+        # convert the imaging_sequence given by user into format required by the bitfile
+        wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
+        for n, key in enumerate(wavelengths):
+            if key == 'Brightfield':
+                wavelengths[n] = 0
+            else:
+                wavelengths[n] = self.lightsource_dict[key]
+
         for i in range(self.num_laserlines, 5):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths
