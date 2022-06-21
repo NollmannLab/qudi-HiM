@@ -240,7 +240,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                                               self.num_laserlines, self.exposure)
 
         # defines the timeout value
-        self.timeout = self.num_laserlines * self.exposure + 0.
+        self.timeout = self.num_laserlines * self.exposure + 0.1
 
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
