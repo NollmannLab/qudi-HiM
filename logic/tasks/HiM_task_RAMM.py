@@ -106,7 +106,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_param_dict: dict = {}
         self.logging: bool = True
         self.start: float = 0
-        self.default_exposure: float = 0
+        self.default_exposure: float = 0.05
         self.directory: str = ""
         self.network_directory: str = ""
         self.log_folder: str = ""
@@ -251,7 +251,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
         if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (
-        not self.ref['focus']._setpoint_defined):
+            not self.ref['focus']._setpoint_defined):
             return False
 
         if not self.aborted:
