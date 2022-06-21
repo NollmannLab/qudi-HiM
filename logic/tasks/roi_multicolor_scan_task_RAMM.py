@@ -269,7 +269,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         save_z_positions_to_file(z_target_positions, z_actual_positions, file_path)
 
         self.roi_counter += 1
-        return self.roi_counter < len(self.roi_names)
+        return (self.roi_counter < len(self.roi_names)) and (not self.aborted)
 
     def pauseTask(self):
         """ """

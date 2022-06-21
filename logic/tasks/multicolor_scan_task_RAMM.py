@@ -173,7 +173,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.log.warning('Timeout occurred')
                 break
 
-        return self.step_counter < self.num_z_planes
+        return (self.step_counter < self.num_z_planes) and (not self.aborted)
 
     def pauseTask(self):
         """ """
