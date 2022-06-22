@@ -42,7 +42,9 @@ from tifffile import TiffWriter
 from functools import wraps
 from time import time, sleep
 
-data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication did not work)
+# Global variable to follow data registration for each cycle (signal/slot communication is not available when working
+# with thread pool)
+data_saved = True
 
 
 # Defines the decorator function for the log
@@ -54,7 +56,8 @@ def log(func):
         result = func(*args, **kwargs)
         t1 = time()
         task_logger = logging.getLogger('Task_logging')
-        task_logger.info(f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
+        task_logger.info(
+            f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
         return result
     return wrap
 
@@ -199,7 +202,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_config_path: str = self.config['path_to_user_config']
         self.n_dz_calibration_cycles: int = 1
         self.sample_name: str = ""
-        self.exposure: dict = {}
+        self.exposure: float = 0
         self.centered_focal_plane: bool = False
         self.num_z_planes: int = 0
         self.z_step: float = 0.25  # in µm
@@ -220,6 +223,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.dz: list = []
         self.calibration_path: str = ""
         self.FTL_init_time: float = time()
+        self.timeout: float = 0
 
         print('Task {0} added!'.format(self.name))
 
@@ -276,7 +280,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
             self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
             self.ref['cam'].stop_acquisition()  # for safety
-            self.ref['cam'].start_acquisition() # in case the camera is sending a false trigger
+            self.ref['cam'].start_acquisition()  # in case the camera is sending a false trigger
             sleep(1)
             self.ref['cam'].stop_acquisition()
 
@@ -289,6 +293,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
             self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                                   self.num_laserlines, self.exposure)
+
+            # defines the timeout value
+            self.timeout = self.num_laserlines * self.exposure + 0.1
 
             # set the active_roi to none to avoid having two active rois displayed
             # self.ref['roi'].active_roi = None
@@ -481,14 +488,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # convert the imaging_sequence given by user into format required by the bitfile
         wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
-        print(f'wavelength first : {wavelengths}')
+        # print(f'wavelength first : {wavelengths}')
         for n, key in enumerate(wavelengths):
             if key == 'Brightfield':
                 wavelengths[n] = 0
             else:
                 wavelengths[n] = self.lightsource_dict[key]
         # wavelengths = [self.lightsource_dict[key] for key in wavelengths]
-        print(f'wavelength second : {wavelengths}')
+        # print(f'wavelength second : {wavelengths}')
         for i in range(self.num_laserlines, 5):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths
@@ -785,7 +792,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
 
                 t1 = time() - t0
-                if t1 > 1:  # for safety: timeout if no signal received within 1 s
+                if t1 > self.timeout:  # for safety: timeout if no signal received within the indicated duration
                     self.log.warning('Timeout occurred')
                     break
 

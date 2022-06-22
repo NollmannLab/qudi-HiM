@@ -294,6 +294,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
 
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
+
         elif experiment == 'Multicolor scan Airyscan':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
@@ -386,6 +389,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+
+            # Modify the laser list in order to add the bright field control
+            self._mw.laser_ComboBox.addItems(['Brightfield'])
 
         elif experiment == 'ROI multicolor scan Airyscan':
             # chose the right the listview model

@@ -41,7 +41,7 @@ from qtpy import QtCore
 from tifffile import TiffWriter
 from functools import wraps
 from time import time, sleep
-from scipy.interpolate import interp1d
+# from scipy.interpolate import interp1d
 
 
 # Defines the decorator function for the log
@@ -53,7 +53,8 @@ def log(func):
         result = func(*args, **kwargs)
         t1 = time()
         task_logger = logging.getLogger('Task_logging')
-        task_logger.info(f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
+        task_logger.info(
+            f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
         return result
     return wrap
 
@@ -92,7 +93,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.user_config_path: str = self.config['path_to_user_config']
         self.n_dz_calibration_cycles: int = 1
         self.sample_name: str = ""
-        self.exposure: dict = {}
+        self.exposure: float = 0
         self.centered_focal_plane: bool = False
         self.num_z_planes: int = 0
         self.z_step: int = 0
@@ -114,6 +115,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.calibration_path: str = ""
         self.hubble_calibration_step: int = 2  # should it be in the config file?
         self.hubble_init_time: float = time()
+        self.timeout: float = 0
 
         print('Task {0} added!'.format(self.name))
 
@@ -170,7 +172,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.num_frames = self.num_roi * self.num_z_planes * self.num_laserlines
             self.ref['cam'].prepare_camera_for_multichannel_imaging(10, self.exposure, None, None, None)
             self.ref['cam'].stop_acquisition()  # for safety
-            self.ref['cam'].start_acquisition() # in case the camera is sending a false trigger
+            self.ref['cam'].start_acquisition()  # in case the camera is sending a false trigger
             sleep(1)
             self.ref['cam'].stop_acquisition()
             self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
@@ -184,6 +186,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 f'z planes : {self.num_z_planes} - wavelengths : {self.wavelengths} - intensities : {self.intensities}')
             self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                                   self.num_laserlines, self.exposure)
+
+            # defines the timeout value
+            self.timeout = self.num_laserlines * self.exposure + 0.1
 
             # set the active_roi to none to avoid having two active rois displayed
             # self.ref['roi'].active_roi = None
@@ -883,7 +888,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
 
                 t1 = time() - t0
-                if t1 > 1:  # for safety: timeout if no signal received within 1 s
+                if t1 > self.timeout:  # for safety: timeout if no signal received within the indicated duration
                     self.log.warning('Timeout occurred')
                     break
 
