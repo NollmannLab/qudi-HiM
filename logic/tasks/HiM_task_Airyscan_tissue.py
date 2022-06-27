@@ -107,6 +107,9 @@ class Task(InterruptableTask):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        self.threadpool = QtCore.QThreadPool()
+
         self.user_config_path: str = self.config['path_to_user_config']
         self.directory: str = ""
         self.zen_directory: str = ""
@@ -151,6 +154,7 @@ class Task(InterruptableTask):
         self.save_network_path: str = ""
         self.transfer_data: bool = False
         self.uploaded_files: list = []
+        self.network_directory: str = ""
 
     def startTask(self):
         """ """
@@ -251,8 +255,10 @@ class Task(InterruptableTask):
                                              recursive=True)
 
         # create a directory in which all the metadata will be saved (for zen the acquisition parameters and file name
-        # are saved on a separate computer)
+        # are saved on a separate computer) and create the network directory as well
         self.directory = self.create_directory(self.save_path)
+        if self.transfer_data:
+            self.network_directory = self.create_directory(self.save_network_path)
 
         # # save the acquisition parameters
         # metadata = self.get_metadata()
@@ -773,6 +779,8 @@ class Task(InterruptableTask):
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.zen_ref_images_path = self.user_param_dict['zen_ref_images_path']
                 self.zen_saving_path = self.user_param_dict['zen_saving_path']
+                self.transfer_data = self.user_param_dict['transfer_data']
+                self.save_network_path = self.user_param_dict['save_network_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -1086,14 +1094,14 @@ class Task(InterruptableTask):
 
         @return: path_to_upload : list of all the files in the local directory
         """
-        # look for all the tif/npy/yml files in the folder
-        path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
+        # look for all the czi/txt/npy/yml files in the folder
+        path_to_upload_npy = glob(self.directory + '/*.npy', recursive=True)
         print(f'Number of npy files found : {len(path_to_upload_npy)}')
-        path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
-        print(f'Number of yaml files found : {len(path_to_upload_yml)}')
+        path_to_upload_txt = glob(self.directory + '/*.txt', recursive=True)
+        print(f'Number of yaml files found : {len(path_to_upload_txt)}')
         path_to_upload_czi = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
         print(f'Number of tif files found : {len(path_to_upload_czi)}')
-        path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_czi
+        path_to_upload = path_to_upload_npy + path_to_upload_txt + path_to_upload_czi
 
         # # look for all the tif/npy/yml files in the destination folder
         # uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
@@ -1148,7 +1156,7 @@ class Task(InterruptableTask):
             # they are. However, the czi files needs to be converted, renamed and saved as tif. The following part is
             # handling the renaming of the czi files.
             _, file_extension = os.path.splitext(path)
-            if file_extension is not '.czi':
+            if file_extension != '.czi':
                 relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
                 network_dir = os.path.join(self.network_directory, relative_dir)
                 os.makedirs(network_dir, exist_ok=True)
