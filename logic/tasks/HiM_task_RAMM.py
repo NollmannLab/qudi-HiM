@@ -49,7 +49,6 @@ data_saved = True  # Global variable to follow data registration for each cycle 
 # available with QRunnable - however, since qudi is using QThreadPool & QRunnable, I kept the same method for multi-
 # threading.
 
-
 class UploadDataWorker(QtCore.QRunnable):
     """ Worker thread to parallelize data uploading to network during injections.
 
@@ -116,7 +115,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log_path: str = ""
         self.num_frames: int = 0
         self.sample_name: str = ""
-        self.exposure: float = ""
+        self.exposure: float = 0.05
         self.num_z_planes: int = 0
         self.z_step: float = 0
         self.centered_focal_plane: bool = False
@@ -228,10 +227,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # close default FPGA session
         self.ref['laser'].close_default_session()
-
-        # # prepare the camera
-        # self.num_frames = self.num_z_planes * self.num_laserlines
-        # self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
         # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
