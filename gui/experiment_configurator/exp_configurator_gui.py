@@ -1071,10 +1071,12 @@ class ExpConfiguratorGUI(GUIBase):
         self._exp_logic.img_sequence_model_timelapse_palm.layoutChanged.emit()
         self._mw.save_path_LineEdit.setText(self._exp_logic.config_dict.get('save_path', ''))
         self._mw.save_network_path_LineEdit.setText(self._exp_logic.config_dict.get('save_network_path', ''))
+        self._mw.TransferData_checkBox.setChecked(self._exp_logic.config_dict.get('transfer_data', False))
         self._mw.fileformat_ComboBox.setCurrentText(self._exp_logic.config_dict.get('file_format', ''))
         self._mw.num_z_planes_SpinBox.setValue(self._exp_logic.config_dict.get('num_z_planes', 1))
         self._mw.z_step_DSpinBox.setValue(self._exp_logic.config_dict.get('z_step', 0.0))
-        self._mw.centered_focal_plane_CheckBox.setChecked(self._exp_logic.config_dict.get('centered_focal_plane', False))
+        self._mw.centered_focal_plane_CheckBox.setChecked(
+            self._exp_logic.config_dict.get('centered_focal_plane', False))
         self._mw.roi_list_path_LineEdit.setText(self._exp_logic.config_dict.get('roi_list_path', ''))
         self._mw.injections_list_LineEdit.setText(self._exp_logic.config_dict.get('injections_path', ''))
         self._mw.dapi_data_LineEdit.setText(self._exp_logic.config_dict.get('dapi_path', ''))
