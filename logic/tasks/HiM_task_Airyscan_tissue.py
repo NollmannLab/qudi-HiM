@@ -42,6 +42,7 @@ from time import sleep
 from datetime import datetime
 from scipy.signal import correlate
 from czifile import imread
+from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
@@ -72,12 +73,28 @@ class UploadDataWorker(QtCore.QRunnable):
         """ Copy the file to destination
         """
         _, file_extension = os.path.splitext(self.data_local_path)
-        if file_extension is not '.czi':
+        if file_extension != '.czi':
             shutil.copy(self.data_local_path, self.data_network_path)
-            global data_saved
-            data_saved = True
         else:
-            print(self.data_local_path)
+            self.save_czi_to_tif()
+
+        global data_saved
+        data_saved = True
+
+    def save_czi_to_tif(self):
+        """ Convert the czi file and save it on the network as a tif
+        """
+        movie = imread(self.data_local_path)
+        print(f'movie shape is {movie.shape}')
+        n_channel = movie.shape[1]
+        n_z = movie.shape[2]
+
+        with TiffWriter(self.data_network_path) as tf:
+            for z in range(n_z):
+                for c in range(n_channel):
+                    im = movie[0, c, z, :, :, 0]
+                    im = np.array(im)
+                    tf.save(im.astype(np.uint16))
 
 
 class Task(InterruptableTask):
@@ -168,6 +185,13 @@ class Task(InterruptableTask):
         self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
 
+        # create the tkinter root window and hide it
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+        # send an error message to make sure the filter on the backport of the microscope is set to position 2
+        messagebox.showinfo("Check microscope configuration", "Make sure the back-port filter is set on position 2")
+
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
             self.log.warning(
@@ -217,10 +241,6 @@ class Task(InterruptableTask):
         #                                      recursive=True)
         # return the list of immediate subdirectories in self.zen_saving_path
         zen_folder_list_before = glob(os.path.join(self.zen_saving_path, '*'))
-
-        # create the tkinter root window and hide it
-        self.root = tk.Tk()
-        self.root.withdraw()
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
@@ -704,6 +724,11 @@ class Task(InterruptableTask):
             except Exception:  # in case cleanup task was called before self.status_dict_path is defined
                 pass
 
+        # save correlation score
+        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
+
+        # if the task was not aborted, make sure all the files were properly transferred (if the online transfer option
+        # was selected by the user)
         if self.aborted:
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
@@ -718,9 +743,6 @@ class Task(InterruptableTask):
             while path_to_upload and not self.aborted:
                 time.sleep(1)
                 path_to_upload = self.launch_data_uploading(path_to_upload)
-
-        # save correlation score
-        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
 
         # destroy the tkinter window
         self.root.destroy()
@@ -1098,9 +1120,9 @@ class Task(InterruptableTask):
         path_to_upload_npy = glob(self.directory + '/*.npy', recursive=True)
         print(f'Number of npy files found : {len(path_to_upload_npy)}')
         path_to_upload_txt = glob(self.directory + '/*.txt', recursive=True)
-        print(f'Number of yaml files found : {len(path_to_upload_txt)}')
+        print(f'Number of txt files found : {len(path_to_upload_txt)}')
         path_to_upload_czi = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
-        print(f'Number of tif files found : {len(path_to_upload_czi)}')
+        print(f'Number of czi files found : {len(path_to_upload_czi)}')
         path_to_upload = path_to_upload_npy + path_to_upload_txt + path_to_upload_czi
 
         # # look for all the tif/npy/yml files in the destination folder
@@ -1115,27 +1137,27 @@ class Task(InterruptableTask):
         # remove from the list all the files that have already been transferred
         selected_path_to_upload = set(path_to_upload)
         for path in path_to_upload:
-            file_name = os.path.basename(path)
-            if file_name in self.uploaded_files:
+            # file_name = os.path.basename(path)
+            if path in self.uploaded_files:
                 selected_path_to_upload.remove(path)
         selected_path_to_upload = list(selected_path_to_upload)
 
         # sort the list based on the file format
         idx_czi = []
         idx_npy = []
-        idx_yaml = []
+        idx_txt = []
 
         for n, path in enumerate(selected_path_to_upload):
             if path.__contains__('.npy'):
                 idx_npy.append(n)
-            elif path.__contains__('.yaml'):
-                idx_yaml.append(n)
+            elif path.__contains__('.txt'):
+                idx_txt.append(n)
             else:
                 idx_czi.append(n)
 
         # build the final list of file to transfer
         path_to_upload_sorted = [selected_path_to_upload[i] for i in idx_npy] \
-                                + [selected_path_to_upload[i] for i in idx_yaml] \
+                                + [selected_path_to_upload[i] for i in idx_txt] \
                                 + [selected_path_to_upload[i] for i in idx_czi]
 
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
@@ -1176,7 +1198,11 @@ class Task(InterruptableTask):
         return path_to_upload
 
     def rename_czi(self, movie_path):
+        """ According to the experiment's parameters defined on Qudi, each czi file is associated to a unique file name.
 
+        @param movie_path: path to the czi file selected for uploading
+        @return: name of the associated tif file indicating the ROI, RT and scan number for the selected file
+        """
         # list all the czi files and sort them according to the acquisition order
         czi_path = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
 
