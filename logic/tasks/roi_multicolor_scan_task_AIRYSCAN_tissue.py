@@ -194,7 +194,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
         # --------------------------------------------------------------------------------------------------------------
-        # first imaging sequence
+        # imaging sequence
         # --------------------------------------------------------------------------------------------------------------
 
         # make sure the celesta laser source is ready
