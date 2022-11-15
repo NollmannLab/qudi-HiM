@@ -261,14 +261,21 @@ class Task(InterruptableTask):
         # return the list of immediate subdirectories in self.zen_saving_path and compare it to the previous list. When
         # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
         # folder where the czi data will be saved is defined.
-        zen_folder_list_after = glob(os.path.join(self.zen_saving_path, '*'))
-        self.zen_directory = list(set(zen_folder_list_after) - set(zen_folder_list_before))
-        if len(self.zen_directory) == 1:
-            self.zen_directory = self.zen_directory[0]
-            print(f'ZEN will save the data in the following folder : {self.zen_directory}')
-        else:
-            print('More than one folder were found. The acquisition is aborted')
-            self.aborted = True
+        attempt = 0
+        while attempt < 10:
+
+            attempt = attempt + 1
+            zen_folder_list_after = glob(os.path.join(self.zen_saving_path, '*'))
+            self.zen_directory = list(set(zen_folder_list_after) - set(zen_folder_list_before))
+
+            if len(self.zen_directory) == 1:
+                self.zen_directory = self.zen_directory[0]
+                print(f'ZEN will save the data in the following folder : {self.zen_directory}')
+            elif len(self.zen_directory) == 0:
+                sleep(1)
+            else:
+                print('More than one folder were found. The acquisition is aborted')
+                self.aborted = True
 
         # check the autofocus images in the save folder
         self.save_path_content_before = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
