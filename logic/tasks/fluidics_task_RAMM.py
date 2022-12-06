@@ -138,12 +138,12 @@ class Task(InterruptableTask):
 
             ready = self.ref['flow'].target_volume_reached
             while not ready:
-                sleep(2)
+                sleep(1)
                 ready = self.ref['flow'].target_volume_reached
                 if self.aborted:
                     ready = True
             self.ref['flow'].stop_pressure_regulation_loop()
-            sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+            sleep(1)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
             self.ref['flow'].set_pressure(0.0)
         else:  # an incubation step
             incubation_time = self.hybridization_list[self.step_counter]['time']
