@@ -164,7 +164,7 @@ class FlowcontrolLogic(GenericLogic):
 
     # attributes for pid - the sampling rate defines the frequency at which the volume & flow-rate will be measured. Be
     # aware that modifying this value will likely require to change the pid settings as well.
-    sampling_interval = 1  # in s
+    sampling_interval = 1.  # in s
     p_gain = ConfigOption('p_gain', 0.005, missing='warn')   # 0.005
     i_gain = ConfigOption('i_gain', 0.01, missing='warn')  # 0.001 for Airyscan   # 0.01 for RAMM
     d_gain = ConfigOption('d_gain', 0.0, missing='warn')  # 0.0
@@ -440,8 +440,8 @@ class FlowcontrolLogic(GenericLogic):
 
     def volume_measurement_loop(self):
         """ Perform a step in the volume count loop.
-        :param: int target_volume: target volume to be injected.
-                                Volume measurement will be stopped when target volume is reached (necessary for tasks).
+        :param: int target_volume: target volume to be injected. Volume measurement will be stopped when target volume
+        is reached (necessary for tasks).
         :return: None
         """
         # calculate the fluidics parameters. Note that the total volume is rounded as safety to avoid entering into the
