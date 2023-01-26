@@ -544,8 +544,12 @@ class FocusLogic(GenericLogic):
                     return
                 else:
                     self.autofocus_enabled = False
-                    self.log.warning('autofocus signal not found')
+                    self.log.warning('Autofocus signal not found - the procedure is stopped')
                     self.sigAutofocusError.emit()
+                    # if the search focus option is True, move the offset back to its initial position
+                    if search_focus:
+                        offset = self._autofocus_logic._focus_offset
+                        self._autofocus_logic.stage_move_z(-offset)
                     return
             else:
                 self.autofocus_enabled = False
