@@ -206,6 +206,16 @@
           </property>
          </widget>
         </item>
+        <item row="4" column="0">
+         <widget class="QLabel" name="label_3">
+          <property name="text">
+           <string>Start ROI at: </string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="1">
+         <widget class="QSpinBox" name="roi_starting_digit_spinBox"/>
+        </item>
        </layout>
       </item>
      </layout>
@@ -240,7 +250,7 @@
      <x>0</x>
      <y>0</y>
      <width>1091</width>
-     <height>22</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuMenu">
@@ -300,6 +310,7 @@
     <bool>false</bool>
    </attribute>
    <addaction name="tracking_mode_Action"/>
+   <addaction name="actionLoad_ROI_template"/>
   </widget>
   <action name="new_roi_Action">
    <property name="text">
@@ -378,6 +389,14 @@
   <action name="close_MenuAction">
    <property name="text">
     <string>Close</string>
+   </property>
+  </action>
+  <action name="actionLoad_ROI_template">
+   <property name="text">
+    <string>Load ROI template</string>
+   </property>
+   <property name="toolTip">
+    <string>Load template for RNA / DNA ROIs</string>
    </property>
   </action>
  </widget>
