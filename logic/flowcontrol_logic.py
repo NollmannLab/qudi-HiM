@@ -28,6 +28,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+# import logging
 import numpy as np
 from time import sleep
 from simple_pid import PID
@@ -36,6 +37,24 @@ from qtpy import QtCore
 from logic.generic_logic import GenericLogic
 from core.configoption import ConfigOption
 from core.connector import Connector
+# from functools import wraps
+
+
+# # Defines the decorator function for the log
+# def log(func):
+#     @wraps(func)
+#     def wrap(*args, **kwargs):
+#         global t_start
+#         global t_step
+#         t0 = time()
+#         result = func(*args, **kwargs)
+#         t1 = time()
+#         task_logger = logging.getLogger('Task_logging')
+#         task_logger.info(
+#             f'function : {func.__name__} - time since start = {t0 - t_start}s - time since last = {t0 - t_step}s - '
+#             f'execution time = {t1 - t0}s')
+#         return result
+#     return wrap
 
 
 # ======================================================================================================================
