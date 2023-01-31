@@ -112,6 +112,7 @@ class FluidicsGUI(GUIBase):
     positioning_logic = Connector(interface='PositioningLogic')
 
     # config options
+    tube_types = ConfigOption('tube_type', '')
     pos1_x_default = ConfigOption('pos1_x_default', 0)
     pos1_y_default = ConfigOption('pos1_y_default', 0)
     pos1_z_default = ConfigOption('pos1_z_default', 0)
@@ -344,6 +345,11 @@ class FluidicsGUI(GUIBase):
         """
         # Create the settings window
         self._pos1_sd = Position1SettingDialog()
+
+        # update the combobox and connect it to the select_tube_type method
+        self._pos1_sd.Tube_comboBox.addItems(self.tube_types)
+        self._pos1_sd.Tube_comboBox.currentIndexChanged.connect(self.select_tube_type)
+
         # update the labels according to connected hardware
         self._pos1_sd.label.setText(self._positioning_logic.first_axis_label)
         self._pos1_sd.label_2.setText(self._positioning_logic.second_axis_label)
@@ -354,6 +360,11 @@ class FluidicsGUI(GUIBase):
         self._pos1_sd.rejected.connect(self.sd_set_default_values)  # cancel button
 
         # start with default values
+        self.sd_set_default_values()
+
+    def select_tube_type(self):
+        """ Update the default value according to the selected tube type
+        """
         self.sd_set_default_values()
 
     def set_position1(self):
@@ -368,9 +379,10 @@ class FluidicsGUI(GUIBase):
     def sd_set_default_values(self):
         """ Callback of the settings dialog cancel button.
         Resets default values. """
+        idx = self._pos1_sd.Tube_comboBox.currentIndex()
         self._pos1_sd.x_pos_DSpinBox.setValue(self.pos1_x_default)
         self._pos1_sd.y_pos_DSpinBox.setValue(self.pos1_y_default)
-        self._pos1_sd.z_pos_DSpinBox.setValue(self.pos1_z_default)
+        self._pos1_sd.z_pos_DSpinBox.setValue(self.pos1_z_default[idx])
 # end of position1 settings window related methods ---------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------------------------------------------

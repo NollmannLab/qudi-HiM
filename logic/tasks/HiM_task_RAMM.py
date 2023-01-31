@@ -49,7 +49,6 @@ data_saved = True  # Global variable to follow data registration for each cycle 
 # available with QRunnable - however, since qudi is using QThreadPool & QRunnable, I kept the same method for multi-
 # threading.
 
-
 class UploadDataWorker(QtCore.QRunnable):
     """ Worker thread to parallelize data uploading to network during injections.
 
@@ -96,22 +95,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Generic Task methods
     # ==================================================================================================================
 
-    # TODO :
-    #  defines the type for the variables self.var : type = default
-    #  simplify the code using tips from Thales - in the init defines functions that requires direct communication to
-    #  hardware
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.threadpool = QtCore.QThreadPool()
 
         self.user_config_path = self.config['path_to_user_config']
-        self.probe_counter = None
+        self.probe_counter: int = 0
         self.user_param_dict: dict = {}
         self.logging: bool = True
-        self.start: float = None
-        self.default_exposure = None
+        self.start: float = 0
+        self.default_exposure: float = 0.05
         self.directory: str = ""
         self.network_directory: str = ""
         self.log_folder: str = ""
@@ -119,30 +113,31 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.status_dict_path: str = ""
         self.status_dict: dict = {}
         self.log_path: str = ""
-        self.num_frames = None
+        self.num_frames: int = 0
         self.sample_name: str = ""
-        self.exposure = None
-        self.num_z_planes = None
-        self.z_step = None
+        self.exposure: float = 0.05
+        self.num_z_planes: int = 0
+        self.z_step: float = 0
         self.centered_focal_plane: bool = False
         self.imaging_sequence: list = []
         self.save_path: str = ""
         self.save_network_path: str = ""
         self.transfer_data: bool = False
-        self.file_format: str = None
-        self.roi_list_path: list = None
-        self.injections_path = None
+        self.file_format: str = ""
+        self.roi_list_path: list = []
+        self.injections_path: str = ""
         self.dapi_path: str = ""
         self.roi_names: list = []
-        self.num_laserlines = None
-        self.wavelengths = []
-        self.intensities = []
+        self.num_laserlines: int = 0
+        self.wavelengths: list = []
+        self.intensities: list = []
         self.probe_dict: dict = {}
         self.hybridization_list: list = []
         self.photobleaching_list: list = []
         self.buffer_dict: dict = {}
         self.probe_list: list = []
         self.prefix: str = ""
+        self.timeout: float = 0
 
     def startTask(self):
         """ """
@@ -233,15 +228,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
-        # # prepare the camera
-        # self.num_frames = self.num_z_planes * self.num_laserlines
-        # self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-
         # start the session on the fpga using the user parameters
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
+
+        # defines the timeout value
+        self.timeout = self.num_laserlines * self.exposure + 0.1
+
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
 
@@ -251,7 +246,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
         if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (
-        not self.ref['focus']._setpoint_defined):
+            not self.ref['focus']._setpoint_defined):
             return False
 
         if not self.aborted:
@@ -504,7 +499,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
 
                         t1 = time.time() - t0
-                        if t1 > 1:  # for safety: timeout if no signal received within 1 s
+                        if t1 > self.timeout:  # for safety: timeout if no signal received within the indicated time
                             self.log.warning('Timeout occurred')
                             break
 
@@ -674,7 +669,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
-        return self.probe_counter < len(self.probe_list)
+        return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
     def pauseTask(self):
         """ """

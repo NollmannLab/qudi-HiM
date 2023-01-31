@@ -6,11 +6,11 @@ An extension to Qudi.
 
 This module contains a task to perform a multicolor scan on the Airyscan setup iterating over a list of ROIs.
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
-in each plane of the stack.)
+in each plane of the stack). This Task was created for Ariana.
 
-@author: F. Barho, JB. Fiche
+@author: JB. Fiche
 
-Created on Wed March 30 2021
+Created on Mon July 13 2022
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -127,8 +127,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is compatible with experiment ZEN/HiM_celesta')
-        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)/2))
+        self.log.warning('This task is ONLY compatible with experiment ZEN/ROI_celesta_Ariana')
+        self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)))
         self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
         self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
         self.log.warning('Select the autofocus block and hit "Start Experiment"')
@@ -187,14 +187,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         sleep(0.1)
         self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
+        # switch ON the 405nm channel
+        self.ref['daq'].write_to_ao_channel(5, 1)
+        # self.ref['daq'].write_to_ao_channel(5, 5)
+
         # wait for ZEN trigger indicating the task is completed
         trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
         while trigger == 0 and not self.aborted:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
+        # switch OFF the 405nm channel
+        self.ref['daq'].write_to_ao_channel(0, 1)
+        # self.ref['daq'].write_to_ao_channel(0, 5)
+
         # --------------------------------------------------------------------------------------------------------------
-        # first imaging sequence
+        # imaging sequence
         # --------------------------------------------------------------------------------------------------------------
 
         # make sure the celesta laser source is ready
@@ -229,54 +237,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # save the file name
         self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
-        # --------------------------------------------------------------------------------------------------------------
-        # move to the second ROI
-        # --------------------------------------------------------------------------------------------------------------
-
-        # define the name of the file according to the roi number and cycle
-        scan_name = self.file_name(self.roi_names[self.roi_counter])
-
-        # go to roi
-        self.ref['roi'].set_active_roi(name=self.roi_names[self.roi_counter])
-        self.ref['roi'].go_to_roi_xy()
-        self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
-        self.ref['roi'].stage_wait_for_idle()
-        self.roi_counter += 1
-
-        # --------------------------------------------------------------------------------------------------------------
-        # second imaging sequence
-        # --------------------------------------------------------------------------------------------------------------
-
-        # launch the acquisition task
-        sleep(5)
-        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
-        sleep(0.1)
-        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
-
-        for plane in range(self.num_z_planes):
-            for i in range(len(self.imaging_sequence)):
-
-                # daq waiting for global_exposure trigger from the camera ----------------------------------------------
-                error = self.wait_for_camera_trigger(1)
-                if error is True:
-                    return False
-
-                # switch the selected laser line ON --------------------------------------------------------------------
-                # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
-                self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
-
-                # daq waiting for global_exposure trigger from the camera to end ---------------------------------------
-                error = self.wait_for_camera_trigger(0)
-                if error is True:
-                    return False
-
-                # switch the selected laser line OFF -------------------------------------------------------------------
-                self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
-
-        # save the file name
-        self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
-
-        return (self.roi_counter < len(self.roi_names)) and (not self.aborted)
+        return self.roi_counter < len(self.roi_names)
 
     def pauseTask(self):
         """ """
