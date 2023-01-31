@@ -380,8 +380,6 @@ class FluidicsGUI(GUIBase):
         """ Callback of the settings dialog cancel button.
         Resets default values. """
         idx = self._pos1_sd.Tube_comboBox.currentIndex()
-        print(idx)
-        print(self.pos1_z_default)
         self._pos1_sd.x_pos_DSpinBox.setValue(self.pos1_x_default)
         self._pos1_sd.y_pos_DSpinBox.setValue(self.pos1_y_default)
         self._pos1_sd.z_pos_DSpinBox.setValue(self.pos1_z_default[idx])

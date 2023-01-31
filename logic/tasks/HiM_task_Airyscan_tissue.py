@@ -37,16 +37,64 @@ import os
 import re
 import time
 import tkinter as tk
+import shutil
 from time import sleep
 from datetime import datetime
 from scipy.signal import correlate
 from czifile import imread
+from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
 from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from tkinter import messagebox
+from qtpy import QtCore
+
+
+data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
+
+
+class UploadDataWorker(QtCore.QRunnable):
+    """ Worker thread to parallelize data uploading to network during injections. This worker is opening the czi file
+    acquired by ZEN and saving it on the network as a tif.
+
+    :param: str data_path = path to the local data
+    :param: str dest_folder = path where the data should be uploaded
+    """
+
+    def __init__(self, data_path, dest_folder):
+        super(UploadDataWorker, self).__init__()
+        self.data_local_path = data_path
+        self.data_network_path = dest_folder
+
+    @QtCore.Slot()
+    def run(self):
+        """ Copy the file to destination
+        """
+        _, file_extension = os.path.splitext(self.data_local_path)
+        if file_extension != '.czi':
+            shutil.copy(self.data_local_path, self.data_network_path)
+        else:
+            self.save_czi_to_tif()
+
+        global data_saved
+        data_saved = True
+
+    def save_czi_to_tif(self):
+        """ Convert the czi file and save it on the network as a tif
+        """
+        movie = imread(self.data_local_path)
+        print(f'movie shape is {movie.shape}')
+        n_channel = movie.shape[1]
+        n_z = movie.shape[2]
+
+        with TiffWriter(self.data_network_path) as tf:
+            for z in range(n_z):
+                for c in range(n_channel):
+                    im = movie[0, c, z, :, :, 0]
+                    im = np.array(im)
+                    tf.save(im.astype(np.uint16))
 
 
 class Task(InterruptableTask):
@@ -76,9 +124,12 @@ class Task(InterruptableTask):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        print('Task {0} added!'.format(self.name))
+
+        self.threadpool = QtCore.QThreadPool()
+
         self.user_config_path: str = self.config['path_to_user_config']
         self.directory: str = ""
+        self.zen_directory: str = ""
         self.user_param_dict: dict = {}
         self.sample_name: str = ""
         self.probe_counter: int = 0
@@ -117,6 +168,10 @@ class Task(InterruptableTask):
         self.correlation_score: list = []
         self.save_path_content_before: list = []
         self.root = None
+        self.save_network_path: str = ""
+        self.transfer_data: bool = False
+        self.uploaded_files: list = []
+        self.network_directory: str = ""
 
     def startTask(self):
         """ """
@@ -129,6 +184,13 @@ class Task(InterruptableTask):
         self.ref['valves'].disable_valve_positioning()
         self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
+
+        # create the tkinter root window and hide it
+        self.root = tk.Tk()
+        self.root.withdraw()
+
+        # send an error message to make sure the filter on the backport of the microscope is set to position 2
+        messagebox.showinfo("Check microscope configuration", "Make sure the back-port filter is set on position 2")
 
         # control if experiment can be started : origin defined in position logic ?
         if not self.ref['pos'].origin:
@@ -174,13 +236,11 @@ class Task(InterruptableTask):
         # define the correlation list where the data will be saved
         self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
 
-        # check the images in the save folder
-        self.save_path_content_before = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
-                                             recursive=True)
-
-        # create the tkinter root window and hide it
-        self.root = tk.Tk()
-        self.root.withdraw()
+        # # check the images in the save folder
+        # self.save_path_content_before = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+        #                                      recursive=True)
+        # return the list of immediate subdirectories in self.zen_saving_path
+        zen_folder_list_before = glob(os.path.join(self.zen_saving_path, '*'))
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
@@ -198,8 +258,34 @@ class Task(InterruptableTask):
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT7_ZEN, 1)
 
-        # create a directory in which all the data will be saved
+        # return the list of immediate subdirectories in self.zen_saving_path and compare it to the previous list. When
+        # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
+        # folder where the czi data will be saved is defined.
+        attempt = 0
+        while attempt < 10:
+
+            attempt = attempt + 1
+            zen_folder_list_after = glob(os.path.join(self.zen_saving_path, '*'))
+            self.zen_directory = list(set(zen_folder_list_after) - set(zen_folder_list_before))
+
+            if len(self.zen_directory) == 1:
+                self.zen_directory = self.zen_directory[0]
+                print(f'ZEN will save the data in the following folder : {self.zen_directory}')
+            elif len(self.zen_directory) == 0:
+                sleep(1)
+            else:
+                print('More than one folder were found. The acquisition is aborted')
+                self.aborted = True
+
+        # check the autofocus images in the save folder
+        self.save_path_content_before = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                             recursive=True)
+
+        # create a directory in which all the metadata will be saved (for zen the acquisition parameters and file name
+        # are saved on a separate computer) and create the network directory as well
         self.directory = self.create_directory(self.save_path)
+        if self.transfer_data:
+            self.network_directory = self.create_directory(self.save_network_path)
 
         # # save the acquisition parameters
         # metadata = self.get_metadata()
@@ -278,6 +364,12 @@ class Task(InterruptableTask):
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
+
             # position the valves for hybridization sequence
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: inject probe
             self.ref['valves'].wait_for_idle()
@@ -333,6 +425,8 @@ class Task(InterruptableTask):
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         self.append_flow_data(pressure, volume, flowrate)
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
 
                         if self.aborted:
                             ready = True
@@ -358,6 +452,10 @@ class Task(InterruptableTask):
                     num_steps = t // 30
                     remainder = t % 30
                     for i in range(num_steps):
+
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
+
                         if not self.aborted:
                             time.sleep(30)
                     if not self.aborted:
@@ -387,13 +485,18 @@ class Task(InterruptableTask):
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
+            # make sure there is no data being transferred
+            global data_saved
+            print('Checking there is no data being transferred ...')
+            while not data_saved:
+                time.sleep(1)
+
+            # ref_folder = r'W:\jb\2022-05-11\RT-7.czi\RT-7_AcquisitionBlock1.czi'
+            # im_list = glob(os.path.join(ref_folder, '*.czi'))
+            # im_list = sorted(im_list)
+            # print(im_list)
+
             # start the acquisition loop over all the roi
-
-            ref_folder = r'W:\jb\2022-05-11\RT-7.czi\RT-7_AcquisitionBlock1.czi'
-            im_list = glob(os.path.join(ref_folder, '*.czi'))
-            im_list = sorted(im_list)
-            print(im_list)
-
             for n_roi, roi in enumerate(self.roi_names):
                 if self.aborted:
                     break
@@ -503,6 +606,19 @@ class Task(InterruptableTask):
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
 
+            # rinse needle after photobleaching
+            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
+            self.ref['valves'].wait_for_idle()
+            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
+            self.ref['valves'].wait_for_idle()
+            start_rinsing_time = time.time()
+
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
+
             # iterate over the steps in the photobleaching sequence
             for step in range(len(self.photobleaching_list)):
                 if self.aborted:
@@ -536,6 +652,8 @@ class Task(InterruptableTask):
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         self.append_flow_data(pressure, volume, flowrate)
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
 
                         if self.aborted:
                             ready = True
@@ -562,6 +680,8 @@ class Task(InterruptableTask):
                     num_steps = t // 30
                     remainder = t % 30
                     for i in range(num_steps):
+                        # if data are ready to be saved, launch a worker
+                        path_to_upload = self.launch_data_uploading(path_to_upload)
                         if not self.aborted:
                             time.sleep(30)
                     time.sleep(remainder)
@@ -571,13 +691,11 @@ class Task(InterruptableTask):
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
-            # rinse needle after photobleaching
-            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
-            self.ref['valves'].wait_for_idle()
-            self.ref['flow'].start_rinsing(60)
-            time.sleep(61)   # block the program flow until rinsing is finished
+            # verify if rinsing finished in the meantime
+            current_time = time.time()
+            diff = current_time - start_rinsing_time
+            if diff < 60:
+                time.sleep(60 - diff + 1)
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -613,15 +731,25 @@ class Task(InterruptableTask):
             except Exception:  # in case cleanup task was called before self.status_dict_path is defined
                 pass
 
-        if self.aborted:
+        # save correlation score
+        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
 
+        # if the task was not aborted, make sure all the files were properly transferred (if the online transfer option
+        # was selected by the user)
+        if self.aborted:
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
             # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
             # position, etc. (maybe not necessary because all those elements will still be done above)
-
-        # save correlation score
-        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
+        else:
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                path_to_upload = self.check_acquired_data()
+            else:
+                path_to_upload = []
+            while path_to_upload and not self.aborted:
+                time.sleep(1)
+                path_to_upload = self.launch_data_uploading(path_to_upload)
 
         # destroy the tkinter window
         self.root.destroy()
@@ -680,6 +808,8 @@ class Task(InterruptableTask):
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.zen_ref_images_path = self.user_param_dict['zen_ref_images_path']
                 self.zen_saving_path = self.user_param_dict['zen_saving_path']
+                self.transfer_data = self.user_param_dict['transfer_data']
+                self.save_network_path = self.user_param_dict['save_network_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -932,11 +1062,16 @@ class Task(InterruptableTask):
         # analyze the content of the folder until a new autofocus image is detected
         new_image_found = False
         while not new_image_found:
-            save_path_content_after = glob(os.path.join(self.zen_saving_path, '**', '*_AcquisitionBlock1_pt*.czi'),
+            save_path_content_after = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
                                            recursive=True)
+            print(save_path_content_after)
             new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
             if len(new_autofocus_image_path) > 1:
                 sleep(0.5)
+                print('temporary file')
+            elif len(new_autofocus_image_path) == 0:
+                sleep(0.5)
+                print('no file')
             else:
                 new_image_found = True
 
@@ -968,3 +1103,143 @@ class Task(InterruptableTask):
         correlation_score = np.max(correlation_new) / np.max(correlation_ref)
 
         return correlation_score
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # data for acquisition tracking
+    # ------------------------------------------------------------------------------------------------------------------
+
+    @staticmethod
+    def calculate_save_projection(num_channel, image_array, saving_path):
+
+        # According to the number of channels acquired, split the stack accordingly
+        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+
+        # For each channel, the projection is calculated and saved as a npy file
+        for n_channel in range(num_channel):
+            image_array = deinterleaved_array_list[n_channel]
+            projection = np.max(image_array, axis=0)
+            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+            np.save(path, projection)
+
+    def check_acquired_data(self):
+        """ List all the acquired data in the directory and all the data already uploaded on the network. Compare the
+        data in order to return a list containing only the paths to the files that were not transferred yet. In order to
+        optimize the transfer, the npy and yaml files are processed first (allowing to use bokeh).
+
+        @return: path_to_upload : list of all the files in the local directory
+        """
+        # look for all the czi/txt/npy/yml files in the folder
+        path_to_upload_npy = glob(self.directory + '/*.npy', recursive=True)
+        print(f'Number of npy files found : {len(path_to_upload_npy)}')
+        path_to_upload_txt = glob(self.directory + '/*.txt', recursive=True)
+        print(f'Number of txt files found : {len(path_to_upload_txt)}')
+        path_to_upload_czi = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
+        print(f'Number of czi files found : {len(path_to_upload_czi)}')
+        path_to_upload = path_to_upload_npy + path_to_upload_txt + path_to_upload_czi
+
+        # # look for all the tif/npy/yml files in the destination folder
+        # uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
+        # uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
+        # uploaded_path_czi = glob(self.network_directory + '/**/*.czi', recursive=True)
+        # uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_czi
+        # uploaded_files = []
+        # for n, path in enumerate(uploaded_path):
+        #     uploaded_files.append(os.path.basename(path))
+
+        # remove from the list all the files that have already been transferred
+        selected_path_to_upload = set(path_to_upload)
+        for path in path_to_upload:
+            # file_name = os.path.basename(path)
+            if path in self.uploaded_files:
+                selected_path_to_upload.remove(path)
+        selected_path_to_upload = list(selected_path_to_upload)
+
+        # sort the list based on the file format
+        idx_czi = []
+        idx_npy = []
+        idx_txt = []
+
+        for n, path in enumerate(selected_path_to_upload):
+            if path.__contains__('.npy'):
+                idx_npy.append(n)
+            elif path.__contains__('.txt'):
+                idx_txt.append(n)
+            else:
+                idx_czi.append(n)
+
+        # build the final list of file to transfer
+        path_to_upload_sorted = [selected_path_to_upload[i] for i in idx_npy] \
+                                + [selected_path_to_upload[i] for i in idx_txt] \
+                                + [selected_path_to_upload[i] for i in idx_czi]
+
+        print(f'Number of files to upload : {len(path_to_upload_sorted)}')
+        return list(path_to_upload_sorted)
+
+    def launch_data_uploading(self, path_to_upload):
+        """ Look for the next file to upload and start the worker on a specific thread to launch the transfer
+
+        @param path_to_upload: list of all the files in the local directory
+        """
+        global data_saved
+
+        if data_saved and path_to_upload:
+
+            path = path_to_upload.pop(0)
+
+            # rewrite the path to the server, following the same hierarchy. Note that npy and yml files can be saved as
+            # they are. However, the czi files needs to be converted, renamed and saved as tif. The following part is
+            # handling the renaming of the czi files.
+            _, file_extension = os.path.splitext(path)
+            if file_extension != '.czi':
+                relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
+                network_dir = os.path.join(self.network_directory, relative_dir)
+                os.makedirs(network_dir, exist_ok=True)
+            else:
+                czi_renamed = self.rename_czi(path)
+                network_dir = os.path.join(self.network_directory, czi_renamed)
+
+            # launch the worker to start the transfer
+            data_saved = False
+            print(f"uploading {path}")
+            worker = UploadDataWorker(path, network_dir)
+            self.threadpool.start(worker)
+
+            # update the uploaded_files list
+            self.uploaded_files.append(path)
+
+        return path_to_upload
+
+    def rename_czi(self, movie_path):
+        """ According to the experiment's parameters defined on Qudi, each czi file is associated to a unique file name.
+
+        @param movie_path: path to the czi file selected for uploading
+        @return: name of the associated tif file indicating the ROI, RT and scan number for the selected file
+        """
+        # list all the czi files and sort them according to the acquisition order
+        czi_path = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
+
+        data_number = []
+        for file in czi_path:
+            n = re.findall(r'_pt\d+', file)
+            data_number.append(n[0][3:])
+
+        data_number = np.array(data_number)
+        data_number = data_number.astype(np.int16)
+        idx = np.argsort(data_number)
+
+        sorted_czi_path = []
+        for n in idx:
+            sorted_czi_path.append(czi_path[n])
+
+        # list all the names of the movie from the txt file updated during acquisition
+        with open(os.path.join(self.directory, 'movie_name.txt')) as f:
+            data_name = f.readlines()
+            data_name = [x.strip() for x in data_name]
+
+        # find the position of the selected file to upload in sorted_czi_path and return the associated name from
+        # data_name
+        idx = sorted_czi_path.index(movie_path)
+        return data_name[idx] + '.tif'
+
+
+

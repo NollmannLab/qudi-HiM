@@ -6,11 +6,11 @@ An extension to Qudi.
 
 This module contains a task to perform a multicolor scan on the Airyscan setup iterating over a list of ROIs.
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
-in each plane of the stack.)
+in each plane of the stack). This Task was created for Ariana.
 
 @author: JB. Fiche
 
-Created on Mon May 16 2022
+Created on Mon July 13 2022
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -127,7 +127,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # indicate to the user the parameters he should use for zen configuration
         self.log.warning('############ ZEN PARAMETERS ############')
-        self.log.warning('This task is ONLY compatible with experiment ZEN/HiM_celesta_autofocus_intensity')
+        self.log.warning('This task is ONLY compatible with experiment ZEN/ROI_celesta_Ariana')
         self.log.warning('Number of acquisition loops in ZEN experiment designer : {}'.format(len(self.roi_names)))
         self.log.warning('For each acquisition block C={} and Z={}'.format(self.num_laserlines, self.num_z_planes))
         self.log.warning('The number of ticked channels should be equal to {}'.format(self.num_laserlines))
@@ -187,11 +187,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         sleep(0.1)
         self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
+        # switch ON the 405nm channel
+        self.ref['daq'].write_to_ao_channel(5, 2)
+        # self.ref['daq'].write_to_ao_channel(5, 5)
+
         # wait for ZEN trigger indicating the task is completed
         trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
         while trigger == 0 and not self.aborted:
             sleep(.1)
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+
+        # switch OFF the 405nm channel
+        self.ref['daq'].write_to_ao_channel(0, 2)
+        # self.ref['daq'].write_to_ao_channel(0, 5)
 
         # --------------------------------------------------------------------------------------------------------------
         # imaging sequence
