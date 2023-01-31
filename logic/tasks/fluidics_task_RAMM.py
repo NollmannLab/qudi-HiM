@@ -30,8 +30,25 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 from logic.generic_task import InterruptableTask
-from time import sleep
+from time import sleep, time
+from functools import wraps
 import yaml
+import logging
+
+
+# Defines the decorator function for the log
+def log(func):
+    @wraps(func)
+    def wrap(*args, **kwargs):
+        t_init = args[0].FTL_init_time
+        t0 = time()
+        result = func(*args, **kwargs)
+        t1 = time()
+        task_logger = logging.getLogger('Task_logging')
+        task_logger.info(
+            f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
+        return result
+    return wrap
 
 
 class Task(InterruptableTask):
