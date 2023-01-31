@@ -1064,9 +1064,14 @@ class Task(InterruptableTask):
         while not new_image_found:
             save_path_content_after = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
                                            recursive=True)
+            print(save_path_content_after)
             new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
             if len(new_autofocus_image_path) > 1:
                 sleep(0.5)
+                print('temporary file')
+            elif len(new_autofocus_image_path) == 0:
+                sleep(0.5)
+                print('no file')
             else:
                 new_image_found = True
 
