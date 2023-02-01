@@ -5,9 +5,9 @@ qudi-HiM is a software package developed by the [Nollmann Lab](http://www.nollma
 qudi-HiM is built using the framework provided by [Qudi](https://github.com/Ulm-IQO/qudi), a suite of tools for operating multi-instrument and multi-computer laboratory experiments. The [Qudi](https://github.com/Ulm-IQO/qudi) Github repository contains a detailed documentation for users as well as guidelines for contributors.
 
 ## Documentation
-- [User's guide](https://github.com/NollmannLab/qudi-cbs/blob/master/documentation/qudi-cbs%20documentation/qudi-cbs_userguide/Qudi-CBS_UserGuide.md)
-- [Developer's guide](https://github.com/NollmannLab/qudi-cbs/blob/master/documentation/qudi-cbs%20documentation/qudi_cbs_developer)
-- [Hardware guides](https://github.com/NollmannLab/qudi-cbs/tree/master/documentation/qudi-cbs%20documentation/qudi-cbs_hardware)
+- [User's guide](https://github.com/NollmannLab/qudi-HiM/blob/master/documentation/qudi-cbs%20documentation/qudi-HiM_userguide/Qudi-CBS_UserGuide.md)
+- [Developer's guide](https://github.com/NollmannLab/qudi-HiM/blob/master/documentation/qudi-cbs%20documentation/qudi_HiM_developer/Developer_Guide_Qudi_CBS.md)
+- [Hardware guides](https://github.com/NollmannLab/qudi-HiM/tree/master/documentation/qudi-cbs%20documentation/qudi-HiM_hardware)
 
 [here](/home/jb/Repositories/qudi-cbs/documentation/qudi-cbs documentation/doc_sphinx/build/html/index.html)
 
