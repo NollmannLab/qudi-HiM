@@ -26,6 +26,8 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import time
+
 import numpy as np
 from time import sleep  #, time
 import os
@@ -550,6 +552,9 @@ class CameraLogic(GenericLogic):
         err = self._hardware.start_movie_acquisition(n_frames)
         if not err:
             self.log.warning('Video acquisition did not start')
+
+        # wait at least a full exposure time to make sure at least one image was acquired.
+        time.sleep(self._exposure * 2)
 
         # start a worker thread that will monitor the status of the saving
         worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
