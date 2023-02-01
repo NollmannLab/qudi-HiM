@@ -66,10 +66,10 @@ class HamiltonValve(Base, ValvePositionerInterface):
               - '6'
               - '7'
               - '8'
-            - - '1: Rinse needle'
-              - '2: Inject probe'
-            - - '1: Syringe'
-              - '2: Pump'
+            - - '1': Rinse needle
+              - '2': Inject probe
+            - - '1': Syringe
+              - '2': Pump
 
     # please specify for all elements corresponding information in the same order,
     # starting from the first valve in the daisychain (valve 'a')
@@ -110,6 +110,7 @@ class HamiltonValve(Base, ValvePositionerInterface):
             self.write(cmd)
             # self._valve_state[chr(n+97)] = 'Idle'
         self.wait_for_idle()
+        print('Hamilton valves initialization OK')
         self._valve_state = self.get_status()
 
     def on_deactivate(self):
@@ -207,7 +208,6 @@ class HamiltonValve(Base, ValvePositionerInterface):
             while self._valve_state[chr(n+97)] != "Y":
                 sleep(0.5)
                 self.get_status()
-
                 # this waits on valve 'a' until idle before moving to the next one
 
 # ----------------------------------------------------------------------------------------------------------------------

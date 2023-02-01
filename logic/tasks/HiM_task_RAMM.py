@@ -4,11 +4,11 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains the Hi-M Experiment for the RAMM setup.
+This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
-@author: F. Barho
+@authors: F.Barho, JB.Fiche (for later modifications)
 
-Created on Wed March 30 2021
+Created on Wed March 30 2021 - Last modifications on Mon September 26 2022
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -46,14 +46,12 @@ from time import sleep, time
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
 
 
-# available with QRunnable - however, since qudi is using QThreadPool & QRunnable, I kept the same method for multi-
-# threading.
-
 class UploadDataWorker(QtCore.QRunnable):
-    """ Worker thread to parallelize data uploading to network during injections.
+    """ Worker thread to parallelize data uploading to network during injections. Available with QRunnable - however,
+    since qudi is using QThreadPool & QRunnable, I kept the same method for multi-threading (jb).
 
-    :param: str data_path = path to the local data
-    :param: str dest_folder = path where the data should be uploaded
+    :@param: str data_path = path to the local data
+    :@param: str dest_folder = path where the data should be uploaded
     """
 
     def __init__(self, data_path, dest_folder):

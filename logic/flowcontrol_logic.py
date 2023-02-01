@@ -28,6 +28,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+# import logging
 import numpy as np
 from time import sleep
 from simple_pid import PID
@@ -36,6 +37,24 @@ from qtpy import QtCore
 from logic.generic_logic import GenericLogic
 from core.configoption import ConfigOption
 from core.connector import Connector
+# from functools import wraps
+
+
+# # Defines the decorator function for the log
+# def log(func):
+#     @wraps(func)
+#     def wrap(*args, **kwargs):
+#         global t_start
+#         global t_step
+#         t0 = time()
+#         result = func(*args, **kwargs)
+#         t1 = time()
+#         task_logger = logging.getLogger('Task_logging')
+#         task_logger.info(
+#             f'function : {func.__name__} - time since start = {t0 - t_start}s - time since last = {t0 - t_step}s - '
+#             f'execution time = {t1 - t0}s')
+#         return result
+#     return wrap
 
 
 # ======================================================================================================================
@@ -164,7 +183,7 @@ class FlowcontrolLogic(GenericLogic):
 
     # attributes for pid - the sampling rate defines the frequency at which the volume & flow-rate will be measured. Be
     # aware that modifying this value will likely require to change the pid settings as well.
-    sampling_interval = 1  # in s
+    sampling_interval = 1.  # in s
     p_gain = ConfigOption('p_gain', 0.005, missing='warn')   # 0.005
     i_gain = ConfigOption('i_gain', 0.01, missing='warn')  # 0.001 for Airyscan   # 0.01 for RAMM
     d_gain = ConfigOption('d_gain', 0.0, missing='warn')  # 0.0
@@ -440,8 +459,8 @@ class FlowcontrolLogic(GenericLogic):
 
     def volume_measurement_loop(self):
         """ Perform a step in the volume count loop.
-        :param: int target_volume: target volume to be injected.
-                                Volume measurement will be stopped when target volume is reached (necessary for tasks).
+        :param: int target_volume: target volume to be injected. Volume measurement will be stopped when target volume
+        is reached (necessary for tasks).
         :return: None
         """
         # calculate the fluidics parameters. Note that the total volume is rounded as safety to avoid entering into the

@@ -188,7 +188,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
         # switch ON the 405nm channel
-        self.ref['daq'].write_to_ao_channel(5, 1)
+        self.ref['daq'].write_to_ao_channel(5, 2)
         # self.ref['daq'].write_to_ao_channel(5, 5)
 
         # wait for ZEN trigger indicating the task is completed
@@ -198,7 +198,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
 
         # switch OFF the 405nm channel
-        self.ref['daq'].write_to_ao_channel(0, 1)
+        self.ref['daq'].write_to_ao_channel(0, 2)
         # self.ref['daq'].write_to_ao_channel(0, 5)
 
         # --------------------------------------------------------------------------------------------------------------

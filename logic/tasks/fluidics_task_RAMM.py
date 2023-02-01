@@ -30,8 +30,25 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 from logic.generic_task import InterruptableTask
-from time import sleep
+from time import sleep, time
+from functools import wraps
 import yaml
+import logging
+
+
+# Defines the decorator function for the log
+def log(func):
+    @wraps(func)
+    def wrap(*args, **kwargs):
+        t_init = args[0].FTL_init_time
+        t0 = time()
+        result = func(*args, **kwargs)
+        t1 = time()
+        task_logger = logging.getLogger('Task_logging')
+        task_logger.info(
+            f'function : {func.__name__} - time since start = {t0 - t_init}s - execution time = {t1 - t0}s')
+        return result
+    return wrap
 
 
 class Task(InterruptableTask):
@@ -138,12 +155,12 @@ class Task(InterruptableTask):
 
             ready = self.ref['flow'].target_volume_reached
             while not ready:
-                sleep(2)
+                sleep(1)
                 ready = self.ref['flow'].target_volume_reached
                 if self.aborted:
                     ready = True
             self.ref['flow'].stop_pressure_regulation_loop()
-            sleep(2)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
+            sleep(1)  # waiting time to wait until last regulation step is finished, afterwards reset pressure to 0
             self.ref['flow'].set_pressure(0.0)
         else:  # an incubation step
             incubation_time = self.hybridization_list[self.step_counter]['time']
