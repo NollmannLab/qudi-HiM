@@ -246,7 +246,8 @@ class RegionOfInterestList:
     #        self._rois[new_name] = self._rois.pop(name)
     #        return None
 
-    # to be modified: remove kwarg name in calls to this function -> better solution: leave it as it for compatibility and just make sure that a generic name always overwrites a name given by user
+    # to be modified: remove kwarg name in calls to this function -> better solution: leave it as it for compatibility
+    # and just make sure that a generic name always overwrites a name given by user
 
     def add_roi(self, position, name=None):
         """ Add a new ROI to a list. A generic name is used (even when the name parameter is filled with a user defined

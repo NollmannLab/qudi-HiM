@@ -9,6 +9,8 @@ qudi-HiM is built using the framework provided by [Qudi](https://github.com/Ulm-
 - [Developer's guide](https://github.com/NollmannLab/qudi-HiM/blob/master/documentation/qudi-cbs%20documentation/qudi_HiM_developer/Developer_Guide_Qudi_CBS.md)
 - [Hardware guides](https://github.com/NollmannLab/qudi-HiM/tree/master/documentation/qudi-cbs%20documentation/qudi-HiM_hardware)
 
+[here](/home/jb/Repositories/qudi-cbs/documentation/qudi-cbs documentation/doc_sphinx/build/html/index.html)
+
 Do not expect help, debugging efforts or other support.
 
 ## License

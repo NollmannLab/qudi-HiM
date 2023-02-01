@@ -4,7 +4,7 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains a task to perform a multicolor scan on RAMM setup iterating over a list of ROIs.
+This module contains a task to perform a multicolor scan on the Airyscan setup iterating over a list of ROIs.
 (Take for each region of interest (ROI) a stack of images using a sequence of different laserlines or intensities
 in each plane of the stack.)
 
@@ -276,7 +276,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # save the file name
         self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
-        return self.roi_counter < len(self.roi_names)
+        return (self.roi_counter < len(self.roi_names)) and (not self.aborted)
 
     def pauseTask(self):
         """ """

@@ -75,7 +75,7 @@ class FocusWindow(QtWidgets.QMainWindow):
     def __init__(self):
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_focus.ui')
+        ui_file = os.path.join(this_dir, 'ui_focus_v3.ui')
 
         # Load it
         super().__init__()
@@ -169,7 +169,12 @@ class FocusGUI(GUIBase):
         if self._focus_logic._readout == 'camera':
             self._mw.find_offset_PushButton.hide()
             self._mw.offset_lineEdit.hide()
-            self._mw.offset_unit_label.hide()
+            self._mw.offset_label.hide()
+
+        # Initialize the combobox and the pushbutton used for the autofocus calibration
+        self._mw.select_experiment_ComboBox.addItems(self._focus_logic.experiments)
+        self._mw.find_offset_PushButton.setEnabled(False)
+        self._mw.setpoint_PushButton.setEnabled(False)
 
         # initialize the display of the camera
         self.raw_imageitem = pg.ImageItem(axisOrder='row-major')
@@ -220,6 +225,7 @@ class FocusGUI(GUIBase):
         self._mw.calibration_PushButton.clicked.connect(self.calibrate_focus_stabilization_clicked)
         self._mw.find_offset_PushButton.clicked.connect(self.calibrate_offset_clicked)
         self._mw.threshold_SpinBox.valueChanged.connect(self.threshold_changed)
+        self._mw.select_experiment_ComboBox.currentIndexChanged.connect(self.update_autofocus_option)
 
         # signals to logic
         self._mw.setpoint_PushButton.clicked.connect(self._focus_logic.define_autofocus_setpoint)
@@ -425,6 +431,21 @@ class FocusGUI(GUIBase):
 # Slots for autofocus
 # ----------------------------------------------------------------------------------------------------------------------
 
+    def update_autofocus_option(self):
+        experiment = self._mw.select_experiment_ComboBox.currentText()
+        if experiment == 'Hi-M RAMM' or experiment == 'ROI multicolor scan RAMM':
+            self._mw.find_offset_PushButton.setEnabled(True)
+            self._mw.setpoint_PushButton.setEnabled(False)
+        elif experiment == 'Manual' or experiment == 'ROI multicolor scan PALM' or experiment == 'Timelapse PALM':
+            self._mw.find_offset_PushButton.setEnabled(True)
+            self._mw.setpoint_PushButton.setEnabled(True)
+        elif experiment == 'Timelapse RAMM' or experiment == 'Fast timelapse RAMM' or experiment == 'Hubble RAMM':
+            self._mw.find_offset_PushButton.setEnabled(False)
+            self._mw.setpoint_PushButton.setEnabled(True)
+        else:
+            self._mw.find_offset_PushButton.setEnabled(False)
+            self._mw.setpoint_PushButton.setEnabled(False)
+
     def threshold_changed(self):
         """ Callback invoked when the value in the threshold spinbox is changed.
         Threshold is used for the camera based autofocus readout. """
@@ -481,7 +502,7 @@ class FocusGUI(GUIBase):
         :return: None
         """
         self._mw.find_offset_PushButton.setEnabled(True)
-        self._mw.find_offset_PushButton.setText('Find offset')
+        self._mw.find_offset_PushButton.setText('Define offset for focus search')
         self._mw.find_offset_PushButton.setChecked(False)
         self._mw.offset_lineEdit.setText("{:.2f}".format(offset))
 

@@ -87,7 +87,8 @@ class ImagingSequenceModelTimelapsePALM(QtCore.QAbstractListModel):
     def data(self, index, role):
         if role == QtCore.Qt.DisplayRole:
             source, intens, num_z_planes, z_step, filter_pos = self.items[index.row()].values()
-            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}, filter_pos: {filter_pos}"
+            return f"laserline: {source}, intensity: {intens}, num_z_planes: {num_z_planes}, z_step: {z_step}," \
+                   f"filter_pos: {filter_pos}"
 
     def rowCount(self, index):
         return len(self.items)
@@ -133,6 +134,7 @@ class ExpConfigLogic(GenericLogic):
     experiments = ConfigOption('experiments')
     supported_fileformats = ConfigOption('supported fileformats')
     default_path_images = ConfigOption('default path imagedata')
+    default_network_path = ConfigOption('default network path')
 
     config_dict = {}
 
@@ -180,10 +182,12 @@ class ExpConfigLogic(GenericLogic):
     def init_default_config_dict(self):
         """ Initialize the entries of the dictionary with some default values,
         to set entries to the form displayed on the GUI on startup.
+        NB : since the following entries are defined by default, they will not be mandatory for saving the form.
         """
-        self.config_dict = {}
+        # self.config_dict = {}
         self.config_dict['dapi'] = False
         self.config_dict['rna'] = False
+        self.config_dict['transfer_data'] = False
         self.config_dict['exposure'] = 0.05
         self.config_dict['gain'] = 0
         self.config_dict['num_frames'] = 1
@@ -192,10 +196,13 @@ class ExpConfigLogic(GenericLogic):
         self.img_sequence_model_timelapse_ramm.items = []
         self.img_sequence_model_timelapse_palm.items = []
         self.config_dict['save_path'] = self.default_path_images
+        self.config_dict['save_network_path'] = self.default_network_path
         self.config_dict['file_format'] = 'tif'
         self.config_dict['num_z_planes'] = 1
         self.config_dict['centered_focal_plane'] = False
-        self.config_dict['dapi_path'] = ''  # not necessary, it can be empty and needs to be initialized as empty string
+        self.config_dict['dapi_path'] = ''
+        # self.config_dict['zen_ref_images_path'] = ''
+        # self.config_dict['zen_saving_path'] = ''
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
         self.config_dict['axial_calibration_path'] = ''
@@ -220,6 +227,8 @@ class ExpConfigLogic(GenericLogic):
                 self.log.error(f'Error {e}.')
 
         config_dict = {}
+
+        print(f'Experiment = {experiment}')
 
         try:
             if experiment == 'Multicolor imaging PALM':
@@ -272,6 +281,12 @@ class ExpConfigLogic(GenericLogic):
                                    'roi_list_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'ROI multicolor scan Airyscan confocal':
+                if not filename:
+                    filename = 'ROI_multicolor_scan_task_AIRYSCAN_confocal.yml'
+                keys_to_extract = ['sample_name', 'save_path', 'roi_list_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fluidics RAMM':
                 if not filename:
                     filename = 'fluidics_task_RAMM.yml'
@@ -287,9 +302,9 @@ class ExpConfigLogic(GenericLogic):
             elif experiment == 'Hi-M RAMM':
                 if not filename:
                     filename = 'hi_m_task_RAMM.yml'
-                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
-                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'injections_path',
-                                   'dapi_path']
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'transfer_data',
+                                   'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
+                                   'roi_list_path', 'injections_path', 'dapi_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Lumencor':
@@ -297,6 +312,14 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_AIRYSCAN.yml'
                     keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
                                        'injections_path', 'dapi_path']
+                    config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hi-M Airyscan Lumencor Tissue':
+                if not filename:
+                    filename = 'hi_m_task_AIRYSCAN_tissue.yml'
+                    keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
+                                       'injections_path', 'dapi_path', 'zen_ref_images_path', 'zen_saving_path',
+                                       'save_network_path', 'transfer_data']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Confocal':
@@ -311,11 +334,25 @@ class ExpConfigLogic(GenericLogic):
                 keys_to_extract = ['imaging_sequence', 'roi_list_path', 'illumination_time']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'Photobleaching Airyscan':
+                if not filename:
+                    filename = 'photobleaching_task_AIRYSCAN.yml'
+                keys_to_extract = ['imaging_sequence', 'roi_list_path', 'illumination_time']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Fast timelapse RAMM':
                 if not filename:
                     filename = 'fast_timelapse_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
                                    'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path', 'num_iterations',
+                                   'axial_calibration_path']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            elif experiment == 'Hubble RAMM':
+                if not filename:
+                    filename = 'hubble_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
+                                   'num_z_planes', 'z_step', 'centered_focal_plane', 'roi_list_path',
                                    'axial_calibration_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
@@ -443,6 +480,19 @@ class ExpConfigLogic(GenericLogic):
             self.config_dict['rna'] = False
         self.sigConfigDictUpdated.emit()
 
+    @QtCore.Slot(int)
+    def update_data_transfer(self, state):
+        """ Updates the dictionary entry 'data_transfer' indicating whether the automatic transfer of the data to the
+        server should be activated.
+        :param: int state: Qt.CheckState of the data transfer checkbox
+        :return: None
+        """
+        if state == 2:  # Enum Qt::CheckState Checked = 2
+            self.config_dict['transfer_data'] = True
+        elif state == 0:  # Unchecked = 0
+            self.config_dict['transfer_data'] = False
+        self.sigConfigDictUpdated.emit()
+
     @QtCore.Slot(float)
     def update_exposure(self, value):
         """ Updates the dictionary entry 'exposure'
@@ -487,6 +537,15 @@ class ExpConfigLogic(GenericLogic):
         :return: None
         """
         self.config_dict['save_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_save_network_path(self, path):
+        """ Updates the dictionary entry 'network_save_path' (path where image data will be uploaded).
+        :param: str path: complete path where image et logging data shall be saved on the network
+        :return: None
+        """
+        self.config_dict['save_network_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)
@@ -553,6 +612,24 @@ class ExpConfigLogic(GenericLogic):
         :param: str path: complete path to the folder containing the dapi data
         :return: None"""
         self.config_dict['dapi_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_zen_ref_images_path(self, path):
+        """ Updates the dictionary entry 'zen_ref_images_path' (path to the folder containing the reference images used
+        to test the quality of the autofocus during a Hi-M experiment).
+        :param: str path: complete path to the folder containing the reference images
+        :return: None"""
+        self.config_dict['zen_ref_images_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_zen_saving_path(self, path):
+        """ Updates the dictionary entry 'zen_saving_path' (path to the folder where the data will be saved during a
+        Hi-M experiment).
+        :param: str path: complete path to the folder where the data will be saved
+        :return: None"""
+        self.config_dict['zen_saving_path'] = path
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)

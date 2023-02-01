@@ -62,27 +62,26 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.directory = None
-        self.counter = None
-        self.user_param_dict = {}
-        self.lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
-        print('Task {0} added!'.format(self.name))
-        self.user_config_path = self.config['path_to_user_config']
-        self.autofocus_ok = False
-        self.default_exposure = None
-        self.num_frames = None
-        self.sample_name = None
-        self.exposure = None
-        self.centered_focal_plane = False
-        self.save_path = None
-        self.file_format = None
-        self.roi_list_path = None
-        self.num_iterations = None
-        self.time_step = None
-        self.imaging_sequence = None
-        self.roi_names = []
-        self.num_laserlines = None
-        self.prefix = None
+        self.directory: str = ""
+        self.counter: int = 0
+        self.user_param_dict: dict = {}
+        self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        self.user_config_path: str = self.config['path_to_user_config']
+        self.autofocus_ok: bool = False
+        self.default_exposure: float = 0.05
+        self.num_frames: int = 0
+        self.sample_name: str = ""
+        self.exposure: float = 0.05
+        self.centered_focal_plane: bool = False
+        self.save_path: str = ""
+        self.file_format: str = ""
+        self.roi_list_path: list = []
+        self.num_iterations: int = 0
+        self.time_step: float = 0
+        self.imaging_sequence: list = []
+        self.roi_names: list = []
+        self.num_laserlines: int = 0
+        self.prefix: str = ""
 
     def startTask(self):
         """ """
@@ -124,16 +123,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
 
+        # prepare the camera
+        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        self.ref['cam'].stop_acquisition()  # for safety
+        self.ref['cam'].start_acquisition()
+        time.sleep(1)
+        self.ref['cam'].stop_acquisition()
+
         # close the default FPGA session and start the time-lapse session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
 
         # in order to have a session running for access to autofocus
         self.ref['laser'].run_multicolor_imaging_task_session(1, [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], 1, self.exposure)
-
-        # prepare the camera
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
         # set the active_roi to none to avoid having two active rois displayed
         self.ref['roi'].active_roi = None
@@ -159,7 +163,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # cur_save_path = self.get_complete_path(self.directory, self.counter+1)
 
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
         self.ref['cam'].start_acquisition()
 
         # --------------------------------------------------------------------------------------------------------------
@@ -248,7 +251,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 for plane in range(num_z_planes):
                     # position the piezo
                     position = start_position + plane * z_step
-                    self.ref['focus'].go_to_position(position)
+                    self.ref['focus'].go_to_position(position, direct=True)
                     # print(f'target position: {position} um')
                     time.sleep(0.03)
                     # cur_pos = self.ref['focus'].get_position()
@@ -273,7 +276,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             self.log.warning('Timeout occurred')
                             break
 
-                self.ref['focus'].go_to_position(end_position)
+                self.ref['focus'].go_to_position(end_position, direct=True)
                 if wavelength == 'Brightfield':
                     self.ref['roi'].set_stage_led_intensity(0)
 

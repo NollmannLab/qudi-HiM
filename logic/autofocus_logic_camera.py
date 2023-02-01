@@ -64,14 +64,17 @@ class AutofocusLogic(GenericLogic):
     _autofocus_stable = False
     _autofocus_iterations = 0
 
+    # autofocus parameters for stabilization
+    _num_points_fit = ConfigOption('num_points_fit', 10, missing='warn')
+    _stable_threshold = ConfigOption('stabilization_threshold', 1, missing='warn')
+    _target_tolerance = ConfigOption('target_tolerance', 10, missing='warn')
+
     # pid attributes
     _pid_frequency = 0.2  # in s, frequency for the autofocus PID update
     _P_gain = ConfigOption('proportional_gain', 0, missing='warn')
     _I_gain = ConfigOption('integration_gain', 0, missing='warn')
     _setpoint = None
     _pid = None
-
-    _last_pid_output_values = np.zeros((10,))
 
     # signals
     sigOffsetDefined = QtCore.Signal()  # never emitted from this module, just for compatibility
@@ -83,6 +86,8 @@ class AutofocusLogic(GenericLogic):
         self._im_size = None
         self._idx_X = None
         self._idx_Y = None
+        self._last_pid_output_values: list = []
+        self.X_stabilization: list = []
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
@@ -96,6 +101,10 @@ class AutofocusLogic(GenericLogic):
         self._idx_X = np.linspace(0, self._im_size[0] - 1, self._im_size[0])
         self._idx_Y = np.linspace(0, self._im_size[1] - 1, self._im_size[1])
         self.init_pid()
+
+        # initialize the pid array for stabilization
+        self._last_pid_output_values = np.zeros((self._num_points_fit,))
+        self.X_stabilization = np.linspace(0, self._num_points_fit - 1, num=self._num_points_fit)
 
     def on_deactivate(self):
         """ Required deactivation.
@@ -150,10 +159,10 @@ class AutofocusLogic(GenericLogic):
         self._setpoint = self.read_detector_signal()
         return self._setpoint
 
-    def read_pid_output(self, do_stabilization_check):
+    def read_pid_output(self, do_stabilization_check, stop_at_target):
         """ Read the pid output signal in order to adjust the position of the objective.
-        :param: bool do_stabilization_check: if True, the last 10 pid output values are stored and fitted.
-        :return float: pid output:
+        @param: bool do_stabilization_check: if True, the last 10 pid output values are stored and fitted.
+        @return float: pid output:
                 or tuple (float, bool): pid_output, autofocus stable?
         """
         centroid = self.read_detector_signal()
@@ -161,10 +170,14 @@ class AutofocusLogic(GenericLogic):
 
         if do_stabilization_check:
             self._autofocus_iterations += 1
-            self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
+            self._last_pid_output_values = np.concatenate(
+                (self._last_pid_output_values[1:self._num_points_fit], [pid_output]))
+            # self._last_pid_output_values = np.concatenate((self._last_pid_output_values[1:10], [pid_output]))
             return pid_output, self.check_stabilization()
+        elif stop_at_target:
+            return pid_output, np.abs(self._setpoint - self.read_detector_signal()) < self._target_tolerance
         else:
-            return pid_output
+            return pid_output, False
 
     def check_stabilization(self):
         """ Check for the stabilization of the focus. If at least 10 values of pid readout are present, a linear fit
@@ -172,10 +185,12 @@ class AutofocusLogic(GenericLogic):
         self._autofocus_stable is updated by this function.
         :return: bool: is the autofocus stable ?
         """
-        if self._autofocus_iterations > 10:
-            p = Poly.fit(np.linspace(0, 9, num=10), self._last_pid_output_values, deg=1)
-            slope = p(9) - p(0)
-            if np.absolute(slope) < 10:
+        if self._autofocus_iterations > self._num_points_fit:
+            # p = Poly.fit(np.linspace(0, 9, num=10), self._last_pid_output_values, deg=1)
+            # slope = p(9) - p(0)
+            p = Poly.fit(self.X_stabilization, self._last_pid_output_values, deg=1)
+            slope = p(self._num_points_fit - 1) - p(0)
+            if np.absolute(slope) < self._stable_threshold:
                 self._autofocus_stable = True
             else:
                 self._autofocus_stable = False

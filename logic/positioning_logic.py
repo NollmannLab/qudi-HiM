@@ -458,7 +458,7 @@ class PositioningLogic(GenericLogic):
                 self.moving = False
 
     def abort_movement(self):
-        """ This method is called to abort a stage movement (either initiated by move_stage or move_to_target)
+        """ This method is called to abort a stage movement (either initiated by move_stage or move_to_set_p)
         Sends a signal to indicate that the stage was stopped and the current reached position.
         """
         self.moving = False

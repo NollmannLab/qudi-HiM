@@ -70,39 +70,40 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
-        self.user_config_path = self.config['path_to_user_config']
-        self.directory = None
-        self.user_param_dict = {}
-        self.sample_name = None
-        self.probe_counter = None
-        self.user_param_dict = {}
-        self.logging = True
-        self.num_z_planes = None
-        self.imaging_sequence = []
-        self.save_path = None
-        self.roi_list_path = None
-        self.roi_names = []
-        self.num_laserlines = None
-        self.intensity_dict = {}
-        self.ao_channel_sequence = []
-        self.lumencor_channel_sequence = []
-        self.IN7_ZEN = self.config['IN7_ZEN']
-        self.OUT7_ZEN = self.config['OUT7_ZEN']
-        self.OUT8_ZEN = self.config['OUT8_ZEN']
-        self.camera_global_exposure = self.config['camera_global_exposure']
-        self.log_folder = None
-        self.default_info_path = None
-        self.status_dict_path = None
-        self.log_path = None
-        self.status_dict = {}
-        self.start = None
-        self.injections_path = None
-        self.hybridization_list = []
-        self.photobleaching_list = []
-        self.buffer_dict = {}
-        self.probe_list = []
-        self.prefix = None
-        self.probe_dict = {}
+        self.user_config_path: str = self.config['path_to_user_config']
+        self.directory: str = ""
+        self.user_param_dict: dict = {}
+        self.sample_name: str = ""
+        self.probe_counter: int = 0
+        self.user_param_dict: dict = {}
+        self.logging: bool = True
+        self.num_z_planes: int = 0
+        self.imaging_sequence: list = []
+        self.save_path: str = ""
+        self.roi_list_path: str = ""
+        self.roi_names: list = []
+        self.num_laserlines: int = 0
+        self.intensity_dict: dict = {}
+        self.ao_channel_sequence: list = []
+        self.lumencor_channel_sequence: list = []
+        self.IN7_ZEN: int = self.config['IN7_ZEN']
+        self.OUT7_ZEN: int = self.config['OUT7_ZEN']
+        self.OUT8_ZEN: int = self.config['OUT8_ZEN']
+        self.camera_global_exposure: float = self.config['camera_global_exposure']
+        self.log_folder: str = ""
+        self.default_info_path: str = ""
+        self.status_dict_path: str = ""
+        self.log_path: str = ""
+        self.status_dict: dict = {}
+        self.start: float = 0
+        self.injections_path: str = ""
+        self.hybridization_list: list = []
+        self.photobleaching_list: list = []
+        self.buffer_dict: dict = {}
+        self.probe_list: list = []
+        self.prefix: str = ""
+        self.probe_dict: dict = {}
+        self.probe_valve_number: int = self.config['probe_valve_number']
 
     def startTask(self):
         """ """
@@ -126,7 +127,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.info('HiM experiment is starting ...')
 
         # set stage velocity
-        self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
+        self.ref['roi'].set_stage_velocity({'x': .5, 'y': .5})
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -267,14 +268,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
-                    # for the Airyscan, the needle is connected to valve position 3. If this valve is called more than
-                    # once, the needle will move to the next position. The procedure was added to make the DAPI
-                    # injection easier.
+                    # for the Airyscan, the needle is connected to the valve position defined in the config file by
+                    # self.probe_valve_number. If this valve is called more than once, the needle will move to the next
+                    # position. The procedure was added to make the DAPI injection easier.
                     print('Valve position : {}'.format(valve_pos))
-                    if rt_injection == 0 and valve_pos == 3:
+                    if rt_injection == 0 and valve_pos == self.probe_valve_number:
                         rt_injection += 1
                         needle_pos += 1
-                    elif rt_injection > 0 and valve_pos == 3:
+                    elif rt_injection > 0 and valve_pos == self.probe_valve_number:
                         self.ref['pos'].start_move_to_target(needle_pos)
                         while self.ref['pos'].moving is True:
                             sleep(0.1)
@@ -388,11 +389,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 sleep(0.1)
                 self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
 
+                # switch ON the 477nm channel
+                # self.ref['daq'].write_to_ao_channel(5, 3)
+
                 # wait for ZEN trigger indicating the task is completed
                 trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
                 while trigger == 0 and not self.aborted:
                     sleep(.1)
                     trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+
+                # switch OFF the 477nm channel
+                # self.ref['daq'].write_to_ao_channel(0, 3)
+
+                # check the autofocus image is in focus
+
 
                 # ------------------------------------------------------------------------------------------------------
                 # first imaging sequence
@@ -561,7 +571,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
             # rinse needle after photobleaching
-            self.ref['valves'].set_valve_position('a', 3)  # Towards probe
+            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
             self.ref['valves'].wait_for_idle()
             self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
@@ -581,7 +591,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
-        return self.probe_counter < len(self.probe_list)
+        return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
     def pauseTask(self):
         """ """
@@ -660,6 +670,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
                 self.injections_path = self.user_param_dict['injections_path']
+                self.roi_list_path = self.user_param_dict['roi_list_path']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -736,7 +747,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Load the laser and intensity dictionary used in lasercontrol_logic -----------------------------------------------
         laser_dict = self.ref['laser'].get_laser_dict()
         intensity_dict = self.ref['laser'].init_intensity_dict()
-        # From [('488 nm', 3), ('561 nm', 3)] to [('laser2', 3), ('laser3', 3), (10,)]
         imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
                              self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
 
@@ -759,6 +769,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             emission_state[laser_dict[key]['channel']] = 1
             lumencor_channel_sequence.append(emission_state.tolist())
 
+        ## Temporary modifications for test
+        ## --------------------------------
+        intensity_dict['laser3'] = 2
+        print(f'intensity_dict = {intensity_dict}')
+        ## --------------------------------
         self.intensity_dict = intensity_dict
         self.ao_channel_sequence = ao_channel_sequence
         self.lumencor_channel_sequence = lumencor_channel_sequence

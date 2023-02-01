@@ -10,5 +10,3 @@
 | Single axis piezoelectric stage for objectives | - Physik Instrumente - PIFOC stage & Controller E-625<br />- Mad City Labs - NanoDrive |
 | Filter wheels                                  | - Thorlabs - FW-102C<br />- Thorlabs - FW-103 High-Speed Motorized Filter Wheel & APT Motor BSC201 |
 | Microfluidics                                  | - Fluigent Flowboard - FLB<br />- Fluigent Pump - MFCS-EZ<br />- Fluigent Flowrate Sensor Flowunit L<br />- Hamilton Modular Valve Positioner |
-
-
