@@ -616,6 +616,7 @@ class FocusLogic(GenericLogic):
                             offset = self._autofocus_logic._focus_offset
                             self._autofocus_logic.stage_move_z(-offset)
                             self.focus_search_running = False
+                            self.focus_search_aborted = True
                         return
                 else:
                     self.autofocus_enabled = False
