@@ -140,7 +140,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def startTask(self):
         """ """
-        self.start = time.time()
+        self.start = time()
 
         self.log.info('started Task')
 
@@ -249,7 +249,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             return False
 
         if not self.aborted:
-            now = time.time()
+            now = time()
             # info message
             self.probe_counter += 1
             self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
@@ -364,7 +364,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Incubation time: {t} s')
                     self.ref['valves'].set_valve_position('c', 1)  # stop flux
                     self.ref['valves'].wait_for_idle()
 
@@ -433,19 +433,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
-                # wait for the autofocus flag to turn True, indicating that the search procedure is launched
-                autofocus_start = self.ref['focus'].autofocus_enabled
-                while not autofocus_start:
+                # wait for the search focus flag to turn True, indicating that the search procedure is launched. In case
+                # the autofocus is lost from the start, the search focus routine is starting and stopped before the
+                # while loop is initialized. The aborted flag is then used to avoid getting stuck in the loop.
+                search_focus_start = self.ref['focus'].focus_search_running
+                while not search_focus_start:
                     sleep(0.1)
-                    autofocus_start = self.ref['focus'].autofocus_enabled
-                # wait for the autofocus flag to turn False, indicating that the search procedure stopped, whatever the
-                # result
-                while autofocus_start:
+                    search_focus_start = self.ref['focus'].focus_search_running
+                    if self.ref['focus'].focus_search_aborted:
+                        print('focus search was aborted')
+                        break
+
+                # wait for the search focus flag to turn False, indicating that the search procedure stopped, whatever
+                # the result
+                search_focus_running = self.ref['focus'].focus_search_running
+                while search_focus_running:
                     sleep(0.5)
-                    autofocus_start = self.ref['focus'].autofocus_enabled
-                # check the autofocus was found
+                    search_focus_running = self.ref['focus'].focus_search_running
+                    
+                # check if the focus was found
                 ready = self.ref['focus']._stage_is_positioned
                 if not ready and self.autofocus_failed == 0:
+                    print('The autofocus was lost for the first time.')
                     self.autofocus_failed += 1
                 elif not ready and self.autofocus_failed > 0:
                     print('The autofocus was lost for the second time. The HiM experiment is aborted.')
@@ -543,9 +552,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.save_metadata_file(metadata, file_path)
 
                 # calculate and save projection for bokeh --------------------------------------------------------------
-                # start = time.time()
+                # start = time()
                 self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
-                # stop = time.time()
+                # stop = time()
                 # print("Projection calculation time : {}".format(stop-start))
 
                 # # save file with z positions (same procedure for either file format)
@@ -577,7 +586,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
             self.ref['daq'].start_rinsing(30)
-            start_rinsing_time = time.time()
+            start_rinsing_time = time()
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
@@ -644,7 +653,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Incubation time: {t} s')
                     self.ref['valves'].set_valve_position('c', 1)
                     self.ref['valves'].wait_for_idle()
 
@@ -751,7 +760,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['flow'].enable_flowcontrol_actions()
         self.ref['pos'].enable_positioning_actions()
 
-        total = time.time() - self.start
+        total = time() - self.start
         print(f'total time with logging = {self.logging}: {total} s')
 
         self.log.info('cleanupTask finished')

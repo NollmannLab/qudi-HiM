@@ -151,6 +151,8 @@ class FocusLogic(GenericLogic):
 
     autofocus_enabled: bool = False
     piezo_correction_running: bool = False
+    focus_search_running: bool = False
+    focus_search_aborted: bool = False
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -539,17 +541,20 @@ class FocusLogic(GenericLogic):
             if self.rescue:
                 success = self.rescue_autofocus()
                 if success:
-                    self.start_autofocus(stop_when_stable=stop_when_stable, stop_at_target=stop_at_target,
+                    self.start_autofocus(stop_when_stable=stop_when_stable,
+                                         stop_at_target=stop_at_target,
                                          search_focus=search_focus)
                     return
                 else:
                     self.autofocus_enabled = False
-                    self.log.warning('Autofocus signal not found - the procedure is stopped')
+                    self.log.warning('autofocus signal not found during rescue autofocus')
                     self.sigAutofocusError.emit()
                     # if the search focus option is True, move the offset back to its initial position
                     if search_focus:
                         offset = self._autofocus_logic._focus_offset
                         self._autofocus_logic.stage_move_z(-offset)
+                        self.focus_search_running = False
+                        self.focus_search_aborted = True
                     return
             else:
                 self.autofocus_enabled = False
@@ -606,6 +611,11 @@ class FocusLogic(GenericLogic):
                         self.autofocus_enabled = False
                         self.log.warning('autofocus signal not found during rescue autofocus')
                         self.sigAutofocusError.emit()
+                        # if the search focus option is True, move the offset back to its initial position
+                        if search_focus:
+                            offset = self._autofocus_logic._focus_offset
+                            self._autofocus_logic.stage_move_z(-offset)
+                            self.focus_search_running = False
                         return
                 else:
                     self.autofocus_enabled = False
@@ -733,7 +743,7 @@ class FocusLogic(GenericLogic):
                 self.piezo_correction_running = False
 
         else:  # position does not need to be corrected
-            print('no piezo position correction needed..')
+            print('Piezo repositioning correction is not required.')
             self.piezo_correction_running = False
 
     def finish_piezo_position_correction(self):
@@ -757,7 +767,9 @@ class FocusLogic(GenericLogic):
         This has the same effect as using the start_autofocus method with stop_when_stable=True.
         """
         if self._calibrated and self._setpoint_defined:
-            self._stage_is_positioned = False  # set this flag as indicator that the search focus procedure is running
+            self.focus_search_running = True  # set this flag as indicator that the search focus procedure is running
+            self.focus_search_aborted = False  # set this flag as indicator of an error during the procedure
+            self._stage_is_positioned = False  # set this flag as indicator that the focus position is not defined yet
             offset = self._autofocus_logic._focus_offset
             if offset != 0:
                 self._autofocus_logic.stage_move_z(offset)
@@ -777,6 +789,7 @@ class FocusLogic(GenericLogic):
             self._autofocus_logic.stage_move_z(-offset)
             self._autofocus_logic.stage_wait_for_idle()
         self._stage_is_positioned = True
+        self.focus_search_running = False
         self.sigFocusFound.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
