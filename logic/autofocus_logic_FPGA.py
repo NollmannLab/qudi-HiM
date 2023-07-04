@@ -314,7 +314,6 @@ class AutofocusLogic(GenericLogic):
             for z in range(z_range):
                 self.stage_move_z(-z_step)
                 self.stage_wait_for_idle()
-                # sleep(0.1)
 
                 if self.autofocus_check_signal():
                     success = True
@@ -325,7 +324,15 @@ class AutofocusLogic(GenericLogic):
                 self.stage_move_z(z_range/2)
                 self.stage_wait_for_idle()
                 z_range += 20
-        print('rescue finished ')
+
+        # This final check is necessary if the autofocus if the signal is detected between to iteration of the while
+        # loop
+        if self.autofocus_check_signal():
+            print("autofocus signal found!")
+            success = True
+        else:
+            print('rescue finished without finding the focus position')
+
         return success
 
     def stage_move_z(self, step):
