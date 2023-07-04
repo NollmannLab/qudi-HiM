@@ -136,7 +136,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_list: list = []
         self.prefix: str = ""
         self.timeout: float = 0
-        self.autofocus_failed = 0
+        self.autofocus_failed: int = 0
+        self.dz: list = []
 
     def startTask(self):
         """ """
@@ -216,7 +217,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
         # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
-        # issue is only happening for the very first acquisition.
+        # issue was only happening for the very first acquisition.
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].stop_acquisition()  # for safety
@@ -232,6 +233,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
+
+        # calculate the list of axial positions between successive rois
+        n_roi = len(self.roi_names)
+        z_roi = np.zeros(n_roi + 1)
+        for n, roi in enumerate(self.roi_names):
+            _, _, z_roi[n+1] = self.ref['roi'].get_roi_position(roi)
+        z_roi[0] = z_roi[-1]
+
+        self.dz = z_roi[1:] - z_roi[0:n_roi]
+        print(f'Differential axial positions : dz = {self.dz}')
 
         # defines the timeout value
         self.timeout = self.num_laserlines * self.exposure + 0.1
@@ -398,7 +409,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
-        # Hybridization finished ---------------------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
@@ -409,13 +419,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # make sure there is no data being transferred
+            # make sure there is no data being transferred -------------------------------------------------------------
             global data_saved
             print('Checking there is no data being transferred ...')
             while not data_saved:
                 sleep(1)
 
-            for item in self.roi_names:
+            for n_roi, item in enumerate(self.roi_names):
                 if self.aborted:
                     break
 
@@ -430,6 +440,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['roi'].stage_wait_for_idle()
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
+
+                # correct the axial position ---------------------------------------------------------------------------
+                if n_roi != 0:
+                    print('modifying axial position')
+                    dz = self.dz[n_roi]
+                    self.ref['autofocus'].stage_move_z(dz)
+                    self.ref['autofocus'].stage_wait_for_idle()
 
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
@@ -567,6 +584,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
             self.ref['roi'].go_to_roi_xy()
+
+            # correct for the axial displacement between the first and last ROIs
+            dz = self.dz[0]
+            self.ref['autofocus'].stage_move_z(dz)
+            self.ref['autofocus'].stage_wait_for_idle()
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
