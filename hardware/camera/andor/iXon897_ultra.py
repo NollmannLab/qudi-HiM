@@ -850,7 +850,8 @@ class IxonUltra(Base, CameraInterface):
 
         return ERROR_DICT[error_code]
 
-    # modified fb: frame transfer has no effect when acq mode is single scan or fast_kinetics. it has an effect for kinetic mode however
+    # modified fb: frame transfer has no effect when acq mode is single scan or fast_kinetics. it has an effect for
+    # kinetic mode however
     def _set_frame_transfer(self, transfer_mode):
         """ set the frame transfer mode
 

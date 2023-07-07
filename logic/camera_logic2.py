@@ -438,7 +438,7 @@ class CameraLogic(GenericLogic):
                 self.resume_live()
             self.log.info(f'Frametransfer mode activated: {activate}')
             # we also need to update the indicator on the gui
-            exp = self.get_exposure()  # we just need to send the signal sigExposureChanged but it must carry a float
+            exp = self.get_exposure()  # we just need to send the signal sigExposureChanged, but it must carry a float
             # so we send exp as argument
             self.sigExposureChanged.emit(exp)
         # do nothing in case of cameras that do not support frame transfer
