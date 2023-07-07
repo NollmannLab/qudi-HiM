@@ -64,6 +64,9 @@ class ExpConfiguratorGUI(GUIBase):
         connect:
             exp_config_logic: 'exp_config_logic'
     """
+    # define the default language option as English (to make sure all float have a point as a separator)
+    QtCore.QLocale.setDefault(QtCore.QLocale("English"))
+
     # connector to logic module
     exp_logic = Connector(interface='ExpConfigLogic')
 
