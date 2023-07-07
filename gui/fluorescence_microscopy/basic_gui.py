@@ -143,6 +143,9 @@ class BasicGUI(GUIBase):
     filterwheel_logic = Connector(interface='FilterwheelLogic')
     brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)
 
+    # define the default language option as English (to make sure all float have a point as a separator)
+    QtCore.QLocale.setDefault(QtCore.QLocale("English"))
+
     # config options
     default_path = ConfigOption('default_path', missing='error')
     brightfield_control = ConfigOption('brightfield_control', False)
