@@ -71,9 +71,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
 
-        # stop all interfering modes on GUIs and disable GUI actions
+        # stop all interfering modes on GUIs and disable GUI actions. Make sure the camera is not in Frame Transfer mode
         self.ref['camera'].stop_live_mode()
         self.ref['camera'].disable_camera_actions()
+        self.ref['camera'].set_frametransfer(False)
 
         self.ref['daq'].stop_laser_output()
         self.ref['daq'].disable_laser_actions()
