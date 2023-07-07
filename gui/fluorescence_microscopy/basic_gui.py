@@ -55,7 +55,6 @@ from gui.validators import NameValidator
 # Classes for the dialog windows and main window
 # ======================================================================================================================
 
-
 class CameraSettingDialog(QtWidgets.QDialog):
     """ Create the SettingsDialog window, based on the corresponding *.ui file.
 
@@ -420,6 +419,9 @@ class BasicGUI(GUIBase):
 
             laser_spinbox = QtWidgets.QDoubleSpinBox()
             laser_spinbox.setMaximum(100.00)
+            laser_spinbox.setDecimals(1)
+            locale = QtCore.QLocale('English')
+            laser_spinbox.setLocale(locale)
             self.laser_DSpinBoxes.append(laser_spinbox)
 
             self._mw.formLayout_3.addRow(laser_label, laser_spinbox)
