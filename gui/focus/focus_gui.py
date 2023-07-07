@@ -113,6 +113,9 @@ class FocusGUI(GUIBase):
     connect:
         focus_logic: 'focus_logic'
     """
+    # define the default language option as English (to make sure all float have a point as a separator)
+    QtCore.QLocale.setDefault(QtCore.QLocale("English"))
+
     # connector
     focus_logic = Connector(interface='FocusLogic')
 
