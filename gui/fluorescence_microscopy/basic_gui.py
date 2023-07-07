@@ -365,6 +365,7 @@ class BasicGUI(GUIBase):
         self._camera_logic.sigExposureChanged.connect(self.update_exposure)
         self._camera_logic.sigGainChanged.connect(self.update_gain)
         self._camera_logic.sigTemperatureChanged.connect(self.update_temperature)
+        self._camera_logic.sigDisableFrameTransfer.connect(self.disable_frame_transfer)
 
         # data acquisition signals
         self._camera_logic.sigUpdateDisplay.connect(self.update_data)
@@ -1002,6 +1003,10 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(True)
         self._mw.video_quickstart_Action.setDisabled(True)
         self._mw.set_sensor_Action.setDisabled(True)
+
+    def disable_frame_transfer(self):
+        """ Disables the frame transfer checkbox. """
+        self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
     def enable_camera_toolbuttons(self):
         """ Enables all toolbuttons of the camera toolbar.
