@@ -32,7 +32,6 @@ import yaml
 import numpy as np
 import pandas as pd
 import os
-import time
 import shutil
 from datetime import datetime
 from tqdm import tqdm
@@ -42,6 +41,7 @@ from logic.task_helper_functions import save_z_positions_to_file, save_injection
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from qtpy import QtCore
 from glob import glob
+from time import sleep, time
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
 
@@ -136,10 +136,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_list: list = []
         self.prefix: str = ""
         self.timeout: float = 0
+        self.autofocus_failed: int = 0
+        self.dz: list = []
 
     def startTask(self):
         """ """
-        self.start = time.time()
+        self.start = time()
 
         self.log.info('started Task')
 
@@ -215,12 +217,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
         # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
-        # issue is only happening for the very first acquisition.
+        # issue was only happening for the very first acquisition.
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].stop_acquisition()  # for safety
         self.ref['cam'].start_acquisition()  # in case the camera is sending a false trigger
-        time.sleep(1)
+        sleep(1)
         self.ref['cam'].stop_acquisition()
 
         # close default FPGA session
@@ -231,6 +233,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
+
+        # calculate the list of axial positions between successive rois
+        n_roi = len(self.roi_names)
+        z_roi = np.zeros(n_roi + 1)
+        for n, roi in enumerate(self.roi_names):
+            _, _, z_roi[n+1] = self.ref['roi'].get_roi_position(roi)
+        z_roi[0] = z_roi[-1]
+
+        self.dz = z_roi[1:] - z_roi[0:n_roi]
+        print(f'Differential axial positions : dz = {self.dz}')
 
         # defines the timeout value
         self.timeout = self.num_laserlines * self.exposure + 0.1
@@ -248,7 +260,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             return False
 
         if not self.aborted:
-            now = time.time()
+            now = time()
             # info message
             self.probe_counter += 1
             self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
@@ -263,7 +275,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['pos'].start_move_to_target(self.probe_list[self.probe_counter - 1][0])
             self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
             while self.ref['pos'].moving is True:
-                time.sleep(0.1)
+                sleep(0.1)
 
             # keep in memory the position of the needle
             needle_pos = self.probe_list[self.probe_counter - 1][0]
@@ -320,7 +332,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         rt_injection += 1
                         needle_pos += 1
                         while self.ref['pos'].moving is True:
-                            time.sleep(0.1)
+                            sleep(0.1)
                         self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
                         self.ref['valves'].wait_for_idle()
 
@@ -338,7 +350,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                     ready = self.ref['flow'].target_volume_reached
                     while not ready:
-                        time.sleep(1)
+                        sleep(1)
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         self.append_flow_data(pressure, volume, flowrate)
@@ -349,10 +361,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             ready = True
 
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points for flow data
                     self.append_flow_data(pressure, volume, flowrate)
-                    time.sleep(1)
+                    sleep(1)
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
@@ -363,7 +375,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 else:  # an incubation step
                     t = self.hybridization_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Incubation time: {t} s')
                     self.ref['valves'].set_valve_position('c', 1)  # stop flux
                     self.ref['valves'].wait_for_idle()
 
@@ -376,9 +388,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         path_to_upload = self.launch_data_uploading(path_to_upload)
 
                         if not self.aborted:
-                            time.sleep(30)
+                            sleep(30)
                             print("Elapsed time : {}s".format((i + 1) * 30))
-                    time.sleep(remainder)
+                    sleep(remainder)
 
                     self.ref['valves'].set_valve_position('c', 2)  # open flux again
                     self.ref['valves'].wait_for_idle()
@@ -397,7 +409,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
-        # Hybridization finished ---------------------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
@@ -408,13 +419,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
-            # make sure there is no data being transferred
+            # make sure there is no data being transferred -------------------------------------------------------------
             global data_saved
             print('Checking there is no data being transferred ...')
             while not data_saved:
-                time.sleep(1)
+                sleep(1)
 
-            for item in self.roi_names:
+            for n_roi, item in enumerate(self.roi_names):
                 if self.aborted:
                     break
 
@@ -430,23 +441,60 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
+                # correct the axial position ---------------------------------------------------------------------------
+                if n_roi != 0:
+                    print('modifying axial position')
+                    dz = self.dz[n_roi]
+                    self.ref['autofocus'].stage_move_z(dz)
+                    self.ref['autofocus'].stage_wait_for_idle()
+
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
-                # need to ensure that focus is stable here.
-                ready = self.ref['focus']._stage_is_positioned
-                counter = 0
-                while not ready:
-                    counter += 1
-                    time.sleep(0.1)
-                    ready = self.ref['focus']._stage_is_positioned
-                    if counter > 500:
+                # wait for the search focus flag to turn True, indicating that the search procedure is launched. In case
+                # the autofocus is lost from the start, the search focus routine is starting and stopped before the
+                # while loop is initialized. The aborted flag is then used to avoid getting stuck in the loop.
+                search_focus_start = self.ref['focus'].focus_search_running
+                while not search_focus_start:
+                    sleep(0.1)
+                    search_focus_start = self.ref['focus'].focus_search_running
+                    if self.ref['focus'].focus_search_aborted:
+                        print('focus search was aborted')
                         break
+
+                # wait for the search focus flag to turn False, indicating that the search procedure stopped, whatever
+                # the result
+                search_focus_running = self.ref['focus'].focus_search_running
+                while search_focus_running:
+                    sleep(0.5)
+                    search_focus_running = self.ref['focus'].focus_search_running
+                    
+                # check if the focus was found
+                ready = self.ref['focus']._stage_is_positioned
+                if not ready and self.autofocus_failed == 0:
+                    print('The autofocus was lost for the first time.')
+                    self.autofocus_failed += 1
+                elif not ready and self.autofocus_failed > 0:
+                    print('The autofocus was lost for the second time. The HiM experiment is aborted.')
+                    self.aborted = True
+                    break
+                else:
+                    self.autofocus_failed = 0
+
+                # # need to ensure that focus is stable here - wait for 120S
+                # ready = self.ref['focus']._stage_is_positioned
+                # counter = 0
+                # while not ready:
+                #     counter += 1
+                #     sleep(0.2)
+                #     ready = self.ref['focus']._stage_is_positioned
+                #     if counter > 600:
+                #         break
 
                 # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50) ---------------
                 self.ref['focus'].do_piezo_position_correction()
                 busy = True
                 while busy:
-                    time.sleep(0.5)
+                    sleep(0.5)
                     busy = self.ref['focus'].piezo_correction_running
 
                 reference_position = self.ref['focus'].get_position()  # save it to go back to this plane after imaging
@@ -474,7 +522,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     position = start_position + plane * self.z_step
                     self.ref['focus'].go_to_position(position, direct=True)
                     # print(f'target position: {position} um')
-                    # time.sleep(0.03)
+                    # sleep(0.03)
                     cur_pos = self.ref['focus'].get_position()
                     # print(f'current position: {cur_pos} um')
                     # z_target_positions.append(position)
@@ -483,20 +531,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
                     self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                                         np.array([1], dtype=np.uint8))
-                    time.sleep(0.005)
+                    sleep(0.005)
                     self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                                         np.array([0], dtype=np.uint8))
 
                     # wait for signal from FPGA to DAQ ('acquisition ready')
                     fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-                    t0 = time.time()
+                    t0 = time()
 
                     while not fpga_ready:
-                        time.sleep(0.001)
+                        sleep(0.001)
                         fpga_ready = \
                         self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
 
-                        t1 = time.time() - t0
+                        t1 = time() - t0
                         if t1 > self.timeout:  # for safety: timeout if no signal received within the indicated time
                             self.log.warning('Timeout occurred')
                             break
@@ -521,9 +569,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.save_metadata_file(metadata, file_path)
 
                 # calculate and save projection for bokeh --------------------------------------------------------------
-                # start = time.time()
+                # start = time()
                 self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
-                # stop = time.time()
+                # stop = time()
                 # print("Projection calculation time : {}".format(stop-start))
 
                 # # save file with z positions (same procedure for either file format)
@@ -536,6 +584,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
             self.ref['roi'].go_to_roi_xy()
+
+            # correct for the axial displacement between the first and last ROIs
+            dz = self.dz[0]
+            self.ref['autofocus'].stage_move_z(dz)
+            self.ref['autofocus'].stage_wait_for_idle()
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
@@ -555,7 +608,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
             self.ref['daq'].start_rinsing(30)
-            start_rinsing_time = time.time()
+            start_rinsing_time = time()
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
@@ -597,7 +650,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     ready = self.ref['flow'].target_volume_reached
 
                     while not ready:
-                        time.sleep(1)
+                        sleep(1)
                         ready = self.ref['flow'].target_volume_reached
                         # retrieve data for data saving at the end of interation
                         self.append_flow_data(pressure, volume, flowrate)
@@ -608,10 +661,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                             ready = True
 
                     self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
+                    sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
                     # get the last data points
                     self.append_flow_data(pressure, volume, flowrate)
-                    time.sleep(1)
+                    sleep(1)
                     self.ref['flow'].set_pressure(0.0)
 
                     # save pressure and volume data to file
@@ -622,7 +675,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 else:  # an incubation step
                     t = self.photobleaching_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Incubation time: {t} s')
                     self.ref['valves'].set_valve_position('c', 1)
                     self.ref['valves'].wait_for_idle()
 
@@ -633,8 +686,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                         # if data are ready to be saved, launch a worker
                         path_to_upload = self.launch_data_uploading(path_to_upload)
                         if not self.aborted:
-                            time.sleep(30)
-                    time.sleep(remainder)
+                            sleep(30)
+                    sleep(remainder)
 
                     self.ref['valves'].set_valve_position('c', 2)
                     self.ref['valves'].wait_for_idle()
@@ -648,10 +701,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].wait_for_idle()
 
             # verify if rinsing finished in the meantime
-            current_time = time.time()
+            current_time = time()
             diff = current_time - start_rinsing_time
             if diff < 60:
-                time.sleep(60 - diff + 1)
+                sleep(60 - diff + 1)
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -700,7 +753,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 path_to_upload = []
             while path_to_upload and not self.aborted:
-                time.sleep(1)
+                sleep(1)
                 path_to_upload = self.launch_data_uploading(path_to_upload)
 
         # reset the camera to default state
@@ -729,7 +782,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['flow'].enable_flowcontrol_actions()
         self.ref['pos'].enable_positioning_actions()
 
-        total = time.time() - self.start
+        total = time() - self.start
         print(f'total time with logging = {self.logging}: {total} s')
 
         self.log.info('cleanupTask finished')

@@ -315,7 +315,6 @@ class RoiMainWindowCE(RoiMainWindow):
 # GUI class
 # ======================================================================================================================
 
-
 class RoiGUI(GUIBase):
     """ This is the GUI Class for Roi selection.
 
@@ -337,6 +336,7 @@ class RoiGUI(GUIBase):
 
     # signals
     sigRoiWidthChanged = QtCore.Signal(float)
+    sigRoiFirstDigitChanged = QtCore.Signal(float)
     sigRoiListNameChanged = QtCore.Signal(str)
     sigStartTracking = QtCore.Signal()
     sigStopTracking = QtCore.Signal()
@@ -462,6 +462,7 @@ class RoiGUI(GUIBase):
 
         # signals
         self.sigRoiWidthChanged.connect(self._roi_logic.set_roi_width)
+        self.sigRoiFirstDigitChanged.connect(self._roi_logic.set_roi_first_digit)
         self.sigRoiListNameChanged.connect(self._roi_logic.rename_roi_list, QtCore.Qt.QueuedConnection)
         self._mw.active_roi_ComboBox.activated[str].connect(self._roi_logic.set_active_roi, QtCore.Qt.QueuedConnection)
         self.sigAddInterpolation.connect(self._roi_logic.add_interpolation, QtCore.Qt.QueuedConnection)
@@ -488,7 +489,11 @@ class RoiGUI(GUIBase):
         """ Connect signals with slots within this module (internal signals). """
         self._mw.add_interpolation_Action.triggered.connect(self.add_interpolation_clicked, QtCore.Qt.QueuedConnection)
         self._mw.discard_all_roi_Action.triggered.connect(self.delete_all_roi_clicked, QtCore.Qt.QueuedConnection)
-        self._mw.roi_width_doubleSpinBox.editingFinished.connect(self.roi_width_changed)  # just emit one signal when finished and not at each modification of the value (valueChanged)
+
+        # just emit one signal when finished and not at each modification of the value (valueChanged)
+        self._mw.roi_width_doubleSpinBox.editingFinished.connect(self.roi_width_changed)
+        self._mw.roi_starting_digit_spinBox.editingFinished.connect(self.roi_first_digit_changed)
+
         self._mw.save_list_Action.triggered.connect(self.save_roi_list)
         self._mw.load_list_Action.triggered.connect(self.load_roi_list)
 
@@ -701,6 +706,14 @@ class RoiGUI(GUIBase):
         :return: None
         """
         self.sigRoiWidthChanged.emit(self._mw.roi_width_doubleSpinBox.value())
+
+    @QtCore.Slot()
+    def roi_first_digit_changed(self):
+        """ This method is called when the spinbox value is changed. Sends a signal to logic informing about
+        the new digit to used for naming the ROI.
+        :return: None
+        """
+        self.sigRoiFirstDigitChanged.emit(self._mw.roi_starting_digit_spinBox.value())
 
     @QtCore.Slot()
     def roi_list_name_changed(self):

@@ -91,6 +91,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.num_laserlines: int = 0
         self.prefix: str = ""
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        self.autofocus_failed: int = 0
 
     def startTask(self):
         """ """
@@ -174,15 +175,44 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # autofocus
         self.ref['focus'].start_search_focus()
-        # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
-        ready = self.ref['focus']._stage_is_positioned
-        counter = 0
-        while not ready:
-            counter += 1
+        # wait for the search focus flag to turn True, indicating that the search procedure is launched. In case
+        # the autofocus is lost from the start, the search focus routine is starting and stopped before the
+        # while loop is initialized. The aborted flag is then used to avoid getting stuck in the loop.
+        search_focus_start = self.ref['focus'].focus_search_running
+        while not search_focus_start:
             sleep(0.1)
-            ready = self.ref['focus']._stage_is_positioned
-            if counter > 500:
+            search_focus_start = self.ref['focus'].focus_search_running
+            if self.ref['focus'].focus_search_aborted:
+                print('focus search was aborted')
                 break
+
+        # wait for the search focus flag to turn False, indicating that the search procedure stopped, whatever
+        # the result
+        search_focus_running = self.ref['focus'].focus_search_running
+        while search_focus_running:
+            sleep(0.5)
+            search_focus_running = self.ref['focus'].focus_search_running
+
+        # check if the focus was found
+        ready = self.ref['focus']._stage_is_positioned
+        if not ready and self.autofocus_failed == 0:
+            print('The autofocus was lost for the first time.')
+            self.autofocus_failed += 1
+        elif not ready and self.autofocus_failed > 0:
+            print('The autofocus was lost for the second time. The HiM experiment is aborted.')
+            self.aborted = True
+        else:
+            self.autofocus_failed = 0
+
+        # # need to ensure that focus is stable here and stage is back at the sample surface, not on the reference plane
+        # ready = self.ref['focus']._stage_is_positioned
+        # counter = 0
+        # while not ready:
+        #     counter += 1
+        #     sleep(0.1)
+        #     ready = self.ref['focus']._stage_is_positioned
+        #     if counter > 500:
+        #         break
 
         # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
         self.ref['focus'].do_piezo_position_correction()

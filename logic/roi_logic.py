@@ -249,7 +249,7 @@ class RegionOfInterestList:
     # to be modified: remove kwarg name in calls to this function -> better solution: leave it as it for compatibility
     # and just make sure that a generic name always overwrites a name given by user
 
-    def add_roi(self, position, name=None):
+    def add_roi(self, position, first_digit=0, name=None):
         """ Add a new ROI to a list. A generic name is used (even when the name parameter is filled with a user defined
         value. name parameter was kept for compatibility with previous program structure.
 
@@ -265,11 +265,10 @@ class RegionOfInterestList:
             # Create a generic name which cannot be accessed by the user
             # using the increment of the last roi in the list (deleted roi names do not get 'refilled')
             if len(self._rois) == 0:
-                last_number = 0
+                # last_number = 0
+                last_number = int(first_digit) - 1
             else:
                 last_index = len(self._rois) - 1  # self._rois is a dictionary
-#                print(last_index)
-#                print(self._rois.keys())
                 keylist = [*self._rois.keys()]
                 last = keylist[last_index]  # pick the roi with the highest number in the list containing all the keys
                 last_number = int(last.strip('ROI_'))
@@ -444,6 +443,7 @@ class RoiLogic(GenericLogic):
     _roi_list = StatusVar(default=dict())  # Notice constructor and representer further below
     _active_roi = StatusVar(default=None)
     _roi_width = StatusVar(default=50)
+    _roi_starting_digit = StatusVar(default=0)
 
     # Signals
     sigRoiUpdated = QtCore.Signal(str, str, np.ndarray)  # old_name, new_name, current_position
@@ -670,7 +670,7 @@ class RoiLogic(GenericLogic):
         current_roi_set = set(self.roi_names)
 
         # Add ROI to current ROI list
-        self._roi_list.add_roi(position=position, name=name)
+        self._roi_list.add_roi(position=position, first_digit=self._roi_starting_digit, name=name)
 
         # Get newly added ROI name from comparing ROI names before and after addition of new ROI
         roi_name = set(self.roi_names).difference(current_roi_set).pop()
@@ -919,6 +919,15 @@ class RoiLogic(GenericLogic):
         """
         self._roi_width = float(width)
         self.sigWidthUpdated.emit(width)
+
+    @QtCore.Slot(float)
+    def set_roi_first_digit(self, first_digit):
+        """
+        Set a new first digit for the ROI name.
+        :param: float first_digit: new digit to use for naming the ROI
+        :return: None
+        """
+        self._roi_starting_digit = float(first_digit)
 
     # @QtCore.Slot()
     # def set_cam_image(self, emit_change=True):

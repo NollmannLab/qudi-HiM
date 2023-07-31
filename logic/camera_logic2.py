@@ -26,6 +26,8 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import time
+
 import numpy as np
 from time import sleep  #, time
 import os
@@ -152,14 +154,16 @@ class CameraLogic(GenericLogic):
     sigSaving = QtCore.Signal()
     sigCleanStatusbar = QtCore.Signal()
     sigUpdateCamStatus = QtCore.Signal(str, str, str, str)
-    sigLiveStopped = QtCore.Signal()  # informs the GUI that live mode was stopped programatically
+    sigLiveStopped = QtCore.Signal()  # informs the GUI that live mode was stopped programmatically
     sigDisableCameraActions = QtCore.Signal()
     sigEnableCameraActions = QtCore.Signal()
+    sigDisableFrameTransfer = QtCore.Signal()
 
     # attributes
     enabled = False  # indicates if the camera is currently in live mode
     saving = False  # indicates if the camera is currently saving a movie
     restart_live = False
+    frame_transfer = False  # indicates whether the frame transfer mode is activated
 
     has_temp = False
     has_shutter = False
@@ -435,13 +439,18 @@ class CameraLogic(GenericLogic):
             if self.enabled:  # if live mode was interrupted, restart it
                 self.resume_live()
             self.log.info(f'Frametransfer mode activated: {activate}')
+            self.frame_transfer = bool(activate)
             # we also need to update the indicator on the gui
-            exp = self.get_exposure()  # we just need to send the signal sigExposureChanged but it must carry a float
+            exp = self.get_exposure()  # we just need to send the signal sigExposureChanged, but it must carry a float
             # so we send exp as argument
             self.sigExposureChanged.emit(exp)
         # do nothing in case of cameras that do not support frame transfer
         else:
             pass
+
+    def disable_frame_transfer(self):
+        """ For specific tasks, the frame transfer mode should be disabled."""
+        self.sigDisableFrameTransfer.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle camera acquisition and snap / live display
@@ -550,6 +559,9 @@ class CameraLogic(GenericLogic):
         err = self._hardware.start_movie_acquisition(n_frames)
         if not err:
             self.log.warning('Video acquisition did not start')
+
+        # wait at least a full exposure time to make sure at least one image was acquired.
+        time.sleep(self._exposure * 2)
 
         # start a worker thread that will monitor the status of the saving
         worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
