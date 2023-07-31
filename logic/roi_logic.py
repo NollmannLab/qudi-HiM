@@ -849,6 +849,7 @@ class RoiLogic(GenericLogic):
             return None
 
         try:
+            print(f'The path is {complete_path}')
             with open(complete_path, 'r') as file:
                 roi_list_dict = json.load(file)
 

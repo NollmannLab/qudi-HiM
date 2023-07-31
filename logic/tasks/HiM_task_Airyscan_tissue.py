@@ -229,6 +229,7 @@ class Task(InterruptableTask):
         # list
         ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
         for im_name in ref_im_name_list:
+            print(im_name)
             ref_image = imread(im_name)
             ref_image = ref_image[0, 0, :, :, 0]
             self.ref_images.append(ref_image)
