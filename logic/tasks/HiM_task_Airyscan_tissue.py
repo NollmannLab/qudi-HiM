@@ -272,6 +272,7 @@ class Task(InterruptableTask):
             if len(self.zen_directory) == 1:
                 self.zen_directory = self.zen_directory[0]
                 print(f'ZEN will save the data in the following folder : {self.zen_directory}')
+                break
             elif len(self.zen_directory) == 0:
                 sleep(1)
             else:
@@ -279,8 +280,9 @@ class Task(InterruptableTask):
                 self.aborted = True
 
         # check the autofocus images in the save folder
-        self.save_path_content_before = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
-                                             recursive=True)
+        self.save_path_content_before = []
+        # self.save_path_content_before = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
+        #                                      recursive=True)
 
         # create a directory in which all the metadata will be saved (for zen the acquisition parameters and file name
         # are saved on a separate computer) and create the network directory as well
@@ -607,13 +609,6 @@ class Task(InterruptableTask):
                 write_status_dict_to_file(self.status_dict_path, self.status_dict)
                 add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
 
-            # rinse needle after photobleaching
-            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
-            self.ref['valves'].wait_for_idle()
-            start_rinsing_time = time.time()
-
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
                 path_to_upload = self.check_acquired_data()
@@ -692,11 +687,20 @@ class Task(InterruptableTask):
                 if self.logging:
                     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
-            # verify if rinsing finished in the meantime
-            current_time = time.time()
-            diff = current_time - start_rinsing_time
-            if diff < 60:
-                time.sleep(60 - diff + 1)
+            # perform rinsing
+            # rinse needle after photobleaching
+            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
+            self.ref['valves'].wait_for_idle()
+            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
+            self.ref['valves'].wait_for_idle()
+            self.ref['flow'].start_rinsing(60)
+            start_rinsing_time = time.time()
+            diff = 0
+
+            while diff < 60:
+                current_time = time.time()
+                diff = current_time - start_rinsing_time
+                time.sleep(1)
 
             # set valves to default positions
             self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
@@ -1065,8 +1069,10 @@ class Task(InterruptableTask):
         while not new_image_found:
             save_path_content_after = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
                                            recursive=True)
+            print(self.save_path_content_before)
             print(save_path_content_after)
             new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
+
             if len(new_autofocus_image_path) > 1:
                 sleep(0.5)
                 print('temporary file')
