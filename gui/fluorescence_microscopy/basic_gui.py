@@ -55,7 +55,6 @@ from gui.validators import NameValidator
 # Classes for the dialog windows and main window
 # ======================================================================================================================
 
-
 class CameraSettingDialog(QtWidgets.QDialog):
     """ Create the SettingsDialog window, based on the corresponding *.ui file.
 
@@ -143,6 +142,9 @@ class BasicGUI(GUIBase):
     laser_logic = Connector(interface='LaserControlLogic')
     filterwheel_logic = Connector(interface='FilterwheelLogic')
     brightfield_logic = Connector(interface='BrightfieldLogic', optional=True)
+
+    # define the default language option as English (to make sure all float have a point as a separator)
+    QtCore.QLocale.setDefault(QtCore.QLocale("English"))
 
     # config options
     default_path = ConfigOption('default_path', missing='error')
@@ -363,6 +365,7 @@ class BasicGUI(GUIBase):
         self._camera_logic.sigExposureChanged.connect(self.update_exposure)
         self._camera_logic.sigGainChanged.connect(self.update_gain)
         self._camera_logic.sigTemperatureChanged.connect(self.update_temperature)
+        self._camera_logic.sigDisableFrameTransfer.connect(self.disable_frame_transfer)
 
         # data acquisition signals
         self._camera_logic.sigUpdateDisplay.connect(self.update_data)
@@ -420,6 +423,9 @@ class BasicGUI(GUIBase):
 
             laser_spinbox = QtWidgets.QDoubleSpinBox()
             laser_spinbox.setMaximum(100.00)
+            laser_spinbox.setDecimals(1)
+            locale = QtCore.QLocale('English')
+            laser_spinbox.setLocale(locale)
             self.laser_DSpinBoxes.append(laser_spinbox)
 
             self._mw.formLayout_3.addRow(laser_label, laser_spinbox)
@@ -997,6 +1003,10 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(True)
         self._mw.video_quickstart_Action.setDisabled(True)
         self._mw.set_sensor_Action.setDisabled(True)
+
+    def disable_frame_transfer(self):
+        """ Disables the frame transfer checkbox. """
+        self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
     def enable_camera_toolbuttons(self):
         """ Enables all toolbuttons of the camera toolbar.
