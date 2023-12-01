@@ -66,24 +66,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter: int = 0
         self.user_param_dict = {}
         self.timeout: float = 0
-        self.z_target_positions: list = []
-        self.z_actual_positions: list = []
-        self.num_frames: int = 0
         self.default_exposure: float = 0
         self.sample_name: str = ""
         self.exposure: float = 0
-        self.num_z_planes: int = 0
-        self.z_step: int = 0
-        self.centered_focal_plane: bool = False
+        self.num_frames_total: int = 0
+        self.num_im_per_sequences: int = 400
+        self.sequences: int = 0
+        self.cycles: int = 0
         self.imaging_sequence: list = []
         self.save_path: str = ""
         self.file_format: str = ""
         self.complete_path: str = ""
-        self.start_position: float = 0
         self.num_laserlines: int = 0
         self.wavelengths: list = []
         self.intensities: list = []
-        self.focal_plane_position: float = 0
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
 
     def startTask(self):
@@ -107,9 +103,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # prepare the camera - the maximum number of images per file is ~500. Therefore, the acquisition will be
         # organized as a sequence small acquisition, each composed of 400 images.
-        self.num_frames_total = self.num_z_planes * self.num_laserlines
-        self.sequences = int(self.num_frames_total / 200)
-        self.cycles = int(200 / self.num_laserlines)
+        self.sequences = int(np.ceil(self.num_frames_total / self.num_im_per_sequences))
+        self.cycles = int(self.num_im_per_sequences / self.num_laserlines)
         print(f'The total number of sequences is {self.sequences} and each contains {self.cycles} cycles of '
               f'acquisition')
 
@@ -127,7 +122,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter = 0
 
         # start the session on the fpga using the user parameters
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
+        self.ref['laser'].run_multicolor_imaging_task_session(self.cycles, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
 
         # defines the timeout value
@@ -144,7 +139,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.aborted:
                 break
 
-            self.ref['cam'].prepare_camera_for_multichannel_imaging(200, self.exposure, None, None, None)
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_im_per_sequences, self.exposure,
+                                                                    None, None, None)
             self.ref['cam'].start_acquisition()
 
             for cycle in range(self.cycles):
@@ -180,10 +176,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # save the images
             # ------------------------------------------------------------------------------------------------------
             image_data = self.ref['cam'].get_acquired_data()
+            image_data = image_data[:, 255:1791, 255:1791]
             image_name = os.path.join(os.path.split(self.complete_path)[0], f'sequence_{sequence}.tif')
             print(image_name)
 
-            self.ref['cam'].save_to_tiff(self.num_frames, image_name, image_data)
+            self.ref['cam'].save_to_tiff(self.num_im_per_sequences, image_name, image_data)
             metadata = self.get_metadata()
             file_path = image_name.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
@@ -233,11 +230,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         user must specify the following dictionary (here with example entries):
             sample_name: 'Mysample'
             exposure: 0.05  # in s
-            num_z_planes: 50
-            z_step: 0.25  # in um
-            centered_focal_plane: False
             save_path: 'E:\'
-            file_format: 'tif'
             imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
         """
         try:
@@ -246,12 +239,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 self.sample_name = self.user_param_dict['sample_name']
                 self.exposure = self.user_param_dict['exposure']
-                self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
+                self.num_frames_total = self.user_param_dict['num_z_planes']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
-                self.file_format = self.user_param_dict['file_format']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -277,32 +267,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
         for i in range(self.num_laserlines, 5):
             self.intensities.append(0)
-
-    def calculate_start_position(self, centered_focal_plane):
-        """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
-        Note : the scan should start below the current position so that the focal plane will be the central plane or one
-        of the central planes in case of an even number of planes.
-
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
-
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()  # user has set focus
-        self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
-
-        if centered_focal_plane:
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
-            # odd number of planes:
-            else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -357,12 +321,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return: dict metadata
         """
         metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
-                    'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
+                    'Number of images per sequences': self.num_im_per_sequences,
+                    'Number of sequences': self.sequences,
                     'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        # pixel size ???
+
         return metadata
 
     def get_fits_metadata(self):

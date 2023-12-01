@@ -252,6 +252,12 @@ class ExpConfigLogic(GenericLogic):
                                    'num_z_planes', 'z_step', 'centered_focal_plane']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            if experiment == 'PAINT RAMM':
+                if not filename:
+                    filename = 'PAINT_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'imaging_sequence', 'num_z_planes']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Multicolor scan Airyscan':
                 if not filename:
                     filename = 'multicolor_scan_task_AIRYSCAN.yml'
