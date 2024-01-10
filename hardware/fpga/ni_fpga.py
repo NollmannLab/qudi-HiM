@@ -2,7 +2,7 @@
 """
 Qudi-CBS
 
-This file contains a class for the NI-FPGA.
+This file contains a class for the NI-FPGA used on the RAMM microscope.
 
 An extension to Qudi.
 
@@ -42,7 +42,7 @@ class Nifpga(Base, LasercontrolInterface):
     nifpga:
         module.Class: 'fpga.ni_fpga.Nifpga'
         resource: 'RIO0'
-        default_bitfile: 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QUDIQPDPIDlaserc_kWY0ujWrcbM.lvbitx' # Associated to QUDI_QPD_PID_laser_control.vi
+        default_bitfile: 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QUDIQPDPIDlaserc_kWY0ujWrcbM.lvbitx'
         wavelengths:
             - '405 nm'
             - '488 nm'
@@ -73,9 +73,12 @@ class Nifpga(Base, LasercontrolInterface):
             - 'integration_time_us'
             - 'reset_counter'
 
-            # registers represent something like channels..
-            # The link between registers and the physical channel is made in the labview file from which the bitfile is generated.
+    Registers represent something like input / output channels. Note that the registers indicated in the config file are
+    the variables used in the labview program from which the default bitfile was compiled / generated. If a different
+    bitfile is used (see the section "Functions to handle FPGA sessions associated to different bitfiles" below),
+    different registers will be called.
     """
+
     # config options
     resource = ConfigOption('resource', None, missing='error')
     default_bitfile = ConfigOption('default_bitfile', None, missing='error')
@@ -384,7 +387,7 @@ class Nifpga(Base, LasercontrolInterface):
         # make session registers accessible
         num_lines = self.session.registers['N laser lines']  # number of laser lines
         num_z_pos = self.session.registers['N Z positions']  # number of z positions
-        num_images_acquired = self.session.registers['Images acquired']  # indicator register how many images have been acquired
+        # num_images_acquired = self.session.registers['Images acquired']  # indicator register how many images have been acquired
         laser_lines = self.session.registers['Laser lines']  # list containing numbers of the laser lines which should be addressed
         laser_power = self.session.registers['Laser power']  # list containing the intensity in % to apply (to the element at the same index in laser_lines list
         stop = self.session.registers['stop']
@@ -417,15 +420,47 @@ class Nifpga(Base, LasercontrolInterface):
 
         conv_values = [self.convert_value(item) for item in values]
         num_lines.write(num_laserlines)
-        # print(num_laserlines)
         num_z_pos.write(z_planes)
-        # print(z_planes)
         laser_lines.write(wavelength)
-        # print(wavelength)
         laser_power.write(conv_values)
-        # print(conv_values)
         stop.write(False)
-        # print("exposure time = " + str(exposure_time_ms))
+        exposure_time = int(exposure_time_ms * 1000 * 2)
+        exposure.write(exposure_time)
+
+        self.session.run()
+
+    def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure_time_ms):
+        """ Allows to access the parameters of the bitfile used in multicolor stack imaging experiments.
+        Associated bitfile 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        :param: int z_planes: number of z planes in a stack
+        :param: int list wavelength: list of length 5 containing the identifier number of the laser line to be addressed:
+                                        0: BF, 1: 405, 2: 488, 3: 561, 4: 640
+                                        (elements in the list at index > num_laserlines are ignored)
+        :param: float list values: list of length 5 containing the intensity in per cent to be applied to the line
+                                    given at the same index in the wavelength list
+                                    (elements in the list at index > num_laserlines are ignored)
+        :param: int num_laserlines: number of channels from which images are to be taken
+        :param: float exposure_time_ms: exposure time used during the experiment in ms
+
+        :return: None
+        """
+        # make session registers accessible
+        num_lines = self.session.registers['N laser lines']  # number of laser lines
+        num_z_pos = self.session.registers['N Z positions']  # number of z positions
+        laser_lines = self.session.registers['Laser lines']  # list containing numbers of the laser lines which should be addressed
+        stop = self.session.registers['stop']
+        exposure = self.session.registers['exposure_time_ms']  # integer indicating the exposure time of the camera in ms
+
+        self.stop.write(False)
+        self.integration_time_us.write(10)
+
+        # reset session, apply new values and restart it
+        self.session.reset()
+
+        num_lines.write(num_laserlines)
+        num_z_pos.write(z_planes)
+        laser_lines.write(wavelength)
+        stop.write(False)
         exposure_time = int(exposure_time_ms * 1000 * 2)
         exposure.write(exposure_time)
 
