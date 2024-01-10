@@ -177,7 +177,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             # ------------------------------------------------------------------------------------------------------
             image_data = self.ref['cam'].get_acquired_data()
             image_data = image_data[:, 255:1791, 255:1791]
-            image_name = os.path.join(os.path.split(self.complete_path)[0], f'sequence_{sequence}.tif')
+            image_name = os.path.join(os.path.split(self.complete_path)[0], f'sequence_{str(sequence).zfill(2)}.tif')
             print(image_name)
 
             self.ref['cam'].save_to_tiff(self.num_im_per_sequences, image_name, image_data)
