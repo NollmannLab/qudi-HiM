@@ -33,6 +33,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
+from core.module import Base
 from interface.lasercontrol_interface import LasercontrolInterface
 from qtpy import QtCore
 from core.configoption import ConfigOption
@@ -43,7 +44,7 @@ from time import sleep
 # Logic class
 # ======================================================================================================================
 
-class CelestaFPGALogic(GenericLogic, LasercontrolInterface):
+class CelestaFPGA(GenericLogic, LasercontrolInterface):
     """ Controls the DAQ analog output and allows to set a digital output line for triggering
     or controls the FPGA output
 
@@ -57,7 +58,7 @@ class CelestaFPGALogic(GenericLogic, LasercontrolInterface):
 
     # declare the hardware we need to connect to the logic
     celesta = Connector(interface='LasercontrolInterface')
-    nifpga = Connector(interface='LasercontrolInterface')
+    fpga = Connector(interface='LasercontrolInterface')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -68,15 +69,48 @@ class CelestaFPGALogic(GenericLogic, LasercontrolInterface):
         """ Initialisation performed during activation of the module.
         """
         self._celesta = self.celesta()
-        self._fpga = self.nifpga()
+        self._fpga = self.fpga()
 
     def on_deactivate(self):
         """ Perform required deactivation. """
         pass
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods associated to Celesta
+# ----------------------------------------------------------------------------------------------------------------------
+
     def get_dict(self):
-        self._celesta.get_dict()
+        return self._celesta.get_dict()
 
     def apply_voltage(self, voltage, channel):
         self._celesta.apply_voltage(voltage, channel)
 
+    def wakeup(self):
+        self._celesta.wakeup()
+
+    def set_ttl(self, ttl_state):
+        self._celesta.set_ttl(ttl_state)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods associated to FPGA
+# ----------------------------------------------------------------------------------------------------------------------
+    def close_default_session(self):
+        self._fpga.close_default_session()
+
+    def restart_default_session(self):
+        self._fpga.restart_default_session()
+
+    def start_task_session(self, bitfile):
+        self._fpga.start_task_session(bitfile)
+
+    def end_task_session(self):
+        self._fpga.end_task_session()
+
+    def run_test_task_session(self, data):
+        self._fpga.run_test_task_session(data)
+
+    def run_multicolor_imaging_task_session(self, z_planes, wavelength, values, num_laserlines, exposure):
+        self._fpga.run_multicolor_imaging_task_session(z_planes, wavelength, values, num_laserlines, exposure)
+
+    def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
+        self._fpga.run_celesta_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines, exposure)

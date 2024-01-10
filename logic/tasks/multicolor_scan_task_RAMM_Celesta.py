@@ -4,13 +4,13 @@ Qudi-CBS
 
 An extension to Qudi.
 
-This module contains a task to perform a multicolor scan on RAMM setup.
-(Take at a given position a stack of images using a sequence of different laserlines or intensities in each plane
-of the stack.)
+This module contains a task to perform a multicolor scan on the RAMM setup equiped with a Celesta Lumencor laser source.
+(Take at a given position a stack of images using a sequence of different laserlines or intensities in each plane of the
+ stack.)
 
-@author: F. Barho
+@author: JB. Fiche (from F. Barho original code)
 
-Created on Wed March 10 2021
+Created on Tue January 9, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -37,6 +37,7 @@ import yaml
 from time import sleep, time
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
+from logic.task_helper_functions import get_entry_nested_dict
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -62,6 +63,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
+        self.FPGA_max_laserlines = 10
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter: int = 0
         self.user_param_dict = {}
@@ -84,12 +86,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.wavelengths: list = []
         self.intensities: list = []
         self.focal_plane_position: float = 0
-        self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
+        self.lightsource_dict: dict = {'Brightfield': 0, '405 nm': 1, '477 nm': 2, '546 nm': 3, '638 nm': 4,
+                                       '750 nm': 5}
 
     def startTask(self):
         """ """
         self.log.info('started Task')
-
         self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
 
         # stop all interfering modes on GUIs and disable GUI actions
@@ -103,25 +105,39 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
 
-        # set the ASI stage in trigger mode
+        # set the ASI stage in trigger mode to allow brightfield control
         self.ref['roi'].set_stage_led_mode('Triggered')
+
+        # close default FPGA session
+        self.ref['laser'].end_task_session()
 
         # read all user parameters from config
         self.load_user_parameters()
 
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
+        # compute the starting position of the z-stack (for the piezo)
+        self.start_position = self.calculate_start_position(self.centered_focal_plane)
+
+        # format the imaging sequence (for Lumencor & FPGA)
+        self.format_imaging_sequence()
 
         # prepare the camera
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].start_acquisition()
 
+        # define the laser intensities for the Lumencor
+        # Set : - all laser lines to OFF
+        #       - the celesta laser source in external TTL mode
+        #       - the intensity of each laser line according to the task parameters
+        self.ref['laser'].lumencor_wakeup()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
+
         # download the bitfile for the task on the FPGA
-        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_Qudimulticolours_mq4E6EoFF7s.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
-        self.log.info('Task session started')
+        self.log.info('FPGA bitfile loaded for Multicolour task')
 
         # prepare the daq: set the digital output to 0 before starting the task
         self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
@@ -131,8 +147,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter = 0
 
         # start the session on the fpga using the user parameters
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
-                                                              self.num_laserlines, self.exposure)
+        #self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
+        #                                                      self.num_laserlines, self.exposure)
+        print(self.wavelengths, self.num_laserlines)
+        self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths,
+                                                                      self.num_laserlines, self.exposure)
 
         # defines the timeout value
         self.timeout = self.num_laserlines * self.exposure + 0.1
@@ -148,10 +167,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         position = self.start_position + (self.step_counter - 1) * self.z_step
         self.ref['focus'].go_to_position(position)
-        # print(f'target position: {position} um')
         sleep(0.03)
         cur_pos = self.ref['focus'].get_position()
-        # print(f'current position: {cur_pos} um')
         self.z_target_positions.append(position)
         self.z_actual_positions.append(cur_pos)
 
@@ -248,8 +265,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ This function is called from startTask() to load the parameters given by the user in a specific format.
 
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
-
-        user must specify the following dictionary (here with example entries):
+        User must specify the following dictionary (here with example entries):
             sample_name: 'Mysample'
             exposure: 0.05  # in s
             num_z_planes: 50
@@ -275,29 +291,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
-        # establish further user parameters derived from the given ones
+        # define the path where the data will be saved
         self.complete_path = self.get_complete_path(self.save_path)
-
-        self.start_position = self.calculate_start_position(self.centered_focal_plane)
-
-        # count the number of lightsources
-        self.num_laserlines = len(self.imaging_sequence)
-
-        # convert the imaging_sequence given by user into format required by the bitfile
-        wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
-        for n, key in enumerate(wavelengths):
-            if key == 'Brightfield':
-                wavelengths[n] = 0
-            else:
-                wavelengths[n] = self.lightsource_dict[key]
-
-        for i in range(self.num_laserlines, 5):
-            wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
-        self.wavelengths = wavelengths
-
-        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, 5):
-            self.intensities.append(0)
 
     def calculate_start_position(self, centered_focal_plane):
         """
@@ -367,6 +362,55 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         file_name = f'scan_{prefix}.{self.file_format}'
         complete_path = os.path.join(path, file_name)
         return complete_path
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Format the imaging cycle for the Lumencor laser source and FPGA
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
+        The lumencor celesta is controlled in TTL mode. Intensity for each channel must be set before launching the
+        acquisition sequence. It is not possible to call the same line with different power during the acquisition.
+        """
+
+    # count the number of lightsources
+        self.num_laserlines = len(self.imaging_sequence)
+
+    # convert the imaging_sequence given by user into format required by the bitfile. Note that a maximum number of
+    # laser lines is allowed (self.FPGA_max_laserlines). It is constrained by the size of the laser/intensity arrays
+    # defined in the labview script from which the bitfile is compiled.
+        self.wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
+
+        print(self.wavelengths)
+
+        self.wavelengths = [self.lightsource_dict[key] for key in self.wavelengths]
+
+        print(self.wavelengths)
+
+        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+            self.wavelengths.append(0)  # must always be a list of length 5: append 0 until necessary length reached
+
+        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
+        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+            self.intensities.append(0)
+
+        print(self.intensities)
+
+    # Load the laser and intensity dictionary used in lasercontrol_logic and update it according to the imaging sequence
+        laser_dict = self.ref['laser'].get_laser_dict()
+        intensity_dict = self.ref['laser'].init_intensity_dict()
+        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
+
+        print(laser_dict)
+        print(intensity_dict)
+        print(imaging_sequence)
+
+        for i in range(len(imaging_sequence)):
+            key = imaging_sequence[i][0]
+            intensity_dict[key] = imaging_sequence[i][1]
+
+        self.intensity_dict = intensity_dict
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata

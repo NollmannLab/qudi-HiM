@@ -451,9 +451,6 @@ class Nifpga(Base, LasercontrolInterface):
         stop = self.session.registers['stop']
         exposure = self.session.registers['exposure_time_ms']  # integer indicating the exposure time of the camera in ms
 
-        self.stop.write(False)
-        self.integration_time_us.write(10)
-
         # reset session, apply new values and restart it
         self.session.reset()
 
