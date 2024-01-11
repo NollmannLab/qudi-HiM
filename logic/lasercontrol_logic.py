@@ -353,7 +353,7 @@ class LaserControlLogic(GenericLogic):
         :return: list laser_on - contains the emission state of each laser line
         """
         intensity, laser_on = self.lumencor_read_intensity_dict(intensity_dict)
-        self._controller.apply_voltage(intensity, [x * 0 for x in laser_on])
+        self._controller.apply_voltage(intensity, [0] * len(intensity))
 
     def lumencor_set_laser_line_emission(self, laser_on):
         """ Set the emission state of all the laser lines without changing the intensity values
@@ -362,7 +362,8 @@ class LaserControlLogic(GenericLogic):
 
     @staticmethod
     def lumencor_read_intensity_dict(intensity_dict):
-        """ Define the intensity of each laser lines of the celesta source. Set emission states of all laser lines to O.
+        """ Define the intensity of each laser lines of the celesta source. Set emission states of all laser lines to 1
+        if the intensity is above zero.
         """
         intensity = []
         laser_on = []

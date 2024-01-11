@@ -2,9 +2,9 @@
 """
 Qudi-CBS
 
-A module to control the Celesta Lumencor laser source and the FPGA. This logic was specifically designed for the RAMM
-setup and required to avoid changing the lasercontrol logic. The idea is to combine within the same logic all the
-functionalities associated to the Lumencor (intensity control) and FPGA (synchronization with the camera).
+A module to control the Celesta Lumencor laser source and the FPGA. This interfuse logic was specifically designed for
+the RAMM setup. The idea is to combine within the same logic all the functionalities associated to the Lumencor
+(intensity control) and FPGA (synchronization with the camera).
 
 An extension to Qudi.
 

@@ -37,7 +37,6 @@ import yaml
 from time import sleep, time
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
-from logic.task_helper_functions import get_entry_nested_dict
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -64,7 +63,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.FPGA_max_laserlines = 10
-        self.user_config_path = self.config['path_to_user_config']
+        self.user_config_path: str = self.config['path_to_user_config']
+        self.celesta_laser_dict: dict = self.ref['laser']._laser_dict
+        self.FPGA_wavelength_channels: list = []
+        self.celesta_intensity_dict: dict = {}
+        self.num_laserlines: int = 0
         self.step_counter: int = 0
         self.user_param_dict = {}
         self.timeout: float = 0
@@ -82,12 +85,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.file_format: str = ""
         self.complete_path: str = ""
         self.start_position: float = 0
-        self.num_laserlines: int = 0
-        self.wavelengths: list = []
         self.intensities: list = []
         self.focal_plane_position: float = 0
-        self.lightsource_dict: dict = {'Brightfield': 0, '405 nm': 1, '477 nm': 2, '546 nm': 3, '638 nm': 4,
-                                       '750 nm': 5}
 
     def startTask(self):
         """ """
@@ -108,7 +107,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # set the ASI stage in trigger mode to allow brightfield control
         self.ref['roi'].set_stage_led_mode('Triggered')
 
-        # close default FPGA session
+        # close previously opened FPGA session
         self.ref['laser'].end_task_session()
 
         # read all user parameters from config
@@ -131,10 +130,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         #       - the intensity of each laser line according to the task parameters
         self.ref['laser'].lumencor_wakeup()
         self.ref['laser'].lumencor_set_ttl(True)
-        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
 
         # download the bitfile for the task on the FPGA
-        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_Qudimulticolours_mq4E6EoFF7s.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('FPGA bitfile loaded for Multicolour task')
@@ -147,10 +145,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter = 0
 
         # start the session on the fpga using the user parameters
-        #self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
-        #                                                      self.num_laserlines, self.exposure)
-        print(self.wavelengths, self.num_laserlines)
-        self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths,
+        print(self.FPGA_wavelength_channels, self.num_laserlines)
+        self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
                                                                       self.num_laserlines, self.exposure)
 
         # defines the timeout value
@@ -369,48 +365,80 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def format_imaging_sequence(self):
         """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
-        The lumencor celesta is controlled in TTL mode. Intensity for each channel must be set before launching the
-        acquisition sequence. It is not possible to call the same line with different power during the acquisition.
+        The lumencor celesta is controlled in TTL mode. Intensity for each laser line must be set before launching the
+        acquisition sequence (using the celesta_intensity_dict). Then, the FPGA will activate each line (either laser or
+        brightfiel) based on the list of sources (FPGA_wavelength_channels).
+        Since the intensity of each laser line must be set before the acquisition, it is not possibe to call the same
+        laser line multiple times with different intensity values.
         """
 
-    # count the number of lightsources
+    # count the number of lightsources for each plane
         self.num_laserlines = len(self.imaging_sequence)
 
-    # convert the imaging_sequence given by user into format required by the bitfile. Note that a maximum number of
+    # from _laser_dict, list all the available laser sources in a dictionary and associate a unique integer value for
+    # the FPGA (starting at 1 since, for the FPGA, the brightfield is by default 0 and all the laser lines are organized
+    # in increasing wavelength values).
+    # In parallel, initialize the dictionary containing the intensity of each laser line of the Celesta.
+        available_laser_dict = {}
+        for laser in range(len(self.celesta_laser_dict)):
+            key = self.celesta_laser_dict[f'laser{laser + 1}']['wavelength']
+            available_laser_dict[key] = laser + 1
+            self.celesta_intensity_dict[key] = 0
+
+    # convert the imaging_sequence given by the user into format required by the bitfile (by default, 0 is the
+    # brightfield and then all the laser lines sorted by increasing wavelength values. Note that a maximum number of
     # laser lines is allowed (self.FPGA_max_laserlines). It is constrained by the size of the laser/intensity arrays
     # defined in the labview script from which the bitfile is compiled.
-        self.wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
+        for line in range(self.num_laserlines):
+            line_source = self.imaging_sequence[line][0]
+            line_intensity = self.imaging_sequence[line][1]
+            if line_source in available_laser_dict:
+                self.FPGA_wavelength_channels.append(available_laser_dict[line_source])
+                self.celesta_intensity_dict[line_source] = line_intensity
+            else:
+                self.FPGA_wavelength_channels.append(0)
 
-        print(self.wavelengths)
-
-        self.wavelengths = [self.lightsource_dict[key] for key in self.wavelengths]
-
-        print(self.wavelengths)
-
+    # For the FPGA, the wavelength list should have "FPGA_max_laserlines" entries. The list is padded with zero.
         for i in range(self.num_laserlines, self.FPGA_max_laserlines):
-            self.wavelengths.append(0)  # must always be a list of length 5: append 0 until necessary length reached
+            self.FPGA_wavelength_channels.append(0)
 
-        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
-            self.intensities.append(0)
+        print(available_laser_dict)
+        print(self.celesta_intensity_dict)
+        print(self.FPGA_wavelength_channels)
 
-        print(self.intensities)
 
-    # Load the laser and intensity dictionary used in lasercontrol_logic and update it according to the imaging sequence
-        laser_dict = self.ref['laser'].get_laser_dict()
-        intensity_dict = self.ref['laser'].init_intensity_dict()
-        imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
-                             self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
-
-        print(laser_dict)
-        print(intensity_dict)
-        print(imaging_sequence)
-
-        for i in range(len(imaging_sequence)):
-            key = imaging_sequence[i][0]
-            intensity_dict[key] = imaging_sequence[i][1]
-
-        self.intensity_dict = intensity_dict
+    #     self.wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
+    #
+    #     print(self.wavelengths)
+    #
+    #     self.wavelengths = [self.lightsource_dict[key] for key in self.wavelengths]
+    #
+    #     print(self.wavelengths)
+    #
+    #     for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+    #         self.wavelengths.append(0)  # must always be a list of length 5: append 0 until necessary length reached
+    #
+    #     self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
+    #     for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+    #         self.intensities.append(0)
+    #
+    #     print(self.intensities)
+    #
+    # # Load the laser and intensity dictionary used in lasercontrol_logic and update it according to the imaging sequence
+    #     laser_dict = self.ref['laser'].get_laser_dict()
+    #     intensity_dict = self.ref['laser'].init_intensity_dict()
+    #     imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
+    #                          self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
+    #
+    #     print(laser_dict)
+    #     print(intensity_dict)
+    #     print(imaging_sequence)
+    #
+    #     for i in range(len(imaging_sequence)):
+    #         key = imaging_sequence[i][0]
+    #         intensity_dict[key] = imaging_sequence[i][1]
+    #
+    #     self.intensity_dict = intensity_dict
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
@@ -427,7 +455,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        # pixel size ???
         return metadata
 
     def get_fits_metadata(self):
