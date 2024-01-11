@@ -10,7 +10,8 @@ of the stack.)
 
 @author: F. Barho
 
-Created on Wed March 10 2021
+Created on Wed March 10 2021 - Last modified on Thu Jan 11 2024 (adding the possibility to change the maximum number of
+FPGA channels using the FPGA_max_laserlines variable)
 ------------------------------------------------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -62,6 +63,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
+        self.FPGA_max_laserlines = 10
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter: int = 0
         self.user_param_dict = {}
@@ -118,8 +120,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].start_acquisition()
 
         # download the bitfile for the task on the FPGA
-        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('Task session started')
 
@@ -291,12 +293,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 wavelengths[n] = self.lightsource_dict[key]
 
-        for i in range(self.num_laserlines, 5):
+        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths
 
         self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, 5):
+        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
             self.intensities.append(0)
 
     def calculate_start_position(self, centered_focal_plane):
