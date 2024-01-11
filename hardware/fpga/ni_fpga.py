@@ -432,17 +432,12 @@ class Nifpga(Base, LasercontrolInterface):
     def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure_time_ms):
         """ Allows to access the parameters of the bitfile used in multicolor stack imaging experiments.
         Associated bitfile 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
-        :param: int z_planes: number of z planes in a stack
-        :param: int list wavelength: list of length 5 containing the identifier number of the laser line to be addressed:
+        @param: int z_planes: number of z planes in a stack
+        @param: int list wavelength: list of length 5 containing the identifier number of the laser line to be addressed:
                                         0: BF, 1: 405, 2: 488, 3: 561, 4: 640
                                         (elements in the list at index > num_laserlines are ignored)
-        :param: float list values: list of length 5 containing the intensity in per cent to be applied to the line
-                                    given at the same index in the wavelength list
-                                    (elements in the list at index > num_laserlines are ignored)
-        :param: int num_laserlines: number of channels from which images are to be taken
-        :param: float exposure_time_ms: exposure time used during the experiment in ms
-
-        :return: None
+        @param: int num_laserlines: number of channels from which images are to be taken
+        @param: float exposure_time_ms: exposure time used during the experiment in ms
         """
         # make session registers accessible
         num_lines = self.session.registers['N laser lines']  # number of laser lines
@@ -450,6 +445,53 @@ class Nifpga(Base, LasercontrolInterface):
         laser_lines = self.session.registers['Laser lines']  # list containing numbers of the laser lines which should be addressed
         stop = self.session.registers['stop']
         exposure = self.session.registers['exposure_time_ms']  # integer indicating the exposure time of the camera in ms
+
+        # reset session, apply new values and restart it
+        self.session.reset()
+
+        num_lines.write(num_laserlines)
+        num_z_pos.write(z_planes)
+        laser_lines.write(wavelength)
+        stop.write(False)
+        exposure_time = int(exposure_time_ms * 1000 * 2)
+        exposure.write(exposure_time)
+
+        self.session.run()
+
+    def run_celesta_roi_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure_time_ms):
+        """ Allows to access the parameters of the bitfile used in multicolor stack imaging experiments.
+        Associated bitfile 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        @param: int z_planes: number of z planes in a stack
+        @param: int list wavelength: list of length 5 containing the identifier number of the laser line to be addressed:
+                                        0: BF, 1: 405, 2: 488, 3: 561, 4: 640
+                                        (elements in the list at index > num_laserlines are ignored)
+        @param: int num_laserlines: number of channels from which images are to be taken
+        @param: float exposure_time_ms: exposure time used during the experiment in ms
+        """
+        # make session registers accessible
+        num_lines = self.session.registers['N laser lines']  # number of laser lines
+        num_z_pos = self.session.registers['N Z positions']  # number of z positions
+        laser_lines = self.session.registers['Laser lines']  # list containing numbers of the laser lines which should be addressed
+        stop = self.session.registers['stop']
+        exposure = self.session.registers['exposure_time_ms']  # integer indicating the exposure time of the camera in ms
+
+        # redefine the registers for QPD and autofocus related registers
+        self.qpd_x_read = self.session.registers[self._registers_qpd[0]]
+        self.qpd_y_read = self.session.registers[self._registers_qpd[1]]
+        self.qpd_i_read = self.session.registers[self._registers_qpd[2]]
+        self.counter = self.session.registers[self._registers_qpd[3]]
+        self.duration_ms = self.session.registers[self._registers_qpd[4]]
+
+        self.integration_time_us = self.session.registers[self._registers_general[1]]
+        self.reset_counter = self.session.registers[self._registers_general[2]]
+
+        self.setpoint = self.session.registers[self._registers_autofocus[0]]
+        self.p_gain = self.session.registers[self._registers_autofocus[1]]
+        self.i_gain = self.session.registers[self._registers_autofocus[2]]
+        self.reset = self.session.registers[self._registers_autofocus[3]]
+        self.autofocus = self.session.registers[self._registers_autofocus[4]]
+        self.ref_axis = self.session.registers[self._registers_autofocus[5]]
+        self.output = self.session.registers[self._registers_autofocus[6]]
 
         # reset session, apply new values and restart it
         self.session.reset()

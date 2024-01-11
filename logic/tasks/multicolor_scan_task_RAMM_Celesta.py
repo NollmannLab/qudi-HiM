@@ -124,16 +124,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].start_acquisition()
 
-        # define the laser intensities for the Lumencor
-        # Set : - all laser lines to OFF
-        #       - the celesta laser source in external TTL mode
-        #       - the intensity of each laser line according to the task parameters
+        # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line
         self.ref['laser'].lumencor_wakeup()
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
 
         # download the bitfile for the task on the FPGA
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_Qudimulticolours_mq4E6EoFF7s.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240111.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('FPGA bitfile loaded for Multicolour task')
 
@@ -145,7 +142,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter = 0
 
         # start the session on the fpga using the user parameters
-        print(self.FPGA_wavelength_channels, self.num_laserlines)
         self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
                                                                       self.num_laserlines, self.exposure)
 
@@ -256,7 +252,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
     # user parameters
     # ------------------------------------------------------------------------------------------------------------------
-
     def load_user_parameters(self):
         """ This function is called from startTask() to load the parameters given by the user in a specific format.
 
@@ -401,44 +396,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # For the FPGA, the wavelength list should have "FPGA_max_laserlines" entries. The list is padded with zero.
         for i in range(self.num_laserlines, self.FPGA_max_laserlines):
             self.FPGA_wavelength_channels.append(0)
-
-        print(available_laser_dict)
-        print(self.celesta_intensity_dict)
-        print(self.FPGA_wavelength_channels)
-
-
-    #     self.wavelengths = [self.imaging_sequence[i][0] for i in range(self.num_laserlines)]
-    #
-    #     print(self.wavelengths)
-    #
-    #     self.wavelengths = [self.lightsource_dict[key] for key in self.wavelengths]
-    #
-    #     print(self.wavelengths)
-    #
-    #     for i in range(self.num_laserlines, self.FPGA_max_laserlines):
-    #         self.wavelengths.append(0)  # must always be a list of length 5: append 0 until necessary length reached
-    #
-    #     self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-    #     for i in range(self.num_laserlines, self.FPGA_max_laserlines):
-    #         self.intensities.append(0)
-    #
-    #     print(self.intensities)
-    #
-    # # Load the laser and intensity dictionary used in lasercontrol_logic and update it according to the imaging sequence
-    #     laser_dict = self.ref['laser'].get_laser_dict()
-    #     intensity_dict = self.ref['laser'].init_intensity_dict()
-    #     imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
-    #                          self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
-    #
-    #     print(laser_dict)
-    #     print(intensity_dict)
-    #     print(imaging_sequence)
-    #
-    #     for i in range(len(imaging_sequence)):
-    #         key = imaging_sequence[i][0]
-    #         intensity_dict[key] = imaging_sequence[i][1]
-    #
-    #     self.intensity_dict = intensity_dict
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata

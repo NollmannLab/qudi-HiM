@@ -114,3 +114,6 @@ class CelestaFPGA(GenericLogic, LasercontrolInterface):
 
     def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
         self._fpga.run_celesta_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines, exposure)
+
+    def run_celesta_roi_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
+        self._fpga.run_celesta_roi_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines, exposure)

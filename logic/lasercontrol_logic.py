@@ -323,14 +323,21 @@ class LaserControlLogic(GenericLogic):
 
         :return: None
         """
-        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
+        if self.controllertype == 'fpga':
             self._controller.run_multicolor_imaging_task_session(z_planes, wavelength, values, num_laserlines, exposure)
         else:
             pass
 
     def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
-        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
+        if self.controllertype == 'celesta_fpga':
             self._controller.run_celesta_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines, exposure)
+        else:
+            pass
+
+    def run_celesta_roi_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
+        if self.controllertype == 'celesta_fpga':
+            self._controller.run_celesta_roi_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines,
+                                                                             exposure)
         else:
             pass
 
