@@ -120,8 +120,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].start_acquisition()
 
         # download the bitfile for the task on the FPGA
-        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiFTLQPDPID_20240111.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('Task session started')
 
