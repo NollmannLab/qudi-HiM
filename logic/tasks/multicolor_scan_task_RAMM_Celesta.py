@@ -59,14 +59,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Generic Task methods
     # ==================================================================================================================
 
+    FPGA_max_laserlines = 10
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
-        self.FPGA_max_laserlines = 10
         self.user_config_path: str = self.config['path_to_user_config']
-        self.celesta_laser_dict: dict = self.ref['laser']._laser_dict
-        self.FPGA_wavelength_channels: list = []
+        self.celesta_laser_dict: dict = {}
         self.celesta_intensity_dict: dict = {}
+        self.FPGA_wavelength_channels: list = []
         self.num_laserlines: int = 0
         self.step_counter: int = 0
         self.user_param_dict = {}
@@ -85,7 +86,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.file_format: str = ""
         self.complete_path: str = ""
         self.start_position: float = 0
-        self.intensities: list = []
         self.focal_plane_position: float = 0
 
     def startTask(self):
@@ -110,17 +110,22 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close previously opened FPGA session
         self.ref['laser'].end_task_session()
 
-        # read all user parameters from config
+        # read all user parameters from config and define the path where the data will be saved
+        self.reset_variables()
         self.load_user_parameters()
+        self.complete_path = self.get_complete_path(self.save_path)
 
         # compute the starting position of the z-stack (for the piezo)
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
 
-        # format the imaging sequence (for Lumencor & FPGA)
+        # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
+        self.celesta_laser_dict: dict = self.ref['laser']._laser_dict
         self.format_imaging_sequence()
 
-        # prepare the camera
+        # prepare the camera and defines the timeout value (maximum time between two successive frames if not signal
+        # from the DAQ or FPGA was detected)
         self.num_frames = self.num_z_planes * self.num_laserlines
+        self.timeout = self.num_laserlines * self.exposure + 0.1
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
         self.ref['cam'].start_acquisition()
 
@@ -129,24 +134,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
 
-        # download the bitfile for the task on the FPGA
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240111.lvbitx'
-        self.ref['laser'].start_task_session(bitfile)
-        self.log.info('FPGA bitfile loaded for Multicolour task')
-
         # prepare the daq: set the digital output to 0 before starting the task
         self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                             np.array([0], dtype=np.uint8))
 
-        # initialize the counter (corresponding to the number of planes already acquired)
-        self.step_counter = 0
-
-        # start the session on the fpga using the user parameters
+        # download the bitfile for the task on the FPGA and start the FPGA session
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240112.lvbitx'
+        self.ref['laser'].start_task_session(bitfile)
+        self.log.info('FPGA bitfile loaded for Multicolour task')
         self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
                                                                       self.num_laserlines, self.exposure)
 
-        # defines the timeout value
-        self.timeout = self.num_laserlines * self.exposure + 0.1
+        # initialize the counter (corresponding to the number of planes already acquired)
+        self.step_counter = 0
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
@@ -253,7 +253,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # user parameters
     # ------------------------------------------------------------------------------------------------------------------
     def load_user_parameters(self):
-        """ This function is called from startTask() to load the parameters given by the user in a specific format.
+        """ This function is called from startTask() to load the parameters given by the user in a specific format and
+        initialize all the variables.
 
         Specify the path to the user defined config for this task in the (global) config of the experimental setup.
         User must specify the following dictionary (here with example entries):
@@ -268,53 +269,50 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.user_config_path, 'r') as stream:
-                self.user_param_dict = yaml.safe_load(stream)
+                user_param_dict = yaml.safe_load(stream)
 
-                self.sample_name = self.user_param_dict['sample_name']
-                self.exposure = self.user_param_dict['exposure']
-                self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
-                self.imaging_sequence = self.user_param_dict['imaging_sequence']
-                self.save_path = self.user_param_dict['save_path']
-                self.file_format = self.user_param_dict['file_format']
+                self.sample_name = user_param_dict['sample_name']
+                self.exposure = user_param_dict['exposure']
+                self.num_z_planes = user_param_dict['num_z_planes']
+                self.z_step = user_param_dict['z_step']  # in um
+                self.centered_focal_plane = user_param_dict['centered_focal_plane']
+                self.imaging_sequence = user_param_dict['imaging_sequence']
+                self.save_path = user_param_dict['save_path']
+                self.file_format = user_param_dict['file_format']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
-        # define the path where the data will be saved
-        self.complete_path = self.get_complete_path(self.save_path)
-
-    def calculate_start_position(self, centered_focal_plane):
+    def reset_variables(self):
+        """ reset all the variables to their default value. This step was added to avoid keeping in memory data from
+        previous run (qudi is instantiating the task only once, when launching the task runner GUI).
         """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
-        Note : the scan should start below the current position so that the focal plane will be the central plane or one
-        of the central planes in case of an even number of planes.
-
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
-
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()  # user has set focus
-        self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
-
-        if centered_focal_plane:
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
-            # odd number of planes:
-            else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
+        self.celesta_laser_dict = {}
+        self.celesta_intensity_dict = {}
+        self.FPGA_wavelength_channels = []
+        self.num_laserlines = 0
+        self.step_counter = 0
+        self.user_param_dict = {}
+        self.timeout = 0
+        self.z_target_positions = []
+        self.z_actual_positions = []
+        self.num_frames = 0
+        self.default_exposure = 0
+        self.sample_name = ""
+        self.exposure = 0
+        self.num_z_planes = 0
+        self.z_step = 0
+        self.centered_focal_plane = False
+        self.imaging_sequence = []
+        self.save_path = ""
+        self.file_format = ""
+        self.complete_path = ""
+        self.start_position = 0
+        self.focal_plane_position = 0
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
-
     def get_complete_path(self, path_stem):
         """ Create the complete path based on path_stem given as user parameter,
         such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
@@ -355,9 +353,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return complete_path
 
     # ------------------------------------------------------------------------------------------------------------------
-    # Format the imaging cycle for the Lumencor laser source and FPGA
+    # methods for initializing piezo & laser
     # ------------------------------------------------------------------------------------------------------------------
-
     def format_imaging_sequence(self):
         """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
         The lumencor celesta is controlled in TTL mode. Intensity for each laser line must be set before launching the
@@ -393,14 +390,41 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 self.FPGA_wavelength_channels.append(0)
 
+        print(self.FPGA_wavelength_channels)
+
     # For the FPGA, the wavelength list should have "FPGA_max_laserlines" entries. The list is padded with zero.
         for i in range(self.num_laserlines, self.FPGA_max_laserlines):
             self.FPGA_wavelength_channels.append(0)
 
+    def calculate_start_position(self, centered_focal_plane):
+        """
+        This method calculates the piezo position at which the z stack will start. It can either start in the
+        current plane or calculate an offset so that the current plane will be centered inside the stack.
+        Note : the scan should start below the current position so that the focal plane will be the central plane or one
+        of the central planes in case of an even number of planes.
+
+        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
+                                            or if the focal plane is the bottommost plane in the scan (False)
+
+        :return: float piezo start position
+        """
+        current_pos = self.ref['focus'].get_position()  # user has set focus
+        self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
+
+        if centered_focal_plane:
+            # even number of planes:
+            if self.num_z_planes % 2 == 0:
+                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
+            # odd number of planes:
+            else:
+                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
+            return start_pos
+        else:
+            return current_pos  # the scan starts at the current position and moves up
+
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
     # ------------------------------------------------------------------------------------------------------------------
-
     def get_metadata(self):
         """ Get a dictionary containing the metadata in a plain text easy readable format.
 
