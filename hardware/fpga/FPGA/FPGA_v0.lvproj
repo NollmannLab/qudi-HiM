@@ -32,7 +32,7 @@
 			<Property Name="NI.LV.FPGA.CompileConfigString" Type="Str">PCIe-7841R/Clk40/falsefalseFPGA_EXECUTION_MODEFPGA_TARGETFPGA_TARGET_CLASSPCIE_7841RFPGA_TARGET_FAMILYVIRTEX5TARGET_TYPEFPGA</Property>
 			<Property Name="NI.LV.FPGA.Version" Type="Int">6</Property>
 			<Property Name="NI.SortType" Type="Int">3</Property>
-			<Property Name="niFpga_TopLevelVIID" Type="Path">/C/Users/sCMOS-1/qudi-cbs/hardware/fpga/FPGA/Qudi_multicolour_scan.vi</Property>
+			<Property Name="niFpga_TopLevelVIID" Type="Path">/C/Users/sCMOS-1/qudi-cbs/hardware/fpga/FPGA/Qudi_ROI_multicolour_scan.vi</Property>
 			<Property Name="Resource Name" Type="Str">RIO0</Property>
 			<Property Name="Target Class" Type="Str">PCIe-7841R</Property>
 			<Property Name="Top-Level Timing Source" Type="Str">40 MHz Onboard Clock</Property>
