@@ -3,7 +3,7 @@
 Qudi-CBS
 
 This module contains the logic for the autofocus with quadrant photo diode (QPD)
-based readout.
+based readout. It is used only for the RAMM setup
 
 An extension to Qudi.
 
@@ -406,3 +406,4 @@ class AutofocusLogic(GenericLogic):
         :return: None
         """
         self._fpga.reset_qpd_counter()
+
