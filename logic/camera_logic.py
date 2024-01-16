@@ -137,6 +137,7 @@ class CameraLogic(GenericLogic):
     """
     # declare connectors
     hardware = Connector(interface='CameraInterface')
+    shutter = Connector(interface='GenericLogic')
 
     # config options
     _max_fps = ConfigOption('default_exposure', 20)
@@ -176,6 +177,7 @@ class CameraLogic(GenericLogic):
     _kinetic_time = None
 
     _hardware = None
+    _security_shutter = None
     fileformat_list = ['tif', 'fits', 'npy']
 
     def __init__(self, config, **kwargs):
@@ -186,6 +188,7 @@ class CameraLogic(GenericLogic):
         """ Initialisation performed during activation of the module.
         """
         self._hardware = self.hardware()
+        self._security_shutter = self.shutter()
 
         self.enabled = False
         self.saving = False
@@ -460,6 +463,7 @@ class CameraLogic(GenericLogic):
     def start_single_acquistion(self):  # watch out for the typo !!
         """ Take a single camera image.
         """
+        self._security_shutter.camera_security(acquiring=True)
         self._hardware.start_single_acquisition()
         self._last_image = self._hardware.get_acquired_data()
         self.sigUpdateDisplay.emit()
@@ -471,6 +475,7 @@ class CameraLogic(GenericLogic):
         """ Start the live display loop.
         """
         self.enabled = True
+        self._security_shutter.camera_security(acquiring=True)
 
         worker = LiveImageWorker(1 / self._fps)
         worker.signals.sigFinished.connect(self.loop)
@@ -500,6 +505,7 @@ class CameraLogic(GenericLogic):
         """
         self.enabled = False
         self._hardware.stop_acquisition()
+        self._security_shutter.camera_security(acquiring=False)
         self.sigVideoFinished.emit()
 
 # Helper methods to interrupt/restart the camera live mode to give access to camera settings etc. ----------------------
@@ -555,6 +561,7 @@ class CameraLogic(GenericLogic):
             self._hardware.stop_acquisition()
 
         self.saving = True
+        self._security_shutter.camera_security(acquiring=True)
 
         err = self._hardware.start_movie_acquisition(n_frames)
         if not err:
@@ -627,6 +634,7 @@ class CameraLogic(GenericLogic):
         image_data = self._hardware.get_acquired_data()
         # reset the attributes and the default acquisition mode
         self._hardware.finish_movie_acquisition()
+        self._security_shutter.camera_security(acquiring=False)
         self.saving = False
 
         # restart live in case it was activated
@@ -675,6 +683,7 @@ class CameraLogic(GenericLogic):
             self._hardware.stop_acquisition()
 
         self.saving = True
+        self._security_shutter.camera_security(acquiring=True)
         path = self.create_generic_filename(filenamestem, '_Movie', 'movie', '', addfile=False)  # use an empty
         # string for fileformat. this will be handled by the camera itself
         if fileformat == '.tif':
@@ -768,6 +777,7 @@ class CameraLogic(GenericLogic):
             pass
 
         self.saving = False
+        self._security_shutter.camera_security(acquiring=False)
 
         # restart live in case it was activated
         if self.restart_live:
@@ -805,10 +815,12 @@ class CameraLogic(GenericLogic):
         return self._hardware.get_acquired_data()
 
     def start_acquisition(self):  # used in Hi-M Task RAMM
+        self._security_shutter.camera_security(acquiring=True)
         self._hardware._start_acquisition()  # not on camera interface
 
     def stop_acquisition(self):  # used in Hi-M Task RAMM
         self._hardware.stop_acquisition()
+        self._security_shutter.camera_security(acquiring=False)
         
     def abort_acquisition(self):  # used in multicolor imaging PALM  -> can this be combined with stop_acquisition ?
         self._hardware._abort_acquisition()  # not on camera interface

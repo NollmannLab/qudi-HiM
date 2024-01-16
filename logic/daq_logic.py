@@ -87,7 +87,6 @@ class DAQLogic(GenericLogic):
 
     # config options
     _voltage_rinsing_pump = ConfigOption('voltage_rinsing_pump', 0)
-    _laser_shutter = ConfigOption('laser_shutter', False)
 
     # signals
     sigRinsingDurationFinished = QtCore.Signal()
@@ -96,20 +95,16 @@ class DAQLogic(GenericLogic):
         super().__init__(config=config, **kwargs)
         self._daq = None
         self._pressure = 0
-        self._laser_shutter_initialize = False
         self.threadpool = QtCore.QThreadPool()
 
     def on_activate(self):
         """ Initialisation performed during activation of the module.
         """
         self._daq = self.daq()
-        if self._laser_shutter:
-            self._laser_shutter_initialize = self.initialize_shutter()
 
     def on_deactivate(self):
         """ Perform required deactivation. """
-        if self._laser_shutter:
-            self.write_laser_shutter(0)
+        pass
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Low-level methods for digital input / output
@@ -169,7 +164,6 @@ class DAQLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for analog in/out channels controlling a piezo - not used for the moment on any setup
 # ----------------------------------------------------------------------------------------------------------------------
-
     def read_piezo(self):
         """ Read the voltage applied to the channel controlling the piezo.
 
@@ -189,6 +183,22 @@ class DAQLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for analog in/out channels controlling the IR laser shutter on the RAMM
 # ----------------------------------------------------------------------------------------------------------------------
+    def initialize_shutter(self):
+        """ Test whether the IR laser shutter is properly connected.
+
+        @return: shutter_initialize(bool) 0 : shutter is not connected / 1 : shutter is connected
+        """
+        self.write_laser_shutter(1)
+        sleep(0.5)
+        if self.read_laser_shutter() == 1:
+            self.write_laser_shutter(0)
+            shutter_initialize = True
+        else:
+            self.log.warning('Shutter is not properly connected - initialization did not work')
+            shutter_initialize = False
+
+        return shutter_initialize
+
     def write_laser_shutter(self, state):
         """ Control the state of the laser shutter placed in front of the IR laser.
 
@@ -203,22 +213,6 @@ class DAQLogic(GenericLogic):
         """
         shutter_state = self._daq.read_laser_shutter()
         return shutter_state
-
-    def initialize_shutter(self):
-        """ Test whether the IR laser shutter is properly connected.
-
-        @return: shutter_initialize(bool) 0 : shutter is not connected / 1 : shutter is connected
-        """
-        self.write_laser_shutter(1)
-        sleep(1)
-        if self.read_laser_shutter() == 1:
-            self.write_laser_shutter(0)
-            shutter_initialize = True
-        else:
-            self.log.warning('Shutter is not properly connected')
-            shutter_initialize = False
-
-        return shutter_initialize
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for analog in/out channels controlling a peristaltic pump

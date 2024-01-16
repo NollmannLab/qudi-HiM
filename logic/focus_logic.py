@@ -27,15 +27,16 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import numpy as np
 from core.connector import Connector
 from core.configoption import ConfigOption
 # from core.util.mutex import Mutex
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 from time import sleep, time
-import numpy as np
 from numpy.polynomial import Polynomial as Poly
 from functools import partial
+
 
 # ======================================================================================================================
 # Worker classes
@@ -100,6 +101,7 @@ class FocusLogic(GenericLogic):
     # declare connectors
     piezo = Connector(interface='MotorInterface')
     autofocus = Connector(interface='AutofocusLogic')
+    shutter = Connector(interface='GenericLogic')
 
     # config options
     _init_position: float = ConfigOption('init_position', 10, missing='warn')
@@ -107,6 +109,7 @@ class FocusLogic(GenericLogic):
     _rescue_autofocus_possible: bool = ConfigOption('rescue_autofocus_possible', False, missing='warn')
     _min_piezo_step: float = ConfigOption('minimum_piezo_displacement_autofocus', 0.02, missing='warn')
     experiments: list = ConfigOption('experiments', [], missing='warn')
+    _laser_shutter = ConfigOption('laser_shutter', False)
 
     # signals
     sigStepChanged = QtCore.Signal(float)
@@ -124,6 +127,9 @@ class FocusLogic(GenericLogic):
     sigFocusFound = QtCore.Signal()
     sigDisableFocusActions = QtCore.Signal()
     sigEnableFocusActions = QtCore.Signal()
+
+    # IR laser shutter attributes
+    _laser_shutter_initialize: bool = False
 
     # piezo attributes
     _step: float = 0.01  # in µm
@@ -160,6 +166,7 @@ class FocusLogic(GenericLogic):
         self.threadpool = QtCore.QThreadPool()
         self._piezo = None
         self._autofocus_logic = None
+        self._shutter = None
 
         # uncomment if needed:
         # self.threadlock = Mutex()
@@ -181,6 +188,9 @@ class FocusLogic(GenericLogic):
         # initialize the autofocus class
         self._autofocus_logic = self.autofocus()
 
+        # initialize the shutter class
+        self._shutter = self.shutter()
+
         # signals to autofocus logic
         self.sigDoStageMovement.connect(self._autofocus_logic.do_position_correction)
 
@@ -190,9 +200,10 @@ class FocusLogic(GenericLogic):
 
     def on_deactivate(self):
         """ Perform required deactivation.
-        Reset the piezo to the zero position.
+        Reset the piezo to the zero position. If a shutter for the laser is used, close the shutter.
         """
         self.go_to_position(0.5)
+        self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for manual focus setting (manual focus dockwidget and toolbar)
@@ -375,6 +386,8 @@ class FocusLogic(GenericLogic):
         """ Start the camera live display. """
         self.live_display_enabled = True
         self._autofocus_logic.start_camera_live()
+        if self._shutter.open_shutter():
+            return
 
         worker = Worker(self.live_update_time)
         worker.signals.sigFinished.connect(self.live_display_loop)
@@ -403,6 +416,7 @@ class FocusLogic(GenericLogic):
         """ Stop the camera live image. """
         self._autofocus_logic.stop_camera_live()
         self.live_display_enabled = False
+        self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for autofocus (autofocus dockwidget and toolbar)
@@ -443,6 +457,11 @@ class FocusLogic(GenericLogic):
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.start_camera_live()
 
+        # (for the RAMM) Open the shutter in front of the IR laser - For all other setup, nothing will happen.
+        if self._shutter.open_shutter():
+            return
+
+        # Compute the piezo ramp parameters
         z0 = self.get_position()
         dz = self._calibration_range // 2
         z = np.arange(z0 - dz, z0 + dz, 0.1)
@@ -463,6 +482,10 @@ class FocusLogic(GenericLogic):
             piezo_position[n] = self.get_position()
             # Read the latest QPD signal
             autofocus_signal[n] = self.read_detector_signal()
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
 
         # Calculate the slope of the calibration curve
         p = Poly.fit(piezo_position, autofocus_signal, deg=1)
@@ -497,9 +520,15 @@ class FocusLogic(GenericLogic):
         """ From the present piezo position, read the detector signal and keep the value as reference for the pid.
         @return: None
         """
+        self._shutter.open_shutter()
+
         setpoint = self._autofocus_logic.define_pid_setpoint()
         self._setpoint_defined = True
         self.sigSetpointDefined.emit(setpoint)
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus
@@ -531,6 +560,8 @@ class FocusLogic(GenericLogic):
             self.log.warning('Setpoint not defined.')
             self.sigAutofocusError.emit()
             return
+
+        self._shutter.open_shutter()
 
         # autofocus can be started
         self.autofocus_enabled = True
@@ -672,6 +703,11 @@ class FocusLogic(GenericLogic):
         self.autofocus_enabled = False
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.stop_camera_live()
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
+
         self.sigAutofocusStopped.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -720,7 +756,7 @@ class FocusLogic(GenericLogic):
 
         piezo_pos = self.get_position()
 
-        if (piezo_pos < 10) or (piezo_pos > 50):  # correction necessary
+        if (piezo_pos < (self._min_z + 10)) or (piezo_pos > (self._max_z - 50)):  # correction necessary
             print('doing piezo position correction.')
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
@@ -896,5 +932,3 @@ class FocusLogic(GenericLogic):
             busy = self.autofocus_enabled
             if counter > 500:
                 break
-
-
