@@ -29,15 +29,10 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import numpy as np
 from core.connector import Connector
 from core.configoption import ConfigOption
-# from core.util.mutex import Mutex
 from logic.generic_logic import GenericLogic
-from qtpy import QtCore
-from time import sleep, time
-from numpy.polynomial import Polynomial as Poly
-from functools import partial
+from time import sleep
 
 
 # ======================================================================================================================
@@ -103,6 +98,7 @@ class ShutterLogic(GenericLogic):
     def camera_security(self, acquiring=False):
         if acquiring:
             self.close_shutter()
+            sleep(0.5)
             self._acquisition_running = True
         else:
             self._acquisition_running = False

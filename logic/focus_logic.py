@@ -128,7 +128,8 @@ class FocusLogic(GenericLogic):
     sigDisableFocusActions = QtCore.Signal()
     sigEnableFocusActions = QtCore.Signal()
 
-    # IR laser shutter attributes
+    # IR laser shutter attributes. If a shutter is associated to the setup, disable the focus stabilization function
+    # (cannot be used while acquiring data)
     _laser_shutter_initialize: bool = False
 
     # piezo attributes
@@ -457,7 +458,8 @@ class FocusLogic(GenericLogic):
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.start_camera_live()
 
-        # (for the RAMM) Open the shutter in front of the IR laser - For all other setup, nothing will happen.
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
         if self._shutter.open_shutter():
             return
 
@@ -720,8 +722,17 @@ class FocusLogic(GenericLogic):
         is inspired from the LSM-Zeiss microscope and is used when the sample (such as embryos) is interfering too much
         with the IR signal and makes the regular focus stabilization unstable.
         """
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter.open_shutter():
+            return
+
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
 
     def update_autofocus_offset_parameters(self, offset, setpoint):
         """ From the gui, it is possible to manually indicate which offset and setpoint should be used for the
@@ -803,6 +814,12 @@ class FocusLogic(GenericLogic):
         an offset of 0 is considered so that the focus is searched on the usual surface, not at a reference plane.
         This has the same effect as using the start_autofocus method with stop_when_stable=True.
         """
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter.open_shutter():
+            self.sigFocusFound.emit()
+            return
+
         if self._calibrated and self._setpoint_defined:
             self.focus_search_running = True  # set this flag as indicator that the search focus procedure is running
             self.focus_search_aborted = False  # set this flag as indicator of an error during the procedure
@@ -828,6 +845,10 @@ class FocusLogic(GenericLogic):
         self._stage_is_positioned = True
         self.focus_search_running = False
         self.sigFocusFound.emit()
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
