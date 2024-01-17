@@ -111,7 +111,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].end_task_session()
 
         # read all user parameters from config and define the path where the data will be saved
-        self.reset_variables()
         self.load_user_parameters()
         self.complete_path = self.get_complete_path(self.save_path)
 
@@ -119,7 +118,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
 
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
-        self.celesta_laser_dict: dict = self.ref['laser']._laser_dict
+        self.celesta_laser_dict = self.ref['laser']._laser_dict
         self.format_imaging_sequence()
 
         # prepare the camera and defines the timeout value (maximum time between two successive frames if not signal
@@ -283,33 +282,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
-    def reset_variables(self):
-        """ reset all the variables to their default value. This step was added to avoid keeping in memory data from
-        previous run (qudi is instantiating the task only once, when launching the task runner GUI).
-        """
-        self.celesta_laser_dict = {}
-        self.celesta_intensity_dict = {}
-        self.FPGA_wavelength_channels = []
-        self.num_laserlines = 0
-        self.step_counter = 0
-        self.user_param_dict = {}
-        self.timeout = 0
-        self.z_target_positions = []
-        self.z_actual_positions = []
-        self.num_frames = 0
-        self.default_exposure = 0
-        self.sample_name = ""
-        self.exposure = 0
-        self.num_z_planes = 0
-        self.z_step = 0
-        self.centered_focal_plane = False
-        self.imaging_sequence = []
-        self.save_path = ""
-        self.file_format = ""
-        self.complete_path = ""
-        self.start_position = 0
-        self.focal_plane_position = 0
-
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
@@ -363,6 +335,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Since the intensity of each laser line must be set before the acquisition, it is not possibe to call the same
         laser line multiple times with different intensity values.
         """
+
+    # reset parameters
+        self.celesta_intensity_dict = {}
+        self.FPGA_wavelength_channels = []
 
     # count the number of lightsources for each plane
         self.num_laserlines = len(self.imaging_sequence)

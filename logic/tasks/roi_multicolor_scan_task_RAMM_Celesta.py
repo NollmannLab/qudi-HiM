@@ -63,13 +63,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # Generic Task methods
     # ==================================================================================================================
 
+    FPGA_max_laserlines = 10
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
-        self.user_config_path = self.config['path_to_user_config']
-        self.FPGA_max_laserlines = 10
         self.user_config_path: str = self.config['path_to_user_config']
-        self.celesta_laser_dict: dict = self.ref['laser']._laser_dict
+        self.celesta_laser_dict: dict = {}
         self.FPGA_wavelength_channels: list = []
         self.celesta_intensity_dict: dict = {}
         self.num_laserlines: int = 0
@@ -98,7 +98,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def startTask(self):
         """ """
         self.log.info('started Task')
-
         self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
 
         # stop all interfering modes on GUIs and disable GUI actions
@@ -107,6 +106,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['cam'].stop_live_mode()
         self.ref['cam'].disable_camera_actions()
+        self.ref['cam'].stop_acquisition()  # for safety
 
         self.ref['laser'].stop_laser_output()
         self.ref['bf'].led_off()
@@ -114,6 +114,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
+        self.ref['focus'].stop_live_display()
 
         # set stage velocity and trigger mode (for brightfield control)
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
@@ -122,14 +123,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close previously opened FPGA session
         self.ref['laser'].end_task_session()
 
-        # read all user parameters from config
+        # read all user parameters from config and create a directory in which all the data will be saved
         self.load_user_parameters()
-
-        # format the imaging sequence (for Lumencor & FPGA)
-        self.format_imaging_sequence()
-
-        # create a directory in which all the data will be saved
         self.directory = self.create_directory(self.save_path)
+
+        # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
+        self.celesta_laser_dict = self.ref['laser']._laser_dict
+        self.format_imaging_sequence()
 
         # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
         if self.is_dapi:
@@ -137,29 +137,37 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             dapi_channel_info_path = os.path.join(self.directory, 'DAPI_channel_info.yml')
             write_dict_to_file(dapi_channel_info_path, imag_dict)
 
-        # prepare the camera
+        # prepare the camera and defines the timeout value (maximum time between two successive frames if not signal
+        # from the DAQ or FPGA was detected)
         self.num_frames = self.num_z_planes * self.num_laserlines
+        self.timeout = self.num_laserlines * self.exposure + 0.1
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
 
+        # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line
+        self.ref['laser'].lumencor_wakeup()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
+
+        # prepare the daq: set the digital output to 0 before starting the task
+        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                            np.array([0], dtype=np.uint8))
+
         # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240111.lvbitx'
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        self.log.info('FPGA bitfile loaded for ROIMulticolour task')
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_celesta_roi_multicolor_imaging_task_session(self.num_z_planes,
                                                                           self.FPGA_wavelength_channels,
                                                                           self.num_laserlines, self.exposure)
-
-        # defines the timeout value
-        self.timeout = self.num_laserlines * self.exposure + 0.1
 
         # Check the autofocus is calibrated
         if (not self.ref['focus']._calibrated) or (not self.ref['focus']._setpoint_defined):
             self.log.warning('Autofocus is not calibrated. Experiment can not be started. Please calibrate autofocus!')
             self.aborted = True
 
-        # initialize a counter to iterate over the ROIs
+        # initialize a counter to iterate over the ROIs and set the active_roi to none to avoid having two active rois
+        # displayed
         self.roi_counter = 0
-
-        # set the active_roi to none to avoid having two active rois displayed
         self.ref['roi'].active_roi = None
 
     def runTaskStep(self):
@@ -209,7 +217,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         else:
             self.autofocus_failed = 0
 
-        # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50)
+        # reset piezo position to default starting position if too close to the limits of travel range.
         self.ref['focus'].do_piezo_position_correction()
         busy = True
         while busy:
@@ -226,7 +234,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                             np.array([0], dtype=np.uint8))
 
         # start camera acquisition
-        self.ref['cam'].stop_acquisition()  # for safety
         self.ref['cam'].start_acquisition()
 
         # initialize arrays to save the target and current z positions
@@ -286,6 +293,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata = self.get_metadata()
             file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
+
+        # stop the camera
+        self.ref['cam'].stop_acquisition()
 
         # save the projection of the acquired stack if DAPI was checked (for experiment tracking option)
         if self.is_dapi:
@@ -390,6 +400,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # get the list of the roi names
         self.roi_names = self.ref['roi'].roi_names
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # methods for initializing piezo & laser
+    # ------------------------------------------------------------------------------------------------------------------
+
     def format_imaging_sequence(self):
         """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
         The lumencor celesta is controlled in TTL mode. Intensity for each laser line must be set before launching the
@@ -398,6 +412,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         Since the intensity of each laser line must be set before the acquisition, it is not possibe to call the same
         laser line multiple times with different intensity values.
         """
+    # reset parameters
+        self.FPGA_wavelength_channels = []
+        self.celesta_intensity_dict = {}
 
     # count the number of lightsources for each plane
         self.num_laserlines = len(self.imaging_sequence)
