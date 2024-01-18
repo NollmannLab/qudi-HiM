@@ -94,6 +94,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.roi_names: list = []
         self.prefix: str = ""
         self.autofocus_failed: int = 0
+        self.dz: list = []
 
     def startTask(self):
         """ """
@@ -130,6 +131,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
         self.celesta_laser_dict = self.ref['laser']._laser_dict
         self.format_imaging_sequence()
+
+        # compute the list of axial positions between successive rois
+        dz = np.zeros((len(self.roi_names), ))
+        for n in range(len(self.roi_names)):
+            if n == 0:
+                _, _, z_first = self.ref['roi'].get_roi_position(self.roi_names[0])
+                _, _, z_last = self.ref['roi'].get_roi_position(self.roi_names[-1])
+                dz[n] = z_first - z_last
+            else:
+                _, _, z = self.ref['roi'].get_roi_position(self.roi_names[n])
+                _, _, z_previous = self.ref['roi'].get_roi_position(self.roi_names[n-1])
+                dz[n] = z - z_previous
+
+        self.dz = dz
+        print(f'Differential axial positions : dz = {self.dz}')
 
         # if dapi data is acquired, save a dapi channel info file in order to make the link to the bokeh app
         if self.is_dapi:
@@ -185,6 +201,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].go_to_roi_xy()
         self.log.info('Moved to {} xy position'.format(self.roi_names[self.roi_counter]))
         self.ref['roi'].stage_wait_for_idle()
+
+        # correct the axial position ---------------------------------------------------------------------------
+        # the correction is not applied for the very first roi acquisition since we are starting in-focus.
+        if self.roi_counter != 0:
+            dz = self.dz[self.roi_counter]
+            print(f'modifying axial position by {dz}')
+            self.ref['focus'].stage_move_z_relative(dz)
+            self.ref['focus'].stage_wait_for_idle()
 
         # autofocus
         self.ref['focus'].start_search_focus()
@@ -245,11 +269,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # position the piezo
             position = start_position + plane * self.z_step
-            self.ref['focus'].go_to_position(position)
-            # print(f'target position: {position} um')
-            sleep(0.03)
+            self.ref['focus'].go_to_position(position, direct=True)
             cur_pos = self.ref['focus'].get_position()
-            # print(f'current position: {cur_pos} um')
             z_target_positions.append(position)
             z_actual_positions.append(cur_pos)
 
@@ -273,7 +294,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.log.warning('Timeout occurred')
                     break
 
-        self.ref['focus'].go_to_position(start_position)
+        self.ref['focus'].go_to_position(start_position, direct=True)
 
         # --------------------------------------------------------------------------------------------------------------
         # data saving
