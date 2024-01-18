@@ -8,7 +8,7 @@ This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @authors: F.Barho, JB.Fiche (for later modifications)
 
-Created on Wed March 30 2021 - Last modifications on Mon September 26 2022
+Created on Thu Jan 18 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -92,6 +92,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ==================================================================================================================
     # Generic Task methods
     # ==================================================================================================================
+    FPGA_max_laserlines = 10
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -142,10 +143,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def startTask(self):
         """ """
         self.start = time()
-
         self.log.info('started Task')
 
-        self.default_exposure = self.ref['cam'].get_exposure()  # store this value to reset it at the end of task
+        # store the current exposure value to reset it at the end of task
+        self.default_exposure = self.ref['cam'].get_exposure()
 
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
@@ -153,6 +154,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['cam'].stop_live_mode()
         self.ref['cam'].disable_camera_actions()
+        self.ref['cam'].stop_acquisition()  # for safety
 
         self.ref['laser'].stop_laser_output()
         self.ref['bf'].led_off()
@@ -160,12 +162,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
+        self.ref['focus'].stop_live_display()
 
         self.ref['valves'].disable_valve_positioning()
         self.ref['flow'].disable_flowcontrol_actions()
         self.ref['pos'].disable_positioning_actions()
 
-        # control if experiment can be started : origin defined in position logic ?
+        # control if experiment can be started : origin defined in position logic & autofocus calibrated
         if not self.ref['pos'].origin:
             self.log.warning(
                 'No position 1 defined for injections. Experiment can not be started. Please define position 1!')
@@ -178,12 +181,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # set stage velocity
         self.ref['roi'].set_stage_velocity({'x': 1, 'y': 1})
 
-        # read all user parameters from config
-        self.load_user_parameters()
+        # close previously opened FPGA session
+        self.ref['laser'].end_task_session()
 
-        # create a directory in which all the data will be saved
+        # read all user parameters from config and create a local directory in which all the data will be saved. A
+        # network directory is also saved to transfer data on the server and allow online analysis
+        self.load_user_parameters()
         self.directory = self.create_directory(self.save_path)
         self.network_directory = self.create_directory(self.save_network_path)
+
+        # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
+        self.celesta_laser_dict = self.ref['laser']._laser_dict
+        self.format_imaging_sequence()
 
         # log file paths -----------------------------------------------------------------------------------------------
         self.log_folder = os.path.join(self.network_directory, 'hi_m_log')
@@ -215,37 +224,52 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                 self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
         # logging prepared ---------------------------------------------------------------------------------------------
 
-        # prepare the camera - must be done before starting the FPGA. The camera is sometimes 'false' trigger
+        # prepare the camera - must be done before starting the FPGA. The camera sends sometimes 'false' trigger
         # signals that are detected by the FPGA and induce a shift in the way the images should be acquired. This
         # issue was only happening for the very first acquisition.
         self.num_frames = self.num_z_planes * self.num_laserlines
+        self.timeout = self.num_laserlines * self.exposure + 0.1
         self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-        self.ref['cam'].stop_acquisition()  # for safety
-        self.ref['cam'].start_acquisition()  # in case the camera is sending a false trigger
-        sleep(1)
-        self.ref['cam'].stop_acquisition()
 
-        # close default FPGA session
-        self.ref['laser'].close_default_session()
+        # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line
+        self.ref['laser'].lumencor_wakeup()
+        self.ref['laser'].lumencor_set_ttl(True)
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
 
-        # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'
+        # prepare the daq: set the digital output to 0 before starting the task
+        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                            np.array([0], dtype=np.uint8))
+
+        # download the bitfile for the task on the FPGA and start the FPGA session
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        self.log.info('FPGA bitfile loaded for ROIMulticolour task')
         self.ref['laser'].start_task_session(bitfile)
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
-                                                              self.num_laserlines, self.exposure)
+        self.ref['laser'].run_celesta_roi_multicolor_imaging_task_session(self.num_z_planes,
+                                                                          self.FPGA_wavelength_channels,
+                                                                          self.num_laserlines, self.exposure)
 
         # calculate the list of axial positions between successive rois
-        n_roi = len(self.roi_names)
-        z_roi = np.zeros(n_roi + 1)
-        for n, roi in enumerate(self.roi_names):
-            _, _, z_roi[n+1] = self.ref['roi'].get_roi_position(roi)
-        z_roi[0] = z_roi[-1]
+        # n_roi = len(self.roi_names)
+        # z_roi = np.zeros(n_roi + 1)
+        # for n, roi in enumerate(self.roi_names):
+        #     _, _, z_roi[n+1] = self.ref['roi'].get_roi_position(roi)
+        # z_roi[0] = z_roi[-1]
+        #
+        # self.dz = z_roi[1:] - z_roi[0:n_roi]
 
-        self.dz = z_roi[1:] - z_roi[0:n_roi]
+        dz = np.zeros((len(self.roi_names), ))
+        for n in range(len(self.roi_names)):
+            if n == 0:
+                _, _, z_first = self.ref['roi'].get_roi_position(self.roi_names[0])
+                _, _, z_last = self.ref['roi'].get_roi_position(self.roi_names[-1])
+                dz[n] = z_first - z_last
+            else:
+                _, _, z = self.ref['roi'].get_roi_position(self.roi_names[n])
+                _, _, z_previous = self.ref['roi'].get_roi_position(self.roi_names[n-1])
+                dz[n] = z - z_previous
+
+        self.dz = dz
         print(f'Differential axial positions : dz = {self.dz}')
-
-        # defines the timeout value
-        self.timeout = self.num_laserlines * self.exposure + 0.1
 
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
@@ -254,10 +278,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-        # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
-        if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (
-            not self.ref['focus']._setpoint_defined):
-            return False
+        # # go directly to cleanupTask if position 1 is not defined or autofocus not calibrated
+        # if (not self.ref['pos'].origin) or (not self.ref['focus']._calibrated) or (
+        #     not self.ref['focus']._setpoint_defined):
+        #     return False
 
         if not self.aborted:
             now = time()
@@ -442,11 +466,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
                 # correct the axial position ---------------------------------------------------------------------------
-                if n_roi != 0:
-                    print('modifying axial position')
+                # the correction is not applied for the very first roi acquisition since we are starting in-focus.
+                if (n_roi == 0) and (self.probe_counter == 1):
+                    pass
+                else:
                     dz = self.dz[n_roi]
-                    self.ref['autofocus'].stage_move_z(dz)
-                    self.ref['autofocus'].stage_wait_for_idle()
+                    print(f'modifying axial position by {dz}')
+                    self.ref['focus'].stage_move_z_relative(dz)
+                    self.ref['focus'].stage_wait_for_idle()
 
                 # autofocus --------------------------------------------------------------------------------------------
                 self.ref['focus'].start_search_focus()
@@ -480,17 +507,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 else:
                     self.autofocus_failed = 0
 
-                # # need to ensure that focus is stable here - wait for 120S
-                # ready = self.ref['focus']._stage_is_positioned
-                # counter = 0
-                # while not ready:
-                #     counter += 1
-                #     sleep(0.2)
-                #     ready = self.ref['focus']._stage_is_positioned
-                #     if counter > 600:
-                #         break
-
-                # reset piezo position to 25 um if too close to the limit of travel range (< 10 or > 50) ---------------
+                # reset piezo position to default starting position if too close to the limits of travel range. --------
                 self.ref['focus'].do_piezo_position_correction()
                 busy = True
                 while busy:
@@ -506,27 +523,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                                     np.array([0], dtype=np.uint8))
 
                 # start camera acquisition
-                self.ref['cam'].stop_acquisition()  # for safety
                 self.ref['cam'].start_acquisition()
 
-                # # initialize arrays to save the target and current z positions
-                # z_target_positions = []
-                # z_actual_positions = []
-
-                print(f'{item}: performing z stack..')
-
                 # iterate over all planes in z
+                print(f'{item}: performing z stack..')
                 for plane in tqdm(range(self.num_z_planes)):
 
                     # position the piezo
                     position = start_position + plane * self.z_step
                     self.ref['focus'].go_to_position(position, direct=True)
-                    # print(f'target position: {position} um')
-                    # sleep(0.03)
-                    cur_pos = self.ref['focus'].get_position()
-                    # print(f'current position: {cur_pos} um')
-                    # z_target_positions.append(position)
-                    # z_actual_positions.append(cur_pos)
 
                     # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
                     self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
@@ -568,6 +573,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     file_path = cur_save_path.replace('tif', 'yaml', 1)
                     self.save_metadata_file(metadata, file_path)
 
+                # stop the camera (and allow the shutter security to be removed)
+                self.ref['cam'].stop_acquisition()
+
                 # calculate and save projection for bokeh --------------------------------------------------------------
                 # start = time()
                 self.calculate_save_projection(self.num_laserlines, image_data, cur_save_path)
@@ -585,10 +593,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
             self.ref['roi'].go_to_roi_xy()
 
-            # correct for the axial displacement between the first and last ROIs
-            dz = self.dz[0]
-            self.ref['autofocus'].stage_move_z(dz)
-            self.ref['autofocus'].stage_wait_for_idle()
+            # # correct for the axial displacement between the first and last ROIs
+            # dz = self.dz[0]
+            # self.ref['autofocus'].stage_move_z(dz)
+            # self.ref['autofocus'].stage_wait_for_idle()
 
             if self.logging:
                 add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
@@ -840,23 +848,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].load_roi_list(self.roi_list_path)
         self.roi_names = self.ref['roi'].roi_names
 
-        # imaging ------------------------------------------------------------------------------------------------------
-        # convert the imaging_sequence given by user into format required by the bitfile
-        lightsource_dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
-        self.num_laserlines = len(self.imaging_sequence)
-        wavelengths = [self.imaging_sequence[i][0] for i, item in enumerate(self.imaging_sequence)]
-        wavelengths = [lightsource_dict[key] for key in wavelengths]
-        for i in range(self.num_laserlines, 5):
-            wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
-        self.wavelengths = wavelengths
-
-        self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, 5):
-            self.intensities.append(0)
-
         # injections ---------------------------------------------------------------------------------------------------
         self.load_injection_parameters()
-
         self.log.info('user parameters loaded and processed')
 
     def load_injection_parameters(self):
@@ -881,6 +874,52 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # methods for initializing piezo & laser
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def format_imaging_sequence(self):
+        """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
+        The lumencor celesta is controlled in TTL mode. Intensity for each laser line must be set before launching the
+        acquisition sequence (using the celesta_intensity_dict). Then, the FPGA will activate each line (either laser or
+        brightfiel) based on the list of sources (FPGA_wavelength_channels).
+        Since the intensity of each laser line must be set before the acquisition, it is not possibe to call the same
+        laser line multiple times with different intensity values.
+        """
+    # reset parameters
+        self.FPGA_wavelength_channels = []
+        self.celesta_intensity_dict = {}
+
+    # count the number of lightsources for each plane
+        self.num_laserlines = len(self.imaging_sequence)
+
+    # from _laser_dict, list all the available laser sources in a dictionary and associate a unique integer value for
+    # the FPGA (starting at 1 since, for the FPGA, the brightfield is by default 0 and all the laser lines are organized
+    # in increasing wavelength values).
+    # In parallel, initialize the dictionary containing the intensity of each laser line of the Celesta.
+        available_laser_dict = {}
+        for laser in range(len(self.celesta_laser_dict)):
+            key = self.celesta_laser_dict[f'laser{laser + 1}']['wavelength']
+            available_laser_dict[key] = laser + 1
+            self.celesta_intensity_dict[key] = 0
+
+    # convert the imaging_sequence given by the user into format required by the bitfile (by default, 0 is the
+    # brightfield and then all the laser lines sorted by increasing wavelength values. Note that a maximum number of
+    # laser lines is allowed (self.FPGA_max_laserlines). It is constrained by the size of the laser/intensity arrays
+    # defined in the labview script from which the bitfile is compiled.
+        for line in range(self.num_laserlines):
+            line_source = self.imaging_sequence[line][0]
+            line_intensity = self.imaging_sequence[line][1]
+            if line_source in available_laser_dict:
+                self.FPGA_wavelength_channels.append(available_laser_dict[line_source])
+                self.celesta_intensity_dict[line_source] = line_intensity
+            else:
+                self.FPGA_wavelength_channels.append(0)
+
+    # For the FPGA, the wavelength list should have "FPGA_max_laserlines" entries. The list is padded with zero.
+        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+            self.FPGA_wavelength_channels.append(0)
 
     def calculate_start_position(self, centered_focal_plane):
         """
