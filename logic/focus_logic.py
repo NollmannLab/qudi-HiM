@@ -268,7 +268,7 @@ class FocusLogic(GenericLogic):
         """
         if direct:
             self._piezo.move_abs({self._axis: position})
-            sleep(0.035)
+            sleep(0.03)  # The piezo response for its maximum displacement is 20ms (from spec sheet)
         else:
             self.piezo_ramp(position)
 
@@ -418,6 +418,20 @@ class FocusLogic(GenericLogic):
         self._autofocus_logic.stop_camera_live()
         self.live_display_enabled = False
         self._shutter.close_shutter()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for the 3-axis motor stage (only for the RAMM microscope)
+# ----------------------------------------------------------------------------------------------------------------------
+    def stage_move_z_relative(self, dz):
+        """ Do a relative movement of the translation stage.
+        @param: float dz: target relative movement
+        """
+        self._autofocus_logic.stage_move_z(dz)
+
+    def stage_wait_for_idle(self):
+        """ This method waits that the connected translation stage is in idle state.
+        """
+        self._autofocus_logic.stage_wait_for_idle()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for autofocus (autofocus dockwidget and toolbar)
@@ -585,7 +599,7 @@ class FocusLogic(GenericLogic):
                     # if the search focus option is True, move the offset back to its initial position
                     if search_focus:
                         offset = self._autofocus_logic._focus_offset
-                        self._autofocus_logic.stage_move_z(-offset)
+                        self.stage_move_z_relative(-offset)
                         self.focus_search_running = False
                         self.focus_search_aborted = True
                     return
@@ -647,7 +661,7 @@ class FocusLogic(GenericLogic):
                         # if the search focus option is True, move the offset back to its initial position
                         if search_focus:
                             offset = self._autofocus_logic._focus_offset
-                            self._autofocus_logic.stage_move_z(-offset)
+                            self.stage_move_z_relative(-offset)
                             self.focus_search_running = False
                             self.focus_search_aborted = True
                         return
@@ -771,8 +785,8 @@ class FocusLogic(GenericLogic):
             print('doing piezo position correction.')
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
-            self._autofocus_logic.stage_move_z(offset)
-            self._autofocus_logic.stage_wait_for_idle()
+            self.stage_move_z_relative(offset)
+            self.stage_wait_for_idle()
 
             # check if there is enough signal to perform the piezo position correction
             if not self._autofocus_logic.autofocus_check_signal():
@@ -786,8 +800,8 @@ class FocusLogic(GenericLogic):
                 self.sigDoStageMovement.emit(step)
             else:  # no signal found
                 self.log.warning('Position correction could not be done because autofocus signal not found!')
-                self._autofocus_logic.stage_move_z(-offset)
-                self._autofocus_logic.stage_wait_for_idle()
+                self.stage_move_z_relative(-offset)
+                self.stage_wait_for_idle()
                 self.piezo_correction_running = False
 
         else:  # position does not need to be corrected
@@ -802,8 +816,8 @@ class FocusLogic(GenericLogic):
         self.stop_autofocus()
         # move stage back to surface plane
         offset = self._autofocus_logic._focus_offset
-        self._autofocus_logic.stage_move_z(-offset)
-        self._autofocus_logic.stage_wait_for_idle()
+        self.stage_move_z_relative(-offset)
+        self.stage_wait_for_idle()
         self.piezo_correction_running = False
 
     def start_search_focus(self):
@@ -826,8 +840,8 @@ class FocusLogic(GenericLogic):
             self._stage_is_positioned = False  # set this flag as indicator that the focus position is not defined yet
             offset = self._autofocus_logic._focus_offset
             if offset != 0:
-                self._autofocus_logic.stage_move_z(offset)
-                self._autofocus_logic.stage_wait_for_idle()
+                self.stage_move_z_relative(offset)
+                self.stage_wait_for_idle()
                 sleep(1)
             self.start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=True)
         else:
@@ -840,8 +854,8 @@ class FocusLogic(GenericLogic):
         """
         offset = self._autofocus_logic._focus_offset
         if offset != 0:
-            self._autofocus_logic.stage_move_z(-offset)
-            self._autofocus_logic.stage_wait_for_idle()
+            self.stage_move_z_relative(-offset)
+            self.stage_wait_for_idle()
         self._stage_is_positioned = True
         self.focus_search_running = False
         self.sigFocusFound.emit()
