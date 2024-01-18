@@ -103,6 +103,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         self.ref['focus'].stop_autofocus()
         self.ref['focus'].disable_focus_actions()
+        self.ref['focus'].stop_live_display()
 
         # set the ASI stage in trigger mode to allow brightfield control
         self.ref['roi'].set_stage_led_mode('Triggered')
