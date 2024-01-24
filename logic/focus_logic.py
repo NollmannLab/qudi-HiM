@@ -37,11 +37,12 @@ from time import sleep, time
 from numpy.polynomial import Polynomial as Poly
 from functools import partial
 
+# use global variable "verbose" during debugging in order to follow which methods the program is performing
+verbose = True
 
 # ======================================================================================================================
 # Worker classes
 # ======================================================================================================================
-
 
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread. """
@@ -77,6 +78,19 @@ class Worker(QtCore.QRunnable):
         """ """
         sleep(self.time_constant)
         self.signals.sigFinished.emit()
+
+
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    global verbose
+
+    def new_function(*args, **kwargs):
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
 
 
 # ======================================================================================================================
@@ -422,12 +436,14 @@ class FocusLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for the 3-axis motor stage (only for the RAMM microscope)
 # ----------------------------------------------------------------------------------------------------------------------
+    @decorator_print_function
     def stage_move_z_relative(self, dz):
         """ Do a relative movement of the translation stage.
         @param: float dz: target relative movement
         """
         self._autofocus_logic.stage_move_z(dz)
 
+    @decorator_print_function
     def stage_wait_for_idle(self):
         """ This method waits that the connected translation stage is in idle state.
         """
@@ -463,7 +479,6 @@ class FocusLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus calibration
 # ----------------------------------------------------------------------------------------------------------------------
-
     def calibrate_focus_stabilization(self):
         """ Calibrate the focus stabilization by performing a quick 2 µm ramp with the piezo and measuring the
         autofocus signal (either camera or QPD) for each position.
@@ -549,7 +564,7 @@ class FocusLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus
 # ----------------------------------------------------------------------------------------------------------------------
-
+    @decorator_print_function
     def start_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ This method starts the autofocus. This can only be done if the piezo was calibrated and a setpoint defined.
         A check is also performed in order to make sure there is enough signal detected.
@@ -713,6 +728,7 @@ class FocusLogic(GenericLogic):
                                                        search_focus=search_focus))
             self.threadpool.start(worker)
 
+    @decorator_print_function
     def stop_autofocus(self):
         """ Stop the autofocus loop.
         """
@@ -762,13 +778,26 @@ class FocusLogic(GenericLogic):
         self.sigSetpointDefined.emit(setpoint)
         self._autofocus_logic._setpoint = setpoint
 
+    @decorator_print_function
     def rescue_autofocus(self):
         """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
         The stage moves along the z axis until the signal is found.
         @return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
         """
-        return self._autofocus_logic.rescue_autofocus()
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter.open_shutter():
+            return False
 
+        success = self._autofocus_logic.rescue_autofocus()
+
+        # Close the shutter if the live display mode is off
+        if not self.live_display_enabled:
+            self._shutter.close_shutter()
+
+        return success
+
+    @decorator_print_function
     def do_piezo_position_correction(self):
         """ When the piezo position is too close to the limits (< 10 um, > 50 um), a slow movement of the translation
         stage is started while autofocus is on, so that piezo will follow back into the central range (to 25 um).
@@ -808,6 +837,7 @@ class FocusLogic(GenericLogic):
             print('Piezo repositioning correction is not required.')
             self.piezo_correction_running = False
 
+    @decorator_print_function
     def finish_piezo_position_correction(self):
         """ Slot called by the signal sigStageMoved from the autofocus_logic. Handles the stopping of the autofocus
         and resets the indicator variable. Moves also the stage back to the sample surface plane, as the piezo position
@@ -820,6 +850,7 @@ class FocusLogic(GenericLogic):
         self.stage_wait_for_idle()
         self.piezo_correction_running = False
 
+    @decorator_print_function
     def start_search_focus(self):
         """ Search the IR reflection signal on a reference plane at a distance 'offset' from the current position.
         Autofocus is programmatically stopped once the signal was found and is stable.
@@ -848,6 +879,7 @@ class FocusLogic(GenericLogic):
             self.log.warn('Search focus can not be used. Calibration or setpoint missing.')
             self.sigFocusFound.emit()  # signal is sent although focus not found, just to reset toolbutton state
 
+    @decorator_print_function
     def search_focus_finished(self):
         """ Ensure the return of the 3-axes stage to the surface plane after finding focus based on the signal on
         a reference plane.
