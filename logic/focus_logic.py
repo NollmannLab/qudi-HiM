@@ -27,6 +27,8 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import logging
+
 import numpy as np
 from core.connector import Connector
 from core.configoption import ConfigOption
@@ -859,11 +861,11 @@ class FocusLogic(GenericLogic):
         an offset of 0 is considered so that the focus is searched on the usual surface, not at a reference plane.
         This has the same effect as using the start_autofocus method with stop_when_stable=True.
         """
-        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
-        # calibration is aborted. - For all other setup, nothing will happen.
-        if self._shutter.open_shutter():
-            self.sigFocusFound.emit()
-            return
+        # # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # # calibration is aborted. - For all other setup, nothing will happen.
+        # if self._shutter.open_shutter():
+        #     self.sigFocusFound.emit()
+        #     return
 
         if self._calibrated and self._setpoint_defined:
             self.focus_search_running = True  # set this flag as indicator that the search focus procedure is running
@@ -884,6 +886,16 @@ class FocusLogic(GenericLogic):
         """ Ensure the return of the 3-axes stage to the surface plane after finding focus based on the signal on
         a reference plane.
         """
+        # security : make sure the autofocus is properly stopped before proceeding
+        t0 = time()
+        while self.autofocus_enabled:
+            sleep(0.5)
+            t1 = time()
+            if t1 - t0 > 30:
+                logging.warning("Timeout : the autofocus did not stop properly - finishing the search focus anyway!")
+                break
+
+        # move the z-stage by the offset
         offset = self._autofocus_logic._focus_offset
         if offset != 0:
             self.stage_move_z_relative(-offset)
@@ -892,9 +904,9 @@ class FocusLogic(GenericLogic):
         self.focus_search_running = False
         self.sigFocusFound.emit()
 
-        # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
-            self._shutter.close_shutter()
+        # # Close the shutter if the live display mode is off
+        # if not self.live_display_enabled:
+        #     self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
