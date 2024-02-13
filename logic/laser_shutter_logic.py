@@ -86,6 +86,7 @@ class ShutterLogic(GenericLogic):
     def open_shutter(self):
         if self._shutter and not self._acquisition_running:
             self._daq_logic.write_laser_shutter(1)
+            sleep(0.5)
             abort = False
         elif self._shutter and self._acquisition_running:
             self.log.warning('An acquisition is running - the IR security shutter cannot be open.')

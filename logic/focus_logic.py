@@ -594,7 +594,8 @@ class FocusLogic(GenericLogic):
             self.sigAutofocusError.emit()
             return
 
-        self._shutter.open_shutter()
+        if self._shutter.open_shutter():
+            return
 
         # autofocus can be started
         self.autofocus_enabled = True
