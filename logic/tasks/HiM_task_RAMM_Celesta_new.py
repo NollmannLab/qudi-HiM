@@ -157,6 +157,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.photobleaching_list: list = []
         self.buffer_dict: dict = {}
         self.probe_list: list = []
+        self.needle_rinsing_duration: int = 30
 
     def startTask(self):
         """ """
@@ -222,11 +223,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.probe_counter += 1
             self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
 
-            # list all the files that were already acquired and uploaded
-            if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
+        # list all the files that were already acquired and uploaded
+        if self.transfer_data:
+            path_to_upload = self.check_acquired_data()
+        else:
+            path_to_upload = []
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
@@ -268,14 +269,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 flowrate = self.hybridization_list[step]['flowrate']
                 volume = self.hybridization_list[step]['volume']
                 self.log.info(f'Hybridisation step {step + 1} - product: {product} - volume: {volume} '
-                                      f'- flowrate: {flowrate}')
+                              f'- flowrate: {flowrate}')
 
                 if product is not None:  # an injection step
                     needle_pos = self.set_valves_and_needle(product, needle_injection, needle_pos)
-                    self.perform_injection(flowrate, volume)
+                    path_to_upload = self.perform_injection(flowrate, volume, path_to_upload)
 
                 else:  # an incubation step
-                    self.incubation(self.hybridization_list[step]['time'])
+                    path_to_upload = self.incubation(self.hybridization_list[step]['time'], path_to_upload)
 
                 # if self.bokeh:
                 #     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
@@ -360,22 +361,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # if self.bokeh:
             #     add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
-        # Imaging (for all ROIs) finished ------------------------------------------------------------------------------
 
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
 
-            if self.logging:
-                self.status_dict['process'] = 'Photobleaching'
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-                add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
+            # if self.bokeh:
+            #     self.status_dict['process'] = 'Photobleaching'
+            #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            #     add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
 
-            # rinse needle in parallel with photobleaching
+            # rinse needle
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
             self.ref['valves'].wait_for_idle()
-            self.ref['daq'].start_rinsing(30)
+            self.ref['daq'].start_rinsing(self.needle_rinsing_duration)
             start_rinsing_time = time()
 
             # list all the files that were already acquired and uploaded
@@ -384,7 +384,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 path_to_upload = []
 
-            # inject product
+            # position the injection valve
             self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
             self.ref['valves'].wait_for_idle()
 
@@ -393,11 +393,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if self.aborted:
                     break
 
-                self.log.info(f'Photobleaching step {step + 1}')
-                if self.logging:
-                    add_log_entry(self.log_path, self.probe_counter, 3, f'Started injection {step + 1}')
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 3, f'Started injection {step + 1}')
 
-                if self.photobleaching_list[step]['product'] is not None:  # an injection step
+                product = self.photobleaching_list[step]['product']
+                flowrate = self.photobleaching_list[step]['flowrate']
+                volume = self.photobleaching_list[step]['volume']
+                self.log.info(f'Photobleaching step {step + 1} - product: {product} - volume: {volume} '
+                              f'- flowrate: {flowrate}')
+
+                if product is not None:  # an injection step
                     # set the 8 way valve to the position corresponding to the product
                     product = self.photobleaching_list[step]['product']
                     valve_pos = self.buffer_dict[product]
@@ -405,64 +410,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
-                    # create lists containing pressure, volume and flowrate data and initialize first value to 0
-                    pressure = [0]
-                    volume = [0]
-                    flowrate = [0]
-
-                    self.ref['flow'].set_pressure(0.0)  # as initial value
-                    self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
-                    # start counting the volume of buffer or probe
-                    self.ref['flow'].start_volume_measurement(self.photobleaching_list[step]['volume'])
-
-                    ready = self.ref['flow'].target_volume_reached
-
-                    while not ready:
-                        sleep(1)
-                        ready = self.ref['flow'].target_volume_reached
-                        # retrieve data for data saving at the end of interation
-                        self.append_flow_data(pressure, volume, flowrate)
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-
-                        if self.aborted:
-                            ready = True
-
-                    self.ref['flow'].stop_pressure_regulation_loop()
-                    sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
-                    # get the last data points
-                    self.append_flow_data(pressure, volume, flowrate)
-                    sleep(1)
-                    self.ref['flow'].set_pressure(0.0)
-
-                    # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.network_directory,
-                                                                   self.probe_list[self.probe_counter - 1][1],
-                                                                   'photobleaching', step)
-                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
+                    path_to_upload = self.perform_injection(flowrate, volume, path_to_upload)
 
                 else:  # an incubation step
-                    t = self.photobleaching_list[step]['time']
-                    self.log.info(f'Incubation time: {t} s')
-                    self.ref['valves'].set_valve_position('c', 1)
-                    self.ref['valves'].wait_for_idle()
+                    path_to_upload = self.incubation(self.photobleaching_list[step]['time'], path_to_upload)
 
-                    # allow abort by splitting the waiting time into small intervals of 30 s
-                    num_steps = t // 30
-                    remainder = t % 30
-                    for i in range(num_steps):
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-                        if not self.aborted:
-                            sleep(30)
-                    sleep(remainder)
-
-                    self.ref['valves'].set_valve_position('c', 2)
-                    self.ref['valves'].wait_for_idle()
-                    self.log.info('Incubation time finished')
-
-                if self.logging:
-                    add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
             # stop flux by closing valve towards pump
             self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
@@ -475,18 +429,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 sleep(60 - diff + 1)
 
             # set valves to default positions
-            self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
-            self.ref['valves'].wait_for_idle()
+            self.reset_valves_after_injection()
 
-            if self.logging:
-                add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
-        # Photobleaching finished --------------------------------------------------------------------------------------
-
-        if not self.aborted:
-            if self.logging:
-                add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
+            #     add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
         return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
@@ -502,16 +449,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('cleanupTask called')
 
-        if self.logging:
-            try:
-                self.status_dict = {}
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            except Exception:  # in case cleanup task was called before self.status_dict_path is defined
-                pass
+        # if self.bokeh:
+        #     try:
+        #         self.status_dict = {}
+        #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
+        #     except Exception:  # in case cleanup task was called before self.status_dict_path is defined
+        #         pass
 
         if self.aborted:
-            if self.logging:
-                add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
+            self.log.warning('HiM experiment was aborted.')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
             # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
             # position .. (maybe not necessary because all those elements will still be done above)
         else:
@@ -524,36 +472,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 sleep(1)
                 path_to_upload = self.launch_data_uploading(path_to_upload)
 
-        # reset the camera to default state
-        self.ref['cam'].reset_camera_after_multichannel_imaging()
-        self.ref['cam'].set_exposure(self.default_exposure)
+        # reset GUI and hardware
+        self.task_ending()
 
-        # close the fpga session
-        self.ref['laser'].end_task_session()
-        self.ref['laser'].restart_default_session()
-        self.log.info('restarted default fpga session')
-
-        # reset stage velocity to default
-        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3})  # 5.74592
-
-        # enable gui actions
-        # roi gui
-        self.ref['roi'].enable_tracking_mode()
-        self.ref['roi'].enable_roi_actions()
-        # basic imaging gui
-        self.ref['cam'].enable_camera_actions()
-        self.ref['laser'].enable_laser_actions()
-        # focus tools gui
-        self.ref['focus'].enable_focus_actions()
-        # fluidics control gui
-        self.ref['valves'].enable_valve_positioning()
-        self.ref['flow'].enable_flowcontrol_actions()
-        self.ref['pos'].enable_positioning_actions()
-
+        # reset the logging option and release the log file
         total = time() - self.start
-        print(f'total time with logging = {self.logging}: {total} s')
-
-        self.log.info('cleanupTask finished')
+        self.log.info(f'HiM experiment finished - total time : {total}')
+        self.log.removeHandler(self.file_handler)
 
     # ==================================================================================================================
     # Helper functions
@@ -610,6 +535,36 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].end_task_session()
 
         return abort
+
+    def task_ending(self):
+        """ Perform all actions in order to properly end the task and make sure all hardware and GUI will remain
+        available.
+        """
+        # reset the camera to default state
+        self.ref['cam'].reset_camera_after_multichannel_imaging()
+        self.ref['cam'].set_exposure(self.default_exposure)
+
+        # close the fpga session
+        self.ref['laser'].end_task_session()
+        self.ref['laser'].restart_default_session()
+        self.log.info('restarted default fpga session')
+
+        # reset stage velocity to default
+        self.ref['roi'].set_stage_velocity({'x': 3, 'y': 3})  # 5.74592
+
+        # enable gui actions
+        # roi gui
+        self.ref['roi'].enable_tracking_mode()
+        self.ref['roi'].enable_roi_actions()
+        # basic imaging gui
+        self.ref['cam'].enable_camera_actions()
+        self.ref['laser'].enable_laser_actions()
+        # focus tools gui
+        self.ref['focus'].enable_focus_actions()
+        # fluidics control gui
+        self.ref['valves'].enable_valve_positioning()
+        self.ref['flow'].enable_flowcontrol_actions()
+        self.ref['pos'].enable_positioning_actions()
 
     def init_logger(self):
         """ Initialize a logger for the task. This logger is overriding the logger called in qudi-core, adding the
@@ -976,12 +931,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return needle_position
 
-    def perform_injection(self, target_flowrate, target_volume):
+    def perform_injection(self, target_flowrate, target_volume, path_to_upload):
         """ Perform the injection according to the values of target flowrate and volume.
         N.B All the commented lines were previoulsy used for bokeh
 
         @param target_flowrate: (float) indicate the average flow-rate that should be used for the injection
         @param target_volume: (int) indicate the target volume for the current injection
+        @param path_to_upload: (list) if the option is selected, list all the data files that should be transferred
+        @return path_to_upload: (list) return the updated list of file to be transferred.
         """
         # pressure regulation
         # create lists containing pressure and volume data and initialize first value to 0
@@ -1027,10 +984,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         #                                                'hybridization', step)
         # save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
-    def incubation(self, t):
+        return path_to_upload
+
+    def incubation(self, t, path_to_upload):
         """ Perform an incubation step.
 
+        @param path_to_upload: (list) if the option is selected, list all the data files that should be transferred
         @param t: (int) indicate the duration of the incubation step in seconds
+        @return path_to_upload: (list) return the updated list of file to be transferred.
         """
         # close the valves to make prevent any flow during the incubation
         self.log.info(f'Incubation time: {t} s')
@@ -1054,6 +1015,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['valves'].set_valve_position('c', 2)  # open flux again
         self.ref['valves'].wait_for_idle()
         self.log.info('Incubation time finished')
+
+        return path_to_upload
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for data acquisition
@@ -1176,7 +1139,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def save_stack(self, cur_save_path):
         """ Save the stack in the correct format.
 
-        @param cur_save_path: (str) path where to the save the stack.
+        @param cur_save_path: (str) ROI path where to the save the stack.
         """
         image_data = self.ref['cam'].get_acquired_data()
 
