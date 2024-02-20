@@ -146,12 +146,10 @@ class LumencorCelesta(Base, LasercontrolInterface):
 
         for i, wavelength in enumerate(
                 self._wavelengths):  # use any of the lists retrieved as config option, just to have an index variable
-            label = 'laser{}'.format(i + 1)  # create a label for the i's element in the list starting from 'laser1'
-
+            label = f'laser{format(i + 1)}'  # create a label for the i's element in the list starting from 'laser1'
             dic_entry = {'label': label,
                          'wavelength': wavelength,
                          'channel': i}
-
             laser_dict[dic_entry['label']] = dic_entry
 
         return laser_dict

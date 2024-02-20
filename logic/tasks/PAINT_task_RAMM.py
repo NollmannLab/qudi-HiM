@@ -8,11 +8,10 @@ This module contains a task to perform a multicolor scan on RAMM setup.
 (Take at a given position a stack of images using a sequence of different laserlines or intensities in each plane
 of the stack.)
 
-@author: F. Barho
+@author: JB. Fiche
 
-Created on Wed March 10 2021 - Last modified on Thu Jan 11 2024 (adding the possibility to change the maximum number of
-FPGA channels using the FPGA_max_laserlines variable)
-------------------------------------------------------------------------------------------------------------------------
+Created on Wed November 30 2023
+-----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,7 +28,7 @@ along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
 Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
-------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
 """
 import os
 from datetime import datetime
@@ -63,29 +62,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
-        self.FPGA_max_laserlines = 10
         self.user_config_path = self.config['path_to_user_config']
         self.step_counter: int = 0
         self.user_param_dict = {}
         self.timeout: float = 0
-        self.z_target_positions: list = []
-        self.z_actual_positions: list = []
-        self.num_frames: int = 0
         self.default_exposure: float = 0
         self.sample_name: str = ""
         self.exposure: float = 0
-        self.num_z_planes: int = 0
-        self.z_step: int = 0
-        self.centered_focal_plane: bool = False
+        self.num_frames_total: int = 0
+        self.num_im_per_sequences: int = 400
+        self.sequences: int = 0
+        self.cycles: int = 0
         self.imaging_sequence: list = []
         self.save_path: str = ""
         self.file_format: str = ""
         self.complete_path: str = ""
-        self.start_position: float = 0
         self.num_laserlines: int = 0
         self.wavelengths: list = []
         self.intensities: list = []
-        self.focal_plane_position: float = 0
         self.lightsource_dict: dict = {'BF': 0, '405 nm': 1, '488 nm': 2, '561 nm': 3, '640 nm': 4}
 
     def startTask(self):
@@ -99,14 +93,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['cam'].disable_camera_actions()
 
         self.ref['laser'].stop_laser_output()
-        self.ref['bf'].led_off()
         self.ref['laser'].disable_laser_actions()  # includes also disabling of brightfield on / off button
-
-        self.ref['focus'].stop_autofocus()
-        self.ref['focus'].disable_focus_actions()
-
-        # set the ASI stage in trigger mode
-        self.ref['roi'].set_stage_led_mode('Triggered')
 
         # read all user parameters from config
         self.load_user_parameters()
@@ -114,13 +101,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close default FPGA session
         self.ref['laser'].close_default_session()
 
-        # prepare the camera
-        self.num_frames = self.num_z_planes * self.num_laserlines
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-        self.ref['cam'].start_acquisition()
+        # prepare the camera - the maximum number of images per file is ~500. Therefore, the acquisition will be
+        # organized as a sequence small acquisition, each composed of 400 images.
+        self.sequences = int(np.ceil(self.num_frames_total / self.num_im_per_sequences))
+        self.cycles = int(self.num_im_per_sequences / self.num_laserlines)
+        print(f'The total number of sequences is {self.sequences} and each contains {self.cycles} cycles of '
+              f'acquisition')
 
         # download the bitfile for the task on the FPGA
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiFTLQPDPID_20240111.lvbitx'
+        # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QudiHiMQPDPID_sHetN0yNJQ8.lvbitx'  # associated to Qudi_HiM_QPD_PID.vi
+        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('Task session started')
 
@@ -132,7 +122,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.step_counter = 0
 
         # start the session on the fpga using the user parameters
-        self.ref['laser'].run_multicolor_imaging_task_session(self.num_z_planes, self.wavelengths, self.intensities,
+        self.ref['laser'].run_multicolor_imaging_task_session(self.cycles, self.wavelengths, self.intensities,
                                                               self.num_laserlines, self.exposure)
 
         # defines the timeout value
@@ -142,44 +132,60 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Implement one work step of your task here.
         :return bool: True if the task should continue running, False if it should finish.
         """
-        self.step_counter += 1
 
-        # --------------------------------------------------------------------------------------------------------------
-        # position the piezo
-        # --------------------------------------------------------------------------------------------------------------
-        position = self.start_position + (self.step_counter - 1) * self.z_step
-        self.ref['focus'].go_to_position(position)
-        # print(f'target position: {position} um')
-        sleep(0.03)
-        cur_pos = self.ref['focus'].get_position()
-        # print(f'current position: {cur_pos} um')
-        self.z_target_positions.append(position)
-        self.z_actual_positions.append(cur_pos)
+        for sequence in range(self.sequences):
+            print(f'imaging sequence #{sequence}')
 
-        # --------------------------------------------------------------------------------------------------------------
-        # imaging sequence (handled by FPGA)
-        # --------------------------------------------------------------------------------------------------------------
-        # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
-        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-                                            np.array([1], dtype=np.uint8))
-        sleep(0.005)
-        self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
-                                            np.array([0], dtype=np.uint8))
-
-        # wait for signal from FPGA to DAQ ('acquisition ready')
-        fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-        t0 = time()
-
-        while not fpga_ready:
-            sleep(0.001)
-            fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
-
-            t1 = time() - t0
-            if t1 > self.timeout:  # for safety: timeout if no signal received within the calculated time (in s)
-                self.log.warning('Timeout occurred')
+            if self.aborted:
                 break
 
-        return (self.step_counter < self.num_z_planes) and (not self.aborted)
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_im_per_sequences, self.exposure,
+                                                                    None, None, None)
+            self.ref['cam'].start_acquisition()
+
+            for cycle in range(self.cycles):
+
+                if self.aborted:
+                    break
+
+                # --------------------------------------------------------------------------------------------------
+                # imaging sequence (handled by FPGA)
+                # --------------------------------------------------------------------------------------------------
+                # send signal from daq to FPGA connector 0/DIO3 ('piezo ready')
+                sleep(0.05)
+                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                    np.array([1], dtype=np.uint8))
+                sleep(0.005)
+                self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
+                                                    np.array([0], dtype=np.uint8))
+
+                # wait for signal from FPGA to DAQ ('acquisition ready')
+                fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
+                t0 = time()
+
+                while not fpga_ready:
+                    sleep(0.001)
+                    fpga_ready = self.ref['daq'].read_di_channel(self.ref['daq']._daq.acquisition_done_taskhandle, 1)[0]
+
+                    t1 = time() - t0
+                    if t1 > self.timeout:  # for safety: timeout if no signal received within the calculated time (in s)
+                        self.log.warning('Timeout occurred')
+                        break
+
+            # ------------------------------------------------------------------------------------------------------
+            # save the images
+            # ------------------------------------------------------------------------------------------------------
+            image_data = self.ref['cam'].get_acquired_data()
+            image_data = image_data[:, 255:1791, 255:1791]
+            image_name = os.path.join(os.path.split(self.complete_path)[0], f'sequence_{str(sequence).zfill(2)}.tif')
+            print(image_name)
+
+            self.ref['cam'].save_to_tiff(self.num_im_per_sequences, image_name, image_data)
+            metadata = self.get_metadata()
+            file_path = image_name.replace('tif', 'yaml', 1)
+            self.save_metadata_file(metadata, file_path)
+
+        return False
 
     def pauseTask(self):
         """ """
@@ -193,34 +199,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.log.info('cleanupTask called')
 
-        # reset piezo position to the initial one
-        self.ref['focus'].go_to_position(self.focal_plane_position)
-
-        # set the ASI stage in internal mode
-        self.ref['roi'].set_stage_led_mode('Internal')
-
-        # get acquired data from the camera and save it to file in case the task has not been stopped during acquisition
-        if self.step_counter == self.num_z_planes:
-            image_data = self.ref['cam'].get_acquired_data()
-
-            if self.file_format == 'fits':
-                metadata = self.get_fits_metadata()
-                self.ref['cam'].save_to_fits(self.complete_path, image_data, metadata)
-            elif self.file_format == 'npy':
-                self.ref['cam'].save_to_npy(self.complete_path, image_data)
-                metadata = self.get_metadata()
-                file_path = self.complete_path.replace('npy', 'yaml', 1)
-                self.save_metadata_file(metadata, file_path)
-            else:   # use tiff as default format
-                self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
-                metadata = self.get_metadata()
-                file_path = self.complete_path.replace('tif', 'yaml', 1)
-                self.save_metadata_file(metadata, file_path)
-
-            # save file with z positions (same procedure for either file format)
-            file_path = os.path.join(os.path.split(self.complete_path)[0], 'z_positions.yaml')
-            save_z_positions_to_file(self.z_target_positions, self.z_actual_positions, file_path)
-
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
         self.ref['cam'].set_exposure(self.default_exposure)
@@ -233,7 +211,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # enable gui actions
         self.ref['cam'].enable_camera_actions()
         self.ref['laser'].enable_laser_actions()
-        self.ref['focus'].enable_focus_actions()
 
         self.log.info('cleanupTask finished')
 
@@ -253,11 +230,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         user must specify the following dictionary (here with example entries):
             sample_name: 'Mysample'
             exposure: 0.05  # in s
-            num_z_planes: 50
-            z_step: 0.25  # in um
-            centered_focal_plane: False
             save_path: 'E:\'
-            file_format: 'tif'
             imaging_sequence: [('488 nm', 3), ('561 nm', 3), ('641 nm', 10)]
         """
         try:
@@ -266,20 +239,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 self.sample_name = self.user_param_dict['sample_name']
                 self.exposure = self.user_param_dict['exposure']
-                self.num_z_planes = self.user_param_dict['num_z_planes']
-                self.z_step = self.user_param_dict['z_step']  # in um
-                self.centered_focal_plane = self.user_param_dict['centered_focal_plane']
+                self.num_frames_total = self.user_param_dict['num_z_planes']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
                 self.save_path = self.user_param_dict['save_path']
-                self.file_format = self.user_param_dict['file_format']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
 
         # establish further user parameters derived from the given ones
         self.complete_path = self.get_complete_path(self.save_path)
-
-        self.start_position = self.calculate_start_position(self.centered_focal_plane)
 
         # count the number of lightsources
         self.num_laserlines = len(self.imaging_sequence)
@@ -292,39 +260,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 wavelengths[n] = self.lightsource_dict[key]
 
-        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+        for i in range(self.num_laserlines, 5):
             wavelengths.append(0)  # must always be a list of length 5: append zeros until necessary length reached
         self.wavelengths = wavelengths
 
         self.intensities = [self.imaging_sequence[i][1] for i, item in enumerate(self.imaging_sequence)]
-        for i in range(self.num_laserlines, self.FPGA_max_laserlines):
+        for i in range(self.num_laserlines, 5):
             self.intensities.append(0)
-
-    def calculate_start_position(self, centered_focal_plane):
-        """
-        This method calculates the piezo position at which the z stack will start. It can either start in the
-        current plane or calculate an offset so that the current plane will be centered inside the stack.
-        Note : the scan should start below the current position so that the focal plane will be the central plane or one
-        of the central planes in case of an even number of planes.
-
-        :param: bool centered_focal_plane: indicates if the scan is done below and above the focal plane (True)
-                                            or if the focal plane is the bottommost plane in the scan (False)
-
-        :return: float piezo start position
-        """
-        current_pos = self.ref['focus'].get_position()  # user has set focus
-        self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
-
-        if centered_focal_plane:
-            # even number of planes:
-            if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
-            # odd number of planes:
-            else:
-                start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
-            return start_pos
-        else:
-            return current_pos  # the scan starts at the current position and moves up
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -379,12 +321,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         :return: dict metadata
         """
         metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
-                    'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
+                    'Number of images per sequences': self.num_im_per_sequences,
+                    'Number of sequences': self.sequences,
                     'Number laserlines': self.num_laserlines}
         for i in range(self.num_laserlines):
             metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
             metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        # pixel size ???
+
         return metadata
 
     def get_fits_metadata(self):

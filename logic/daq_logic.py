@@ -164,7 +164,6 @@ class DAQLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for analog in/out channels controlling a piezo - not used for the moment on any setup
 # ----------------------------------------------------------------------------------------------------------------------
-
     def read_piezo(self):
         """ Read the voltage applied to the channel controlling the piezo.
 
@@ -182,10 +181,45 @@ class DAQLogic(GenericLogic):
         self._daq.move_piezo(pos)
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Methods for analog in/out channels controlling the IR laser shutter on the RAMM
+# ----------------------------------------------------------------------------------------------------------------------
+    def initialize_shutter(self):
+        """ Test whether the IR laser shutter is properly connected.
+
+        @return: shutter_initialize(bool) 0 : shutter is not connected / 1 : shutter is connected
+        """
+        self.write_laser_shutter(1)
+        sleep(0.5)
+        if self.read_laser_shutter() == 1:
+            self.write_laser_shutter(0)
+            shutter_initialize = True
+        else:
+            self.log.warning('Shutter is not properly connected - initialization did not work')
+            shutter_initialize = False
+
+        return shutter_initialize
+
+    def write_laser_shutter(self, state):
+        """ Control the state of the laser shutter placed in front of the IR laser.
+
+        @param state: (int) 0 = close the shutter / 1 = open the shutter
+        """
+        self._daq.write_laser_shutter(state)
+
+    def read_laser_shutter(self):
+        """ Read the state of the laser shutter.
+
+        @return: shutter_state: (int): 0 : shutter is close / 1 : shutter is open
+        """
+        shutter_state = self._daq.read_laser_shutter()
+        return shutter_state
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Methods for analog in/out channels controlling a peristaltic pump
 # ----------------------------------------------------------------------------------------------------------------------
 
 # needle rinsing pump used on RAMM and Airyscan setup ------------------------------------------------------------------
+
     def start_rinsing(self, duration):
         """ Start the needle rinsing pump by applying the target voltage.
 

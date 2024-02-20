@@ -19,7 +19,9 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 """
 from logic.generic_task import InterruptableTask
+import os
 import time
+import logging
 
 class Task(InterruptableTask):
     """ Dummy task, does nothing. """
@@ -34,21 +36,29 @@ class Task(InterruptableTask):
         print('Start')
         self.ctr = 0
         self._result = '{0} lines printed!'.format(self.ctr)
+        self.file_handler = logging.FileHandler(filename=os.path.join('/home/jb/Desktop', 'HiM_task.log'))
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        self.file_handler.setFormatter(formatter)
+
+        self.task_logger = logging.getLogger()
+        self.task_logger.setLevel(logging.INFO)
+        self.task_logger.addHandler(self.file_handler)
+        self.task_logger.info('started Task')
 
     def runTaskStep(self):
         """ Dummy step """
 
         if not self.aborted:
             time.sleep(0.5)
-            print('one task step', self.ctr)
+            self.task_logger.info(f'step :{self.ctr}')
         if not self.aborted:
-            time.sleep(5)
+            time.sleep(0.5)
         if not self.aborted:
             print('still in the task step', self.ctr)
             time.sleep(0.1)
             self.ctr += 1
         self._result = '{0} lines printed!'.format(self.ctr)
-        return self.ctr < 50
+        return self.ctr < 5
 
     def pauseTask(self):
         """ Dummy pause """
@@ -63,7 +73,9 @@ class Task(InterruptableTask):
     def cleanupTask(self):
         """ Dummy cleanup """
         print(self._result)
-        print('task cleaned up')
+        self.task_logger.info('task cleaned up')
+        self.task_logger.removeHandler(self.file_handler)
+        self.task_logger.info('task cleaned up')
 
     def checkExtraStartPrerequisites(self):
         """ Check extra start prerequisites, there are none """

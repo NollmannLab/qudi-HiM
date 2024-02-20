@@ -144,6 +144,7 @@ class FocusGUI(GUIBase):
     y_data = None
     _w_pid = None
     _timetrace = None
+    _laser_shutter = None
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -157,6 +158,9 @@ class FocusGUI(GUIBase):
         self._mw = FocusWindowCE(self.close_function)
         self._mw.centralwidget.hide()
         self.init_pid_settings_ui()
+
+        # check if a shutter for the IR laser is used (specifically for the RAMM setup)
+        self._laser_shutter = self._focus_logic._laser_shutter
 
         # setup specific adjustments of the GUI
         if self._focus_logic._readout == 'qpd':
@@ -486,7 +490,10 @@ class FocusGUI(GUIBase):
         self._mw.slope_lineEdit.setText("{:.2f}".format(slope))
         self._mw.precision_lineEdit.setText("{:.2f}".format(precision))
         # enable the piezo position correction, focus stabilization and search focus toolbuttons
-        self._mw.autofocus_Action.setDisabled(False)
+        if not self._laser_shutter:
+            self._mw.autofocus_Action.setDisabled(False)
+        else:
+            self._mw.autofocus_Action.setDisabled(True)
         self._mw.search_focus_Action.setDisabled(False)
 
     def calibrate_offset_clicked(self):
@@ -521,7 +528,11 @@ class FocusGUI(GUIBase):
         not running yet, a signal is sent to the logic to launch it and the button text is changed to "stop autofocus".
         If the autofocus is already running, a signal is sent to the logic to stop the autofocus loop. The text of the
         button is changed back to "Start autofocus".
+        For the RAMM, if a laser shutter is present, this action is not available.
         """
+        if self._laser_shutter:
+            return
+
         if self._focus_logic.autofocus_enabled:
             self._mw.autofocus_Action.setText('Start focus stabilization')
             self._mw.search_focus_Action.setDisabled(False)
@@ -544,7 +555,8 @@ class FocusGUI(GUIBase):
         """ Callback of sigFocusFound sent from focus_logic.
         Re-enable the focus stabilization action (autofocus_Action) and reset search_focus_Action to its default state.
         """
-        self._mw.autofocus_Action.setDisabled(False)
+        if not self._laser_shutter:
+            self._mw.autofocus_Action.setDisabled(False)
         self._mw.search_focus_Action.setChecked(False)
         self._mw.search_focus_Action.setText('Search focus')
         self._mw.search_focus_Action.setDisabled(False)
@@ -554,9 +566,10 @@ class FocusGUI(GUIBase):
         Reset autofocus action button to callable state when autofocus was programmatically stopped, ended in an error
         (autofocus signal lost) or was not started because of missing calibrations.
         """
-        self._mw.autofocus_Action.setText('Start focus stabilization')
-        self._mw.autofocus_Action.setChecked(False)
-        self._mw.autofocus_Action.setDisabled(False)
+        if not self._laser_shutter:
+            self._mw.autofocus_Action.setText('Start focus stabilization')
+            self._mw.autofocus_Action.setChecked(False)
+            self._mw.autofocus_Action.setDisabled(False)
         self._mw.search_focus_Action.setText('Search focus')
         self._mw.search_focus_Action.setChecked(False)
         self._mw.search_focus_Action.setDisabled(False)
@@ -612,8 +625,8 @@ class FocusGUI(GUIBase):
 
     @QtCore.Slot()
     def reset_start_focus_stabilization_button(self):
-        """ Reset the state of the start focus stabilization button, for example when live mode is stopped when closing the
-        focus window.
+        """ Reset the state of the start focus stabilization button, for example when live mode is stopped when closing
+        the focus window.
         """
         self._mw.autofocus_Action.setText('Start focus stabilization')
         self._mw.autofocus_Action.setChecked(False)
@@ -634,8 +647,9 @@ class FocusGUI(GUIBase):
     def enable_focus_toolbuttons(self):
         """ Enables focus toolbuttons, for example at the end of a task. """
         self._mw.piezo_init_Action.setDisabled(False)
-        self._mw.autofocus_Action.setDisabled(False)
         self._mw.search_focus_Action.setDisabled(False)
+        if self._laser_shutter:
+            self._mw.autofocus_Action.setDisabled(False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Custom close function
