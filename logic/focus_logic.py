@@ -117,7 +117,7 @@ class FocusLogic(GenericLogic):
     # declare connectors
     piezo = Connector(interface='MotorInterface')
     autofocus = Connector(interface='AutofocusLogic')
-    shutter = Connector(interface='GenericLogic')
+    shutter = Connector(interface='ShutterInterface', optional=True)
 
     # config options
     _init_position: float = ConfigOption('init_position', 10, missing='warn')
@@ -220,7 +220,8 @@ class FocusLogic(GenericLogic):
         Reset the piezo to the zero position. If a shutter for the laser is used, close the shutter.
         """
         self.go_to_position(0.5)
-        self._shutter.close_shutter()
+        if self._shutter is not None:
+            self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for manual focus setting (manual focus dockwidget and toolbar)
@@ -403,8 +404,9 @@ class FocusLogic(GenericLogic):
         """ Start the camera live display. """
         self.live_display_enabled = True
         self._autofocus_logic.start_camera_live()
-        if self._shutter.open_shutter():
-            return
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
 
         worker = Worker(self.live_update_time)
         worker.signals.sigFinished.connect(self.live_display_loop)
@@ -433,7 +435,8 @@ class FocusLogic(GenericLogic):
         """ Stop the camera live image. """
         self._autofocus_logic.stop_camera_live()
         self.live_display_enabled = False
-        self._shutter.close_shutter()
+        if self._shutter is not None:
+            self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for the 3-axis motor stage (only for the RAMM microscope)
@@ -491,8 +494,9 @@ class FocusLogic(GenericLogic):
 
         # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
         # calibration is aborted. - For all other setup, nothing will happen.
-        if self._shutter.open_shutter():
-            return
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
 
         # Compute the piezo ramp parameters
         z0 = self.get_position()
@@ -517,7 +521,7 @@ class FocusLogic(GenericLogic):
             autofocus_signal[n] = self.read_detector_signal()
 
         # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
+        if (not self.live_display_enabled) and (self._shutter is not None):
             self._shutter.close_shutter()
 
         # Calculate the slope of the calibration curve
@@ -553,14 +557,15 @@ class FocusLogic(GenericLogic):
         """ From the present piezo position, read the detector signal and keep the value as reference for the pid.
         @return: None
         """
-        self._shutter.open_shutter()
+        if self._shutter is not None:
+            self._shutter.open_shutter()
 
         setpoint = self._autofocus_logic.define_pid_setpoint()
         self._setpoint_defined = True
         self.sigSetpointDefined.emit(setpoint)
 
         # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
+        if (not self.live_display_enabled) and (self._shutter is not None):
             self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -594,8 +599,9 @@ class FocusLogic(GenericLogic):
             self.sigAutofocusError.emit()
             return
 
-        if self._shutter.open_shutter():
-            return
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
 
         # autofocus can be started
         self.autofocus_enabled = True
@@ -740,7 +746,7 @@ class FocusLogic(GenericLogic):
             self._autofocus_logic.stop_camera_live()
 
         # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
+        if (not self.live_display_enabled) and (self._shutter is not None):
             self._shutter.close_shutter()
 
         self.sigAutofocusStopped.emit()
@@ -757,14 +763,15 @@ class FocusLogic(GenericLogic):
         """
         # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
         # calibration is aborted. - For all other setup, nothing will happen.
-        if self._shutter.open_shutter():
-            return
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
 
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
 
         # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
+        if (not self.live_display_enabled) and (self._shutter is not None):
             self._shutter.close_shutter()
 
     def update_autofocus_offset_parameters(self, offset, setpoint):
@@ -789,13 +796,14 @@ class FocusLogic(GenericLogic):
         """
         # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
         # calibration is aborted. - For all other setup, nothing will happen.
-        if self._shutter.open_shutter():
-            return False
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return False
 
         success = self._autofocus_logic.rescue_autofocus()
 
         # Close the shutter if the live display mode is off
-        if not self.live_display_enabled:
+        if (not self.live_display_enabled) and (self._shutter is not None):
             self._shutter.close_shutter()
 
         return success
