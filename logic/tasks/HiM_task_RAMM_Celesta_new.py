@@ -34,11 +34,13 @@ import pandas as pd
 import os
 import shutil
 import logging
+import platform
+import subprocess
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
-    create_path_for_injection_data
+# from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
+#     create_path_for_injection_data
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from qtpy import QtCore
 from glob import glob
@@ -104,8 +106,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.probe_counter: int = 0
         self.start: float = 0
         self.timeout: float = 0
+        self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
+        self.needle_rinsing_duration: int = 30  # time in seconds for rinsing the injection needle
+        self.FPGA_bitfile: str = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
 
-        # parameter for parameter handling
+        # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
         self.user_param_dict: dict = {}
 
@@ -129,6 +134,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.transfer_data: bool = False
         self.file_format: str = ""
         self.prefix: str = ""
+        self.path_to_upload: list = []
 
         # parameters for image acquisition
         self.default_exposure: float = 0.05
@@ -144,6 +150,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.autofocus_failed: int = 0
         self.dz: list = []
         self.celesta_laser_dict: dict = {}
+        self.FPGA_wavelength_channels: list = []
+        self.celesta_intensity_dict: dict = {}
 
         # parameters for roi
         self.roi_list_path: list = []
@@ -157,7 +165,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.photobleaching_list: list = []
         self.buffer_dict: dict = {}
         self.probe_list: list = []
-        self.needle_rinsing_duration: int = 30
 
     def startTask(self):
         """ """
@@ -200,9 +207,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                             np.array([0], dtype=np.uint8))
 
         # download the bitfile for the task on the FPGA and start the FPGA session
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
-        self.log.info('FPGA bitfile loaded for ROIMulticolour task')
-        self.ref['laser'].start_task_session(bitfile)
+        self.log.info('FPGA bitfile loaded for HiM task')
+        self.ref['laser'].start_task_session(self.FPGA_bitfile)
         self.ref['laser'].run_celesta_roi_multicolor_imaging_task_session(self.num_z_planes,
                                                                           self.FPGA_wavelength_channels,
                                                                           self.num_laserlines, self.exposure)
@@ -225,9 +231,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # list all the files that were already acquired and uploaded
         if self.transfer_data:
-            path_to_upload = self.check_acquired_data()
-        else:
-            path_to_upload = []
+            self.path_to_upload = self.check_acquired_data()
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
@@ -251,10 +255,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # position the valves for hybridization sequence
             self.prepare_valves_for_injection()
-            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: inject probe
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
-            self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the hybridization sequence
             needle_injection = 0
@@ -273,10 +273,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 if product is not None:  # an injection step
                     needle_pos = self.set_valves_and_needle(product, needle_injection, needle_pos)
-                    path_to_upload = self.perform_injection(flowrate, volume, path_to_upload)
+                    self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    path_to_upload = self.incubation(self.hybridization_list[step]['time'], path_to_upload)
+                    self.incubation(self.hybridization_list[step]['time'], transfer=self.transfer_data)
 
                 # if self.bokeh:
                 #     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
@@ -380,9 +380,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
+                self.path_to_upload = self.check_acquired_data()
 
             # position the injection valve
             self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: towards pump
@@ -410,10 +408,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
-                    path_to_upload = self.perform_injection(flowrate, volume, path_to_upload)
+                    self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    path_to_upload = self.incubation(self.photobleaching_list[step]['time'], path_to_upload)
+                    self.incubation(self.photobleaching_list[step]['time'], transfer=self.transfer_data)
 
                 # if self.bokeh:
                 #     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
@@ -465,12 +463,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         else:
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
-            while path_to_upload and not self.aborted:
+                self.path_to_upload = self.check_acquired_data()
+
+            while self.path_to_upload and not self.aborted:
                 sleep(1)
-                path_to_upload = self.launch_data_uploading(path_to_upload)
+                self.launch_data_uploading()
 
         # reset GUI and hardware
         self.task_ending()
@@ -931,14 +928,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         return needle_position
 
-    def perform_injection(self, target_flowrate, target_volume, path_to_upload):
+    def perform_injection(self, target_flowrate, target_volume, transfer=False):
         """ Perform the injection according to the values of target flowrate and volume.
         N.B All the commented lines were previoulsy used for bokeh
 
         @param target_flowrate: (float) indicate the average flow-rate that should be used for the injection
         @param target_volume: (int) indicate the target volume for the current injection
-        @param path_to_upload: (list) if the option is selected, list all the data files that should be transferred
-        @return path_to_upload: (list) return the updated list of file to be transferred.
+        @param transfer: (bool) indicate whether data transfer should be performed during the waiting time
         """
         # pressure regulation
         # create lists containing pressure and volume data and initialize first value to 0
@@ -961,8 +957,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             sleep(1)
             ready = self.ref['flow'].target_volume_reached
             # if data are ready to be saved and the option was selected, launch a worker
-            if self.transfer_data:
-                path_to_upload = self.launch_data_uploading(path_to_upload)
+            if transfer:
+                self.launch_data_uploading()
 
             # # retrieve data for data saving at the end of interation
             # self.append_flow_data(pressure, volume, flowrate)
@@ -984,14 +980,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         #                                                'hybridization', step)
         # save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
 
-        return path_to_upload
-
-    def incubation(self, t, path_to_upload):
+    def incubation(self, t, transfer=False):
         """ Perform an incubation step.
 
-        @param path_to_upload: (list) if the option is selected, list all the data files that should be transferred
         @param t: (int) indicate the duration of the incubation step in seconds
-        @return path_to_upload: (list) return the updated list of file to be transferred.
+        @param transfer: (bool) indicate whether data transfer should be performed during the waiting time
         """
         # close the valves to make prevent any flow during the incubation
         self.log.info(f'Incubation time: {t} s')
@@ -1003,8 +996,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         remainder = t % 30
         for i in range(num_steps):
             # if data are ready to be saved and the option is selected, launch a worker
-            if self.transfer_data:
-                path_to_upload = self.launch_data_uploading(path_to_upload)
+            if transfer:
+                self.launch_data_uploading()
 
             if not self.aborted:
                 sleep(30)
@@ -1015,8 +1008,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['valves'].set_valve_position('c', 2)  # open flux again
         self.ref['valves'].wait_for_idle()
         self.log.info('Incubation time finished')
-
-        return path_to_upload
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for data acquisition
@@ -1162,6 +1153,24 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for data online transferring
     # ------------------------------------------------------------------------------------------------------------------
+    def check_local_network(self):
+        """ Check if the connection to the local server is working. The IP address should be the typical data server one
+         (for example GREY).
+
+        @return: (bool) True if the network is working.
+        """
+        if platform.system() == 'Linux':
+            result = subprocess.run(['ping', '-c', '1', self.IP_to_check],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        else:
+            result = subprocess.run(['ping', '-n', '1', self.IP_to_check],
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if result.returncode == 0:
+            return True
+        else:
+            self.log.warning('Connection to the local server is lost')
+            return False
+
     def check_acquired_data(self):
         """ List all the acquired data in the directory and all the data already uploaded on the network. Compare the
         data in order to return a list containing only the paths to the files that were not transferred yet. In order to
@@ -1209,36 +1218,33 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 idx_tif.append(n)
 
         # build the final list of file to transfer
-        path_to_upload_sorted = [selected_path_to_upload[i] for i in idx_npy] \
-                                + [selected_path_to_upload[i] for i in idx_yaml] \
-                                + [selected_path_to_upload[i] for i in idx_tif]
+        path_to_upload_sorted = ([selected_path_to_upload[i] for i in idx_npy]
+                                 + [selected_path_to_upload[i] for i in idx_yaml]
+                                 + [selected_path_to_upload[i] for i in idx_tif])
 
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
         return list(path_to_upload_sorted)
 
-    def launch_data_uploading(self, path_to_upload):
+    def launch_data_uploading(self):
         """ Look for the next .tif file to upload and start the worker on a specific thread to launch the transfer
-
-        @param path_to_upload: list of all the .tif files in the local directory
         """
-        global data_saved
+        if self.check_local_network():
 
-        if data_saved and path_to_upload:
+            global data_saved
+            if data_saved and self.path_to_upload:
 
-            path = path_to_upload.pop(0)
+                path = self.path_to_upload.pop(0)
 
-            # rewrite the path to the server, following the same hierarchy
-            relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
-            network_dir = os.path.join(self.network_directory, relative_dir)
-            os.makedirs(network_dir, exist_ok=True)
+                # rewrite the path to the server, following the same hierarchy
+                relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
+                network_dir = os.path.join(self.network_directory, relative_dir)
+                os.makedirs(network_dir, exist_ok=True)
 
-            # launch the worker to start the transfer
-            data_saved = False
-            print(f"uploading {path}")
-            worker = UploadDataWorker(path, network_dir)
-            self.threadpool.start(worker)
-
-        return path_to_upload
+                # launch the worker to start the transfer
+                data_saved = False
+                self.log.info(f"uploading {path}")
+                worker = UploadDataWorker(path, network_dir)
+                self.threadpool.start(worker)
 
 # ======================================================================================================================
 #    DEPRECATED FUNCTIONS
@@ -1314,3 +1320,4 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             projection = np.max(image_array, axis=0)
             path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
             np.save(path, projection)
+            
