@@ -139,11 +139,11 @@ class NIDAQMSeries(Base, LasercontrolInterface):
             try:
                 self.trigger_write_taskhandle = self.create_taskhandle()
                 self.set_up_do_channel(self.trigger_write_taskhandle,
-                                       self._trigger_write_do_channel, taskname="trigger")
+                                       self._trigger_write_do_channel, name="trigger")
                 print('Trigger write digital out channel created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create do channel')
+                self.log.error(f'Failed to create do channel for the trigger : {err}')
 
         if self._trigger_read_ai_channel:
             try:
@@ -152,7 +152,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Trigger read analog in channel created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create ai channel')
+                self.log.error(f'Failed to create ai channel for trigger : {err}')
 
         if self._piezo_write_ao_channel:
             try:
@@ -161,7 +161,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Piezo write created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create ao channel')
+                self.log.error(f'Failed to create ao channel for the piezo : {err}')
 
         if self._piezo_read_ai_channel:
             try:
@@ -170,7 +170,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Piezo read created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failes to create ai channel')
+                self.log.error(f'Failed to create ai channel for the piezo : {err}')
 
         if self._pump_write_ao_channel:
             try:
@@ -180,7 +180,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Pump write created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create ao channel')
+                self.log.error(f'Failed to create ao channel for the pump : {err}')
 
         if self._start_acquisition_do_channel:
             try:
@@ -189,7 +189,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Start acquisition digital out channel created!')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create do channel')
+                self.log.error(f'Failed to create do channel for starting the acquisition : {err}')
 
         if self._acquisition_done_di_channel:
             try:
@@ -198,7 +198,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Acquisition done digital in channel created')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create di channel')
+                self.log.error(f'Failed to create di channel to detect the end of acquisition : {err}')
 
         if self._shutter_write_do_channel:
             try:
@@ -207,7 +207,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Shutter write digital in channel created')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create do channel for shutter')
+                print(f'Failed to create do channel for shutter : {err}')
 
         if self._shutter_read_di_channel:
             try:
@@ -216,7 +216,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print('Shutter read digital in channel created')
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
-                print('Failed to create di channel for shutter')
+                print(f'Failed to create di channel for shutter : {err}')
 
     def on_deactivate(self):
         """ Required deactivation when module is closed. Close all tasks and reset taskhandles to null pointers.
