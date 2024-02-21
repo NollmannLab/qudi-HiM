@@ -6,9 +6,12 @@ An extension to Qudi.
 
 This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
-@authors: F.Barho, JB.Fiche (for later modifications)
+@todo: Find a way to kill the thread for data transfer when the network is not properly working.
+@todo: Save the injection data together with the log.
+@authors: JB.Fiche (based of F.Barho initial script)
 
 Created on Thu Jan 18 2024
+Last modification : Mon Feb 19 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
