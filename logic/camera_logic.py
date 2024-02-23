@@ -39,7 +39,6 @@ import yaml
 from core.connector import Connector
 from core.configoption import ConfigOption
 from logic.generic_logic import GenericLogic
-from interface.shutter_interface import ShutterInterface
 from qtpy import QtCore
 
 # ======================================================================================================================
@@ -509,7 +508,7 @@ class CameraLogic(GenericLogic):
         self.enabled = False
         self._hardware.stop_acquisition()
         if self._security_shutter is not None:
-            self._security_shutter.camera_security(acquiring=True)
+            self._security_shutter.camera_security(acquiring=False)
         self.sigVideoFinished.emit()
 
 # Helper methods to interrupt/restart the camera live mode to give access to camera settings etc. ----------------------
@@ -640,7 +639,7 @@ class CameraLogic(GenericLogic):
         # reset the attributes and the default acquisition mode
         self._hardware.finish_movie_acquisition()
         if self._security_shutter is not None:
-            self._security_shutter.camera_security(acquiring=True)
+            self._security_shutter.camera_security(acquiring=False)
         self.saving = False
 
         # restart live in case it was activated
@@ -785,7 +784,7 @@ class CameraLogic(GenericLogic):
 
         self.saving = False
         if self._security_shutter is not None:
-            self._security_shutter.camera_security(acquiring=True)
+            self._security_shutter.camera_security(acquiring=False)
 
         # restart live in case it was activated
         if self.restart_live:
@@ -830,7 +829,7 @@ class CameraLogic(GenericLogic):
     def stop_acquisition(self):  # used in Hi-M Task RAMM
         self._hardware.stop_acquisition()
         if self._security_shutter is not None:
-            self._security_shutter.camera_security(acquiring=True)
+            self._security_shutter.camera_security(acquiring=False)
         
     def abort_acquisition(self):  # used in multicolor imaging PALM  -> can this be combined with stop_acquisition ?
         self._hardware._abort_acquisition()  # not on camera interface
