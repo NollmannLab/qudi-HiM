@@ -69,9 +69,12 @@ class UploadDataWorker(QtCore.QRunnable):
     def run(self):
         """ Copy the file to destination
         """
-        shutil.copy(self.data_local_path, self.data_network_path)
         global data_saved
-        data_saved = True
+        try:
+            shutil.copy(self.data_local_path, self.data_network_path)
+            data_saved = True
+        except OSError as e:
+            print(f"An error occurred during data transfer : {e}")
 
 
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
@@ -173,13 +176,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ """
         self.aborted = self.task_initialization()
 
-        # read all user parameters from config and create a local directory in which all the data will be saved. If the
-        # transfer option is selected, a network directory is also saved to transfer data on the server and allow online
-        # analysis
+        # read all user parameters from config and create a local directory in which all the data will be saved.
         self.load_user_parameters()
         self.directory = self.create_directory(self.save_path)
-        if (self.save_network_path is not None) and self.transfer_data:
-            self.network_directory = self.create_directory(self.save_network_path)
 
         # initialize the logger for the task
         self.init_logger()
@@ -219,6 +218,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # calculate the list of axial positions between successive rois (this is important for the stability of the
         # acquisition)
         self.dz = self.compute_axial_correction()
+
+        # If the transfer option is selected, a network directory is also saved to transfer data on the server and allow
+        # online analysis
+        if (self.save_network_path is not None) and self.transfer_data:
+            if self.check_local_network():
+                self.network_directory = self.create_directory(self.save_network_path)
+            else:
+                logging.warning(f"Network connection is unavailable. The directory for transferring the data "
+                                f"({self.save_network_path}) cannot be created. The experiment is aborted.")
+                self.aborted = True
+                return
 
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
@@ -271,15 +281,17 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 product = self.hybridization_list[step]['product']
                 flowrate = self.hybridization_list[step]['flowrate']
                 volume = self.hybridization_list[step]['volume']
-                self.log.info(f'Hybridisation step {step + 1} - product: {product} - volume: {volume} '
-                              f'- flowrate: {flowrate}')
+                incubation_time = self.hybridization_list[step]['time']
 
                 if product is not None:  # an injection step
+                    self.log.info(f'Hybridisation step {step + 1} - product: {product} - volume: {volume}µl '
+                                  f'- flowrate: {flowrate}µl/min')
                     needle_pos = self.set_valves_and_needle(product, needle_injection, needle_pos)
                     self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    self.incubation(self.hybridization_list[step]['time'], transfer=self.transfer_data)
+                    self.log.info(f'Hybridisation step {step + 1} - incubation time : {incubation_time}s')
+                    self.incubation(incubation_time, transfer=self.transfer_data)
 
                 # if self.bokeh:
                 #     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
@@ -294,18 +306,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
-            # if self.logging:
+            # if self.bokeh:
             #     self.status_dict['process'] = 'Imaging'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
             #     add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
             # make sure there is no data being transferred
-            if self.transfer_data:
-                global data_saved
-                print('Checking there is no data being transferred ...')
-                while not data_saved:
-                    sleep(1)
+            self.check_data_transfer()
 
+            # launch the acquisition
             for n_roi, item in enumerate(self.roi_names):
                 if self.aborted:
                     break
@@ -400,11 +409,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 product = self.photobleaching_list[step]['product']
                 flowrate = self.photobleaching_list[step]['flowrate']
                 volume = self.photobleaching_list[step]['volume']
-                self.log.info(f'Photobleaching step {step + 1} - product: {product} - volume: {volume} '
-                              f'- flowrate: {flowrate}')
+                incubation_time = self.photobleaching_list[step]['time']
 
                 if product is not None:  # an injection step
                     # set the 8 way valve to the position corresponding to the product
+                    self.log.info(f'Photobleaching step {step + 1} - product: {product} - volume: {volume}µl '
+                                  f'- flowrate: {flowrate}µl/min')
                     product = self.photobleaching_list[step]['product']
                     valve_pos = self.buffer_dict[product]
                     self.ref['valves'].set_valve_position('a', valve_pos)
@@ -414,7 +424,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    self.incubation(self.photobleaching_list[step]['time'], transfer=self.transfer_data)
+                    self.log.info(f'Photobleaching step {step + 1} - incubation time : {incubation_time}s')
+                    self.incubation(incubation_time, transfer=self.transfer_data)
 
                 # if self.bokeh:
                 #     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
@@ -468,17 +479,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.transfer_data:
                 self.path_to_upload = self.check_acquired_data()
 
-            while self.path_to_upload and not self.aborted:
+            while self.path_to_upload and (not self.aborted):
                 sleep(1)
                 self.launch_data_uploading()
+                if not self.check_local_network():
+                    break
 
         # reset GUI and hardware
         self.task_ending()
 
-        # reset the logging option and release the log file
+        # reset the logging options and release the handle to the log file
         total = time() - self.start
         self.log.info(f'HiM experiment finished - total time : {total}')
         self.log.removeHandler(self.file_handler)
+        self.ref['focus'].log.removeHandler(self.file_handler)
 
     # ==================================================================================================================
     # Helper functions
@@ -579,6 +593,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # instantiate the logger
         self.log.addHandler(self.file_handler)
         self.log.info('started Task')
+
+        # instantiate the logger for the focus
+        self.ref['focus'].log.addHandler(self.file_handler)
 
     def load_user_parameters(self):
         """ This function is called from startTask() to load the parameters given by the user in a specific format.
@@ -974,8 +991,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # indicate in the log how long was the injection and compare it to the expected time
         end_time = time()
-        expected_time = target_volume / target_flowrate
-        self.log.info(f'Injection time was {end_time - start_time}s and the expected time was {expected_time}s')
+        expected_time = np.round(target_volume / target_flowrate * 60)
+        self.log.info(f'Injection time was {np.round(end_time - start_time)}s and the expected time was {expected_time}s')
 
         # # save pressure and volume data to file
         # complete_path = create_path_for_injection_data(self.network_directory,
@@ -1023,9 +1040,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].active_roi = None
         self.ref['roi'].set_active_roi(name=roi_name)
         self.ref['roi'].go_to_roi_xy()
-        self.log.info('Moved to {}'.format(roi_name))
         self.ref['roi'].stage_wait_for_idle()
-        self.log.info(f'Move to {roi_name}')
+        self.log.info(f'Moved to {roi_name}')
         # if self.bokeh:
         #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
 
@@ -1041,7 +1057,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             print(f'modifying axial position by {dz}')
             self.ref['focus'].stage_move_z_relative(dz)
             self.ref['focus'].stage_wait_for_idle()
-            self.log.info(f'Correct objective axial position dz={dz}µm')
+            self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
 
     def perform_autofocus(self):
         """ Launch the search focus procedure.
@@ -1079,7 +1095,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             abort_experiment = True
         else:
             self.autofocus_failed = 0
-            self.log.info('Autofocus procedure was successful.')
+
+        # save the final position of the piezo in the log file
+        z = self.ref['focus'].get_position()
+        self.log.info(f'Final piezo position : {np.around(z, decimals=2)}µm')
 
         return abort_experiment
 
@@ -1168,11 +1187,28 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         else:
             result = subprocess.run(['ping', '-n', '1', self.IP_to_check],
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        if result.returncode == 0:
+        if (result.returncode == 0) and ("unreachable" not in str(result.stdout)):
             return True
         else:
             self.log.warning('Connection to the local server is lost')
             return False
+
+    def check_data_transfer(self):
+        """ Before launching an acquisition, check no data is being transferred. If an error occurred during a transfer,
+         the global variable "data_saved" will remain False. A timeout of 5 minutes is used. If the timeout is reached,
+         we proceed with the acquisition but the transfer is cancelled.
+        """
+        timeout_t0 = time()
+        if self.transfer_data:
+            global data_saved
+            print('Checking there is no data being transferred ...')
+            while not data_saved:
+                sleep(1)
+                dt = time() - timeout_t0
+                if dt > 300:
+                    self.log.error("Time out was reached for data transfer. Transfer is cancelled from now on.")
+                    self.transfer_data = False
+                    break
 
     def check_acquired_data(self):
         """ List all the acquired data in the directory and all the data already uploaded on the network. Compare the
@@ -1181,49 +1217,54 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         @return: path_to_upload : list of all the .tif files in the local directory
         """
-        # look for all the tif/npy/yml files in the folder
-        path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
-        print(f'Number of npy files found : {len(path_to_upload_npy)}')
-        path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
-        print(f'Number of yaml files found : {len(path_to_upload_yml)}')
-        path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
-        print(f'Number of tif files found : {len(path_to_upload_tif)}')
-        path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
+        # check the network is available
+        if self.check_local_network():
 
-        # look for all the tif/npy/yml files in the destination folder
-        uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
-        uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
-        uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
-        uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif
-        uploaded_files = []
-        for n, path in enumerate(uploaded_path):
-            uploaded_files.append(os.path.basename(path))
+            # look for all the tif/npy/yml files in the folder
+            path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
+            print(f'Number of npy files found : {len(path_to_upload_npy)}')
+            path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
+            print(f'Number of yaml files found : {len(path_to_upload_yml)}')
+            path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
+            print(f'Number of tif files found : {len(path_to_upload_tif)}')
+            path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
 
-        # remove from the list all the files that have already been transferred
-        selected_path_to_upload = set(path_to_upload)
-        for path in path_to_upload:
-            file_name = os.path.basename(path)
-            if file_name in uploaded_files:
-                selected_path_to_upload.remove(path)
-        selected_path_to_upload = list(selected_path_to_upload)
+            # look for all the tif/npy/yml files in the destination folder
+            uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
+            uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
+            uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
+            uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif
+            uploaded_files = []
+            for n, path in enumerate(uploaded_path):
+                uploaded_files.append(os.path.basename(path))
 
-        # sort the list based on the file format
-        idx_tif = []
-        idx_npy = []
-        idx_yaml = []
+            # remove from the list all the files that have already been transferred
+            selected_path_to_upload = set(path_to_upload)
+            for path in path_to_upload:
+                file_name = os.path.basename(path)
+                if file_name in uploaded_files:
+                    selected_path_to_upload.remove(path)
+            selected_path_to_upload = list(selected_path_to_upload)
 
-        for n, path in enumerate(selected_path_to_upload):
-            if path.__contains__('.npy'):
-                idx_npy.append(n)
-            elif path.__contains__('.yaml'):
-                idx_yaml.append(n)
-            else:
-                idx_tif.append(n)
+            # sort the list based on the file format
+            idx_tif = []
+            idx_npy = []
+            idx_yaml = []
 
-        # build the final list of file to transfer
-        path_to_upload_sorted = ([selected_path_to_upload[i] for i in idx_npy]
-                                 + [selected_path_to_upload[i] for i in idx_yaml]
-                                 + [selected_path_to_upload[i] for i in idx_tif])
+            for n, path in enumerate(selected_path_to_upload):
+                if path.__contains__('.npy'):
+                    idx_npy.append(n)
+                elif path.__contains__('.yaml'):
+                    idx_yaml.append(n)
+                else:
+                    idx_tif.append(n)
+
+            # build the final list of file to transfer
+            path_to_upload_sorted = ([selected_path_to_upload[i] for i in idx_npy]
+                                     + [selected_path_to_upload[i] for i in idx_yaml]
+                                     + [selected_path_to_upload[i] for i in idx_tif])
+        else:
+            path_to_upload_sorted = []
 
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
         return list(path_to_upload_sorted)
@@ -1271,7 +1312,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # It is also useful after the experiment has finished.
         self.log_path = os.path.join(self.log_folder, 'log.csv')
 
-        if self.logging:
+        if self.bokeh:
             # initialize the status dict yaml file
             self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
             write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -1281,7 +1322,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             df.to_csv(self.log_path, index=False, header=True)
 
         # update the default_info file that is necessary to run the bokeh app
-        if self.logging:
+        if self.bokeh:
             # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
             # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
             last_roi_number = int(self.roi_names[-1].strip('ROI_'))
