@@ -41,6 +41,7 @@ import shutil
 from time import sleep
 from datetime import datetime
 from scipy.signal import correlate
+from scipy.ndimage import laplace
 from czifile import imread
 from tifffile import TiffWriter
 from glob import glob
@@ -166,6 +167,7 @@ class Task(InterruptableTask):
         self.zen_saving_path: str = ""
         self.ref_images: list = []
         self.correlation_score: list = []
+        self.correlation_threshold: float = self.config['correlation_threshold']
         self.save_path_content_before: list = []
         self.root = None
         self.save_network_path: str = ""
@@ -549,7 +551,7 @@ class Task(InterruptableTask):
                 correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
                 self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
 
-                if correlation_score < 0.9:
+                if (correlation_score < self.correlation_threshold) and (roi != "ROI_036"):
                     answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
                     if not answer:
                         self.aborted = True
@@ -1104,10 +1106,17 @@ class Task(InterruptableTask):
         # correlation faster but also to be less sensitive to any translational variations between the two images.
         ref_image_bin_roi = ref_image_bin[128:384, 128:384]
 
-        # calculate the correlation between the two images and compute a score (with respect to the reference)
+        # calculate the correlation between the two images
         correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
         correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
-        correlation_score = np.max(correlation_new) / np.max(correlation_ref)
+
+        # compute the position where the maximum of correlation was detected (where the laplacian is the highest)
+        correlation_laplacian = laplace(correlation_new)
+        idx = np.argmax(np.abs(correlation_laplacian))
+        x, y = np.unravel_index(idx, correlation_laplacian.shape)
+
+        # compute a score (with respect to the reference)
+        correlation_score = correlation_new[x, y] / np.max(correlation_ref)
 
         return correlation_score
 
