@@ -30,6 +30,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import logging
 import numpy as np
 import os
 import yaml
@@ -73,6 +74,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.FPGA_wavelength_channels: list = []
         self.celesta_intensity_dict: dict = {}
         self.num_laserlines: int = 0
+        self.file_handler: object = None
 
         self.roi_counter: int = 0
         self.directory: str = "None"
@@ -131,6 +133,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
         self.celesta_laser_dict = self.ref['laser']._laser_dict
         self.format_imaging_sequence()
+
+        # initialize the logger for the task
+        self.init_logger()
 
         # compute the list of axial positions between successive rois
         dz = np.zeros((len(self.roi_names), ))
@@ -368,6 +373,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # focus tools gui
         self.ref['focus'].enable_focus_actions()
 
+        # reset the logging options and release the handle to the log file
+        self.log.removeHandler(self.file_handler)
+        self.ref['focus'].log.removeHandler(self.file_handler)
+
         self.log.info('cleanupTask finished')
 
     # ==================================================================================================================
@@ -420,6 +429,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].load_roi_list(self.roi_list_path)
         # get the list of the roi names
         self.roi_names = self.ref['roi'].roi_names
+
+    def init_logger(self):
+        """ Initialize a logger for the task. This logger is overriding the logger called in qudi-core, adding the
+        possibility to directly write into a log file. The idea is that all errors and warnings sent by qudi will also
+        be written in the log file, together with the task specific messages.
+        """
+        # define the handler for the log file
+        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, 'ROI_task_log.log'))
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        self.file_handler.setFormatter(formatter)
+
+        # instantiate the logger
+        self.log.addHandler(self.file_handler)
+        self.log.info('started Task')
+
+        # instantiate the logger for the focus
+        self.ref['focus'].log.addHandler(self.file_handler)
 
     # ------------------------------------------------------------------------------------------------------------------
     # methods for initializing piezo & laser

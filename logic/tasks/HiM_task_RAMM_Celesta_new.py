@@ -586,7 +586,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         be written in the log file, together with the task specific messages.
         """
         # define the handler for the log file
-        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, 'HiM_task.log'))
+        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, 'HiM_task_log.log'))
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         self.file_handler.setFormatter(formatter)
 
