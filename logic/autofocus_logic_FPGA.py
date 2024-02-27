@@ -325,8 +325,7 @@ class AutofocusLogic(GenericLogic):
                 self.stage_wait_for_idle()
                 z_range += 20
 
-        # This final check is necessary if the autofocus if the signal is detected between to iteration of the while
-        # loop
+        # This final check is necessary if the autofocus signal is detected between two iterations of the while loop
         if self.autofocus_check_signal():
             print("autofocus signal found!")
             success = True
