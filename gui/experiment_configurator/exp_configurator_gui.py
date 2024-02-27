@@ -120,6 +120,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.select_experiment_ComboBox.activated[str].connect(self.start_new_experiment_config)
 
         self._mw.sample_name_LineEdit.textChanged.connect(self._exp_logic.update_sample_name)
+        self._mw.mail_LineEdit.textChanged.connect(self._exp_logic.update_mail_address)
         self._mw.dapi_CheckBox.stateChanged.connect(self._exp_logic.update_is_dapi)
         self._mw.rna_CheckBox.stateChanged.connect(self._exp_logic.update_is_rna)
         self._mw.TransferData_checkBox.stateChanged.connect(self._exp_logic.update_data_transfer)
@@ -138,6 +139,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.dapi_data_LineEdit.textChanged.connect(self._exp_logic.update_dapi_path)
         self._mw.reference_images_lineEdit.textChanged.connect(self._exp_logic.update_zen_ref_images_path)
         self._mw.Zen_saving_folder_lineEdit.textChanged.connect(self._exp_logic.update_zen_saving_path)
+        self._mw.Zen_correlation_DSpinBox.valueChanged.connect(self._exp_logic.update_correlation_threshold)
         self._mw.illumination_time_DSpinBox.valueChanged.connect(self._exp_logic.update_illumination_time)
         self._mw.num_iterations_SpinBox.valueChanged.connect(self._exp_logic.update_num_iterations)
         self._mw.time_step_SpinBox.valueChanged.connect(self._exp_logic.update_time_step)
@@ -645,6 +647,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.z_step_Label.setVisible(False)
+            self._mw.z_step_DSpinBox.setVisible(False)
+            self._mw.centered_focal_plane_CheckBox.setVisible(False)
 
         elif experiment == 'Photobleaching RAMM' or experiment == 'Photobleaching Airyscan':
             # chose the right the listview model
@@ -839,6 +844,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.general_Label.setVisible(visible)
         self._mw.sample_name_Label.setVisible(visible)
         self._mw.sample_name_LineEdit.setVisible(visible)
+        self._mw.mail_LineEdit.setVisible(visible)
+        self._mw.mail_Label.setVisible(visible)
 
         # the dapi and rna checkboxes are needed only for the ROI Multicolor scan RAMM. Set them invisible as default.
         self._mw.dapi_CheckBox.setVisible(False)
@@ -949,6 +956,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.Zen_saving_folder_lineEdit.setVisible(visible)
         self._mw.reference_images_pushButton.setVisible(visible)
         self._mw.Zen_saving_folder_pushButton.setVisible(visible)
+        self._mw.Correlation_threshold_Label.setVisible(visible)
+        self._mw.Zen_correlation_DSpinBox.setVisible(visible)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of the toolbuttons
