@@ -677,7 +677,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """ Format the imaging_sequence dictionary for the celesta laser source and the FPGA controlling the triggers.
         The lumencor celesta is controlled in TTL mode. Intensity for each laser line must be set before launching the
         acquisition sequence (using the celesta_intensity_dict). Then, the FPGA will activate each line (either laser or
-        brightfiel) based on the list of sources (FPGA_wavelength_channels).
+        brightfield) based on the list of sources (FPGA_wavelength_channels).
         Since the intensity of each laser line must be set before the acquisition, it is not possibe to call the same
         laser line multiple times with different intensity values.
         """
