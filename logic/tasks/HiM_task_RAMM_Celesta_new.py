@@ -6,12 +6,13 @@ An extension to Qudi.
 
 This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
-@todo: Find a way to kill the thread for data transfer when the network is not properly working.
+@todo: check rinsing is properly working
 @todo: Save the injection data together with the log.
+
 @authors: JB.Fiche (based of F.Barho initial script)
 
 Created on Thu Jan 18 2024
-Last modification : Mon Feb 19 2024
+Last modification : Wed Feb 28 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -171,6 +172,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.photobleaching_list: list = []
         self.buffer_dict: dict = {}
         self.probe_list: list = []
+        self.needle_valve_number: int = self.config['needle_valve_number']
 
     def startTask(self):
         """ """
@@ -242,15 +244,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.probe_counter += 1
             self.log.info(f'Probe number {self.probe_counter}: {self.probe_list[self.probe_counter - 1][1]}')
 
-        # list all the files that were already acquired and uploaded
-        if self.transfer_data:
-            self.path_to_upload = self.check_acquired_data()
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                self.path_to_upload = self.check_acquired_data()
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
-
             # if self.bokeh:
             #     self.status_dict['cycle_no'] = self.probe_counter
             #     self.status_dict['cycle_start_time'] = time()
@@ -286,7 +286,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 if product is not None:  # an injection step
                     self.log.info(f'Hybridisation step {step + 1} - product: {product} - volume: {volume}µl '
                                   f'- flowrate: {flowrate}µl/min')
-                    needle_pos = self.set_valves_and_needle(product, needle_injection, needle_pos)
+                    needle_pos, needle_injection = self.set_valves_and_needle(product, needle_injection, needle_pos)
                     self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
@@ -305,7 +305,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['process'] = 'Imaging'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -329,7 +328,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # the correction is not applied for the very first roi acquisition since we are starting in-focus.
                 self.correct_axial_position(n_roi)
 
-                # autofocus - if the autofocus is lost for two consecutive ROIs, the experiment is aborted.
+                # autofocus - if the autofocus is lost for two consecutive ROIs, the experiment is aborted -------------
                 autofocus_lost = self.perform_autofocus()
                 if autofocus_lost:
                     self.aborted = True
@@ -377,18 +376,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
-
             # if self.bokeh:
             #     self.status_dict['process'] = 'Photobleaching'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
             #     add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
-
-            # rinse needle
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
-            self.ref['valves'].wait_for_idle()
-            self.ref['daq'].start_rinsing(self.needle_rinsing_duration)
-            start_rinsing_time = time()
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
@@ -415,7 +406,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     # set the 8 way valve to the position corresponding to the product
                     self.log.info(f'Photobleaching step {step + 1} - product: {product} - volume: {volume}µl '
                                   f'- flowrate: {flowrate}µl/min')
-                    product = self.photobleaching_list[step]['product']
                     valve_pos = self.buffer_dict[product]
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
@@ -434,11 +424,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: towards syringe
             self.ref['valves'].wait_for_idle()
 
-            # verify if rinsing finished in the meantime
-            current_time = time()
-            diff = current_time - start_rinsing_time
-            if diff < 60:
-                sleep(60 - diff + 1)
+            # rinse needle
+            self.rinse_needle()
 
             # set valves to default positions
             self.reset_valves_after_injection()
@@ -923,19 +910,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         @param needle_injection: (int) indicate the number of injections already performed using the needle
         @param needle_position: (int) indicate the current position of the needle on the tray
         @return: needle_position: (int) return the current needle position
+                 needle_injection: (int) return the current number of injections performed with the needle
         """
         # set the 8 way valve to the position corresponding to the product
         valve_pos = self.buffer_dict[product]
         self.ref['valves'].set_valve_position('a', valve_pos)
         self.ref['valves'].wait_for_idle()
 
-        # for the RAMM, the needle is connected to valve position 7. If this valve is called more than once,
-        # the needle will be moved to the next position. The procedure was added to make the DAPI injection
-        # easier.
-        if needle_injection == 0 and valve_pos == 7:
+        # for the RAMM, the needle is connected to the valve position indicated by "needle_valve_number" (in the config
+        # file). If this valve is called more than once, the needle will be moved to the next position. The procedure
+        # was added to make the DAPI injection easier.
+        if needle_injection == 0 and valve_pos == self.needle_valve_number:
             needle_injection += 1
             needle_position += 1
-        elif needle_injection > 0 and valve_pos == 7:
+        elif needle_injection > 0 and valve_pos == self.needle_valve_number:
             self.ref['valves'].set_valve_position('c', 1)  # Syringe valve: close
             self.ref['valves'].wait_for_idle()
             self.ref['pos'].start_move_to_target(needle_position)
@@ -946,7 +934,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].set_valve_position('c', 2)  # Syringe valve: open
             self.ref['valves'].wait_for_idle()
 
-        return needle_position
+        return needle_position, needle_injection
 
     def perform_injection(self, target_flowrate, target_volume, transfer=False):
         """ Perform the injection according to the values of target flowrate and volume.
@@ -992,7 +980,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # indicate in the log how long was the injection and compare it to the expected time
         end_time = time()
         expected_time = np.round(target_volume / target_flowrate * 60)
-        self.log.info(f'Injection time was {np.round(end_time - start_time)}s and the expected time was {expected_time}s')
+        self.log.info(f'Injection time was {np.round(end_time - start_time)}s and the expected time was '
+                      f'{expected_time}s')
 
         # # save pressure and volume data to file
         # complete_path = create_path_for_injection_data(self.network_directory,
@@ -1007,7 +996,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         @param transfer: (bool) indicate whether data transfer should be performed during the waiting time
         """
         # close the valves to make prevent any flow during the incubation
-        self.log.info(f'Incubation time: {t} s')
         self.ref['valves'].set_valve_position('c', 1)  # stop flux
         self.ref['valves'].wait_for_idle()
 
@@ -1021,13 +1009,20 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             if not self.aborted:
                 sleep(30)
-                print("Elapsed time : {}s".format((i + 1) * 30))
+                print(f"Elapsed time : {(i + 1) * 30}s")
         sleep(remainder)
 
         # open the valves for the next step
         self.ref['valves'].set_valve_position('c', 2)  # open flux again
         self.ref['valves'].wait_for_idle()
         self.log.info('Incubation time finished')
+
+    def rinse_needle(self):
+        self.log.info('Rinsing needle')
+        self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: rinse needle
+        self.ref['valves'].wait_for_idle()
+        self.ref['daq'].start_rinsing(self.needle_rinsing_duration)
+        sleep(self.needle_rinsing_duration + 5)
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for data acquisition
@@ -1043,7 +1038,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].stage_wait_for_idle()
         self.log.info(f'Moved to {roi_name}')
         # if self.bokeh:
-        #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {item}')
+        #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi_name}')
 
     def correct_axial_position(self, n_roi):
         """ Perform objective axial re-positioning before launching the autofocus.
