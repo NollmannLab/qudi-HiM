@@ -11,6 +11,9 @@ Airyscan microscope and used for epi-fluorescence
 @todo set the TTL of the lumencor to reverse (that is 0V is the base state and TTL are activated only when switched to +5V)
 @todo check the initialization of the lumencor is working properly
 @todo check the task can be aborted even before launching ZEN
+@todo check the behaviour of the error during acquisition when no exposure trigger is detected
+@todo should we skip the ROI where the autofocus did not work and abort the acquisition at the end of the acquisition procedure?
+@todo update the reference image with the newest one -> to avoid loosing the correlation overtime.
 
 @author: JB. Fiche
 
@@ -40,21 +43,21 @@ import numpy as np
 import pandas as pd
 import os
 import re
-import time
 import tkinter as tk
 import shutil
 import logging
 import platform
 import subprocess
-from time import sleep
+from time import sleep, time
 from datetime import datetime
 from scipy.signal import correlate
+from scipy.ndimage import laplace
 from czifile import imread
 from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
-from logic.task_helper_functions import get_entry_nested_dict
+# from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from tkinter import messagebox
 from qtpy import QtCore
@@ -80,20 +83,21 @@ class UploadDataWorker(QtCore.QRunnable):
     def run(self):
         """ Copy the file to destination
         """
+        global data_saved
         _, file_extension = os.path.splitext(self.data_local_path)
         if file_extension != '.czi':
-            shutil.copy(self.data_local_path, self.data_network_path)
+            try:
+                shutil.copy(self.data_local_path, self.data_network_path)
+                data_saved = True
+            except OSError as e:
+                print(f"An error occurred while transferring {self.data_local_path} : {e}")
         else:
             self.save_czi_to_tif()
-
-        global data_saved
-        data_saved = True
 
     def save_czi_to_tif(self):
         """ Convert the czi file and save it on the network as a tif
         """
         movie = imread(self.data_local_path)
-        print(f'movie shape is {movie.shape}')
         n_channel = movie.shape[1]
         n_z = movie.shape[2]
 
@@ -105,7 +109,7 @@ class UploadDataWorker(QtCore.QRunnable):
                         im = np.array(im)
                         tf.save(im.astype(np.uint16))
         except Exception as err:
-            print(f"An error occurred while transferring the movie : {err}")
+            print(f"An error occurred while transferring the movie {self.data_local_path} : {err}")
 
 
 class Task(InterruptableTask):
@@ -146,9 +150,8 @@ class Task(InterruptableTask):
         self.start: float = 0
         self.zen_ref_images_path: str = ""
         self.zen_saving_path: str = ""
-        self.ref_images: list = []
+        self.focus_ref_images: list = []
         self.ao_channel_sequence: list = []
-        self.correlation_score: list = []
 
         # parameter for handling experiment configuration
         self.user_config_path: str = self.config['path_to_user_config']
@@ -169,12 +172,13 @@ class Task(InterruptableTask):
         # parameters for data handling
         self.save_path: str = ""
         self.prefix: str = ""
-        self.save_path_content_before: list = []
+        self.focus_folder_content: list = []
         self.root = None
         self.save_network_path: str = ""
         self.transfer_data: bool = False
         self.uploaded_files: list = []
         self.network_directory: str = ""
+        self.path_to_upload: list = []
 
         # parameters for image acquisition
         self.num_z_planes: int = 0
@@ -187,7 +191,8 @@ class Task(InterruptableTask):
         self.OUT7_ZEN: int = self.config['OUT7_ZEN']
         self.OUT8_ZEN: int = self.config['OUT8_ZEN']
         self.camera_global_exposure: float = self.config['camera_global_exposure']
-        self.corr_threshold: float = 0
+        self.correlation_threshold: float = 0
+        self.correlation_score: list = []
 
         # parameters for roi
         self.roi_list_path: str = ""
@@ -200,7 +205,8 @@ class Task(InterruptableTask):
         self.buffer_dict: dict = {}
         self.probe_list: list = []
         self.probe_dict: dict = {}
-        self.probe_valve_number: int = self.config['probe_valve_number']
+        self.needle_valve_number: int = self.config['probe_valve_number']
+        self.needle_rinsing_duration: int = 30
 
     def startTask(self):
         """ """
@@ -239,10 +245,12 @@ class Task(InterruptableTask):
         # return the list of immediate subdirectories in self.zen_saving_path and compare it to the previous list. When
         # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
         # folder where the czi data will be saved is defined.
-        self.zen_directory = self.find_new_zen_data_directory()
+        self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
 
-        # check the autofocus images in the save folder
-        self.save_path_content_before = []
+        # initialize the list containing the name of all the in-focus images. During an experiment, ZEN will acquire a
+        # single brightfield image before launching the acquisition of the stack. This image will be acquired at the end
+        # of the focus search procedure and will be used to check the sample is still in-focus.
+        self.focus_folder_content = []
 
         # create a directory in which all the metadata will be saved (for zen the acquisition parameters and file name
         # are saved on a separate computer) and create the network directory as well
@@ -271,175 +279,83 @@ class Task(InterruptableTask):
         """ Implement one work step of your task here.
         :return: bool: True if the task should continue running, False if it should finish.
         """
-        # go directly to cleanupTask if position 1 is not defined or ZEN ready trigger not received
-        if not self.ref['pos'].origin:
-            return False
 
         if not self.aborted:
-            now = time.time()
-            # info message indicating the probe
             self.probe_counter += 1
             probe_name = self.probe_list[self.probe_counter - 1][1]
             self.log.info(f'Probe number {self.probe_counter}: {probe_name}')
 
-            if self.bokeh:
-                self.status_dict['cycle_no'] = self.probe_counter
-                self.status_dict['cycle_start_time'] = now
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-                add_log_entry(self.log_path, self.probe_counter, 0, f'Started cycle {self.probe_counter}', 'info')
-
-            # position the needle in the probe
-            needle_pos = self.probe_list[self.probe_counter - 1][0]
-            self.ref['pos'].start_move_to_target(needle_pos)
-            while self.ref['pos'].moving is True:
-                sleep(0.1)
-
-            # disable again the move stage button
-            self.ref['pos'].disable_positioning_actions()
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                self.path_to_upload = self.check_acquired_data()
 
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
+            # if self.bokeh:
+            #     self.status_dict['cycle_no'] = self.probe_counter
+            #     self.status_dict['cycle_start_time'] = time()
+            #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            #     add_log_entry(self.log_path, self.probe_counter, 0, f'Started cycle {self.probe_counter}', 'info')
+            #     self.status_dict['process'] = 'Hybridization'
+            #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            #     add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
 
-            if self.bokeh:
-                self.status_dict['process'] = 'Hybridization'
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-                add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
-
-            # list all the files that were already acquired and uploaded
-            if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
+            # position the needle in the tube associated to the selected probe
+            needle_pos = self.probe_list[self.probe_counter - 1][0]
+            self.ref['pos'].start_move_to_target(needle_pos)
+            self.ref['pos'].disable_positioning_actions()  # to disable again the move stage button
+            while self.ref['pos'].moving is True:
+                sleep(0.1)
 
             # position the valves for hybridization sequence
             self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: inject probe
             self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the hybridization sequence
-            rt_injection = 0
-
+            needle_injection = 0
             for step in range(len(self.hybridization_list)):
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 1, f'Started injection {step + 1}')
                 if self.aborted:
                     break
 
-                self.log.info(f'Hybridisation step {step+1}')
-                if self.bokeh:
-                    add_log_entry(self.log_path, self.probe_counter, 1, f'Started injection {step + 1}')
+                product = self.hybridization_list[step]['product']
+                flowrate = self.hybridization_list[step]['flowrate']
+                volume = self.hybridization_list[step]['volume']
+                incubation_time = self.hybridization_list[step]['time']
 
-                if self.hybridization_list[step]['product'] is not None:  # an injection step
-                    # set the 8 way valve to the position corresponding to the product
-                    product = self.hybridization_list[step]['product']
-                    valve_pos = self.buffer_dict[product]
-                    self.ref['valves'].set_valve_position('a', valve_pos)
-                    self.ref['valves'].wait_for_idle()
-
-                    # for the Airyscan, the needle is connected to the valve position defined in the config file by
-                    # self.probe_valve_number. If this valve is called more than once, the needle will move to the next
-                    # position. The procedure was added to make the DAPI injection easier.
-                    print('Valve position : {}'.format(valve_pos))
-                    if rt_injection == 0 and valve_pos == self.probe_valve_number:
-                        rt_injection += 1
-                        needle_pos += 1
-                    elif rt_injection > 0 and valve_pos == self.probe_valve_number:
-                        self.ref['pos'].start_move_to_target(needle_pos)
-                        while self.ref['pos'].moving is True:
-                            sleep(0.1)
-                        rt_injection += 1
-                        needle_pos += 1
-                        self.ref['pos'].disable_positioning_actions()
-
-                    # pressure regulation
-                    # create lists containing pressure and volume data and initialize first value to 0
-                    pressure = [0]
-                    volume = [0]
-                    flowrate = self.ref['flow'].get_flowrate()
-
-                    self.ref['flow'].set_pressure(0.0)  # as initial value
-                    self.ref['flow'].start_pressure_regulation_loop(self.hybridization_list[step]['flowrate'])
-
-                    # start counting the volume of buffer or probe
-                    self.ref['flow'].start_volume_measurement(self.hybridization_list[step]['volume'])
-
-                    ready = self.ref['flow'].target_volume_reached
-                    while not ready:
-                        time.sleep(1)
-                        ready = self.ref['flow'].target_volume_reached
-                        # retrieve data for data saving at the end of interation
-                        self.append_flow_data(pressure, volume, flowrate)
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-
-                        if self.aborted:
-                            ready = True
-
-                    self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
-                    # get the last data points for flow data
-                    self.append_flow_data(pressure, volume, flowrate)
-                    time.sleep(1)
-                    self.ref['flow'].set_pressure(0.0)
-
-                    # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory,
-                                                                   probe_name,
-                                                                   'hybridization', step)
-                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
+                if product is not None:  # an injection step
+                    self.log.info(f'Hybridisation step {step + 1} - product: {product} - volume: {volume}µl '
+                                  f'- flowrate: {flowrate}µl/min')
+                    needle_pos, needle_injection = self.set_valves_and_needle(product, needle_injection, needle_pos)
+                    self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    t = self.hybridization_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Hybridisation step {step + 1} - incubation time : {incubation_time}s')
+                    self.incubation(incubation_time, transfer=self.transfer_data)
 
-                    # allow abort by splitting the waiting time into small intervals of 30 s
-                    num_steps = t // 30
-                    remainder = t % 30
-                    for i in range(num_steps):
-
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-
-                        if not self.aborted:
-                            time.sleep(30)
-                    if not self.aborted:
-                        time.sleep(remainder)
-
-                    self.log.info('Incubation time finished')
-
-                if self.bokeh:
-                    add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 1, f'Finished injection {step + 1}')
 
             # set valves to default positions
-            self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Inject probe
-            self.ref['valves'].wait_for_idle()
+            self.reset_valves_after_injection()
 
-            if self.bokeh:
-                add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 1, 'Finished Hybridization', 'info')
 
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
-
-            if self.bokeh:
-                self.status_dict['process'] = 'Imaging'
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-                add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
+            # if self.bokeh:
+            #     self.status_dict['process'] = 'Imaging'
+            #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            #     add_log_entry(self.log_path, self.probe_counter, 2, 'Started Imaging', 'info')
 
             # make sure there is no data being transferred
-            global data_saved
-            print('Checking there is no data being transferred ...')
-            while not data_saved:
-                time.sleep(1)
+            self.check_data_transfer()
 
-            # ref_folder = r'W:\jb\2022-05-11\RT-7.czi\RT-7_AcquisitionBlock1.czi'
-            # im_list = glob(os.path.join(ref_folder, '*.czi'))
-            # im_list = sorted(im_list)
-            # print(im_list)
-
-            # start the acquisition loop over all the roi
+            # launch the acquisition
             for n_roi, roi in enumerate(self.roi_names):
                 if self.aborted:
                     break
@@ -447,213 +363,100 @@ class Task(InterruptableTask):
                 # make sure the celesta laser source is ready
                 self.ref['laser'].lumencor_wakeup()
 
-                # define the name of the file according to the roi number and cycle
-                # roi = self.roi_names[roi_counter]
-                scan_name = self.file_name(roi, probe_name)
+                # move to roi
+                self.move_to_roi(roi)
 
-                # move to roi ------------------------------------------------------------------------------------------
-                self.ref['roi'].active_roi = None
-                self.ref['roi'].set_active_roi(name=roi)
-                self.ref['roi'].go_to_roi_xy()
-                self.log.info('Moved to {}'.format(roi))
-                self.ref['roi'].stage_wait_for_idle()
-                # roi_counter += 1
+                # start autofocus by sending a trigger to ZEN to start the focus search --------------------------------
+                self.launch_zen_focus_search()
+                autofocus_error = self.check_focus(roi, n_roi)
 
-                if self.bokeh:
-                    add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi}')
-
-                # --------------------------------------------------------------------------------------------------------------
-                # autofocus (ZEN)
-                # --------------------------------------------------------------------------------------------------------------
-
-                # send trigger to ZEN to start the autofocus search
-                sleep(5)
-                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
-                sleep(0.1)
-                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
-
-                # wait for ZEN trigger indicating the task is completed
-                trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
-                while trigger == 0 and not self.aborted:
-                    sleep(.1)
-                    trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
-
-                # check the autofocus image is in focus. This is performed in a few steps :
-                #   1- wait for a new autofocus output image to be saved by ZEN
-                #   2- calculate the correlation score is then calculated and saved
-                #   3- if the correlation score is too low, the experiment is put in hold
-                new_autofocus_image_path = self.check_for_new_autofocus_images()
-
-                ref_image = self.ref_images[n_roi]
-                new_image = imread(new_autofocus_image_path[0])
-                correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
-                self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
-
-                if correlation_score < 0.9:
+                if autofocus_error:
                     answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
                     if not answer:
+                        self.log.warn(f'The correlation score was too low for {roi} - experiment was aborted by user.')
                         self.aborted = True
                         break
                     else:
+                        self.log.warn(f'The correlation score was too low for {roi} - proceed with experiment by '
+                                      f'skipping the roi')
                         messagebox.showinfo("Proceed with experiment", "The experiment will move to the next ROI...")
 
-                print(f'correlation for image #{n_roi} : {correlation_score}')
-
-                # ------------------------------------------------------------------------------------------------------
-                # imaging sequence
-                # ------------------------------------------------------------------------------------------------------
-
+                # imaging sequence -------------------------------------------------------------------------------------
                 # launch the acquisition task
-                sleep(5)
-                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
-                sleep(0.1)
-                self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
+                acquisition_error = self.start_acquisition()
+                if acquisition_error:
+                    self.log.error(f'An error occurred while acquiring {roi} - no exposure trigger was detected before '
+                                   f'timeout was reached')
 
-                for plane in range(self.num_z_planes):
-                    for i in range(len(self.imaging_sequence)):
-
-                        # daq waiting for global_exposure trigger from the camera --------------------------------------
-                        error = self.wait_for_camera_trigger(1)
-                        if error is True:
-                            return False
-
-                        # switch the selected laser line ON ------------------------------------------------------------
-                        # self.ref['laser'].lumencor_set_laser_line_emission(self.lumencor_channel_sequence[i])
-                        self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
-
-                        # daq waiting for global_exposure trigger from the camera to end -------------------------------
-                        error = self.wait_for_camera_trigger(0)
-                        if error is True:
-                            return False
-
-                        # switch the selected laser line OFF -----------------------------------------------------------
-                        self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
-
-                # save the file name
+                # define the name of the stack that was acquired according to the roi number and cycle - save it locally
+                # in a txt file
+                scan_name = self.file_name(roi, probe_name)
                 self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
 
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
             self.ref['roi'].go_to_roi_xy()
 
-            if self.bokeh:
-                add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
 
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
-        if not self.aborted:
-
-            if self.bokeh:
-                self.status_dict['process'] = 'Photobleaching'
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-                add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
+        #     if self.bokeh:
+        #         self.status_dict['process'] = 'Photobleaching'
+        #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
+        #         add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
+                self.path_to_upload = self.check_acquired_data()
+
+            # position the injection valve
+            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Inject probe
+            self.ref['valves'].wait_for_idle()
 
             # iterate over the steps in the photobleaching sequence
             for step in range(len(self.photobleaching_list)):
                 if self.aborted:
                     break
 
-                self.log.info(f'Photobleaching step {step+1}')
-                if self.bokeh:
-                    add_log_entry(self.log_path, self.probe_counter, 3, f'Started injection {step + 1}')
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 3, f'Started injection {step + 1}')
 
-                if self.photobleaching_list[step]['product'] is not None:  # an injection step
+                product = self.photobleaching_list[step]['product']
+                flowrate = self.photobleaching_list[step]['flowrate']
+                volume = self.photobleaching_list[step]['volume']
+                incubation_time = self.photobleaching_list[step]['time']
+
+                if product is not None:  # an injection step
                     # set the 8 way valve to the position corresponding to the product
-                    product = self.photobleaching_list[step]['product']
+                    self.log.info(f'Photobleaching step {step + 1} - product: {product} - volume: {volume}µl '
+                                  f'- flowrate: {flowrate}µl/min')
                     valve_pos = self.buffer_dict[product]
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
                     # pressure regulation
-                    # create lists containing pressure, volume and flowrate data and initialize first value to 0
-                    pressure = [0]
-                    volume = [0]
-                    flowrate = self.ref['flow'].get_flowrate()
-
-                    self.ref['flow'].set_pressure(0.0)  # as initial value
-                    self.ref['flow'].start_pressure_regulation_loop(self.photobleaching_list[step]['flowrate'])
-                    # start counting the volume of buffer or probe
-                    self.ref['flow'].start_volume_measurement(self.photobleaching_list[step]['volume'])
-
-                    ready = self.ref['flow'].target_volume_reached
-                    while not ready:
-                        time.sleep(1)
-                        ready = self.ref['flow'].target_volume_reached
-                        # retrieve data for data saving at the end of interation
-                        self.append_flow_data(pressure, volume, flowrate)
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-
-                        if self.aborted:
-                            ready = True
-
-                    self.ref['flow'].stop_pressure_regulation_loop()
-                    time.sleep(1)  # time to wait until last regulation step is finished, afterwards reset pressure to 0
-                    # get the last data points
-                    self.append_flow_data(pressure, volume, flowrate)
-                    time.sleep(1)
-
-                    self.ref['flow'].set_pressure(0.0)
-
-                    # save pressure and volume data to file
-                    complete_path = create_path_for_injection_data(self.directory,
-                                                                   probe_name,
-                                                                   'photobleaching', step)
-                    save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
+                    self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
-                    t = self.photobleaching_list[step]['time']
-                    self.log.info(f'Incubation time.. {t} s')
+                    self.log.info(f'Photobleaching step {step + 1} - incubation time : {incubation_time}s')
+                    self.incubation(incubation_time, transfer=self.transfer_data)
 
-                    # allow abort by splitting the waiting time into small intervals of 30 s
-                    num_steps = t // 30
-                    remainder = t % 30
-                    for i in range(num_steps):
-                        # if data are ready to be saved, launch a worker
-                        path_to_upload = self.launch_data_uploading(path_to_upload)
-                        if not self.aborted:
-                            time.sleep(30)
-                    time.sleep(remainder)
-
-                    self.log.info('Incubation time finished')
-
-                if self.bokeh:
-                    add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
+                # if self.bokeh:
+                #     add_log_entry(self.log_path, self.probe_counter, 3, f'Finished injection {step + 1}')
 
             # perform rinsing
             # rinse needle after photobleaching
-            self.ref['valves'].set_valve_position('a', self.probe_valve_number)  # Towards probe
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
-            self.ref['valves'].wait_for_idle()
-            self.ref['flow'].start_rinsing(60)
-            start_rinsing_time = time.time()
-            diff = 0
-
-            while diff < 60:
-                current_time = time.time()
-                diff = current_time - start_rinsing_time
-                time.sleep(1)
+            self.rinse_needle()
 
             # set valves to default positions
-            self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
-            self.ref['valves'].wait_for_idle()
-            self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Rinse needle
-            self.ref['valves'].wait_for_idle()
+            self.reset_valves_after_injection()
 
-            if self.bokeh:
-                add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
-
-        if not self.aborted:
-            if self.bokeh:
-                add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 3, 'Finished Photobleaching', 'info')
+            #     add_log_entry(self.log_path, self.probe_counter, 0, f'Finished cycle {self.probe_counter}', 'info')
 
         return (self.probe_counter < len(self.probe_list)) and (not self.aborted)
 
@@ -669,12 +472,12 @@ class Task(InterruptableTask):
         """ """
         self.log.info('cleanupTask called')
 
-        if self.bokeh:
-            try:
-                self.status_dict = {}
-                write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            except Exception:  # in case cleanup task was called before self.status_dict_path is defined
-                pass
+        # if self.bokeh:
+        #     try:
+        #         self.status_dict = {}
+        #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
+        #     except Exception:  # in case cleanup task was called before self.status_dict_path is defined
+        #         pass
 
         # save correlation score
         np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
@@ -682,44 +485,32 @@ class Task(InterruptableTask):
         # if the task was not aborted, make sure all the files were properly transferred (if the online transfer option
         # was selected by the user)
         if self.aborted:
-            if self.bokeh:
-                add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
+            self.log.warning('HiM experiment was aborted.')
+            # if self.bokeh:
+            #     add_log_entry(self.log_path, self.probe_counter, 0, 'Task was aborted.', level='warning')
             # add extra actions to end up in a proper state: pressure 0, end regulation loop, set valves to default
             # position, etc. (maybe not necessary because all those elements will still be done above)
         else:
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
-                path_to_upload = self.check_acquired_data()
-            else:
-                path_to_upload = []
-            while path_to_upload and not self.aborted:
-                time.sleep(1)
-                path_to_upload = self.launch_data_uploading(path_to_upload)
+                self.path_to_upload = self.check_acquired_data()
+
+            while self.path_to_upload and (not self.aborted):
+                sleep(1)
+                self.launch_data_uploading()
+                if not self.check_local_network():
+                    break
 
         # destroy the tkinter window
         self.root.destroy()
 
-        # reset stage velocity to default
-        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
+        # reset GUI and hardware
+        self.task_ending()
 
-        # enable gui actions
-        # roi gui
-        self.ref['roi'].enable_tracking_mode()
-        self.ref['roi'].enable_roi_actions()
-
-        # fluidics control gui
-        self.ref['valves'].enable_valve_positioning()
-        self.ref['flow'].enable_flowcontrol_actions()
-        self.ref['pos'].enable_positioning_actions()
-
-        # reset the lumencor state
-        self.ref['laser'].lumencor_set_ttl(False)
-        self.ref['laser'].voltage_off()
-
-        total = time.time() - self.start
-        print(f'total time with logging = {self.bokeh}: {total} s')
-
-        self.log.info('cleanupTask finished')
+        # reset the logging options and release the handle to the log file
+        total = time() - self.start
+        self.log.info(f'HiM experiment finished - total time : {total}')
+        self.log.removeHandler(self.file_handler)
 
     # ==================================================================================================================
     # Helper functions
@@ -734,7 +525,7 @@ class Task(InterruptableTask):
         @return: abort: (bool) if the safety checks have not been met, the task is aborted.
         """
         abort = False
-        self.start = time.time()
+        self.start = time()
 
         # stop all interfering modes on GUIs and disable GUI actions
         self.ref['roi'].disable_tracking_mode()
@@ -813,7 +604,7 @@ class Task(InterruptableTask):
                 self.transfer_data = self.user_param_dict['transfer_data']
                 self.save_network_path = self.user_param_dict['save_network_path']
                 self.email = self.user_param_dict['email']
-                self.corr_threshold = self.user_param_dict['correlation_threshold']
+                self.correlation_threshold = self.user_param_dict['correlation_threshold']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -826,6 +617,27 @@ class Task(InterruptableTask):
 
         # injections
         self.load_injection_parameters()
+
+    def task_ending(self):
+        """ Perform all actions in order to properly end the task and make sure all hardware and GUI will remain
+        available.
+        """
+        # reset stage velocity to default
+        self.ref['roi'].set_stage_velocity({'x': 6, 'y': 6})  # 5.74592
+
+        # enable gui actions
+        # roi gui
+        self.ref['roi'].enable_tracking_mode()
+        self.ref['roi'].enable_roi_actions()
+
+        # fluidics control gui
+        self.ref['valves'].enable_valve_positioning()
+        self.ref['flow'].enable_flowcontrol_actions()
+        self.ref['pos'].enable_positioning_actions()
+
+        # reset the lumencor state
+        self.ref['laser'].lumencor_set_ttl(False)
+        self.ref['laser'].voltage_off()
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for the injections
@@ -852,6 +664,128 @@ class Task(InterruptableTask):
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
+
+    def set_valves_and_needle(self, product, needle_injection, needle_position):
+        """ Set the positions of the valves and needle for a hybridization step.
+
+        @param product: (str) indicate the product to be injected
+        @param needle_injection: (int) indicate the number of injections already performed using the needle
+        @param needle_position: (int) indicate the current position of the needle on the tray
+        @return: needle_position: (int) return the current needle position
+                 needle_injection: (int) return the current number of injections performed with the needle
+        """
+        # set the 8 way valve to the position corresponding to the product
+        valve_pos = self.buffer_dict[product]
+        self.ref['valves'].set_valve_position('a', valve_pos)
+        self.ref['valves'].wait_for_idle()
+
+        # for the Airyscan, the needle is connected to the valve position defined in the config file by
+        # self.needle_valve_number. If this valve is called more than once, the needle will move to the next
+        # position. The procedure was added to make the DAPI injection easier.
+        if needle_injection == 0 and valve_pos == self.needle_valve_number:
+            needle_injection += 1
+            needle_position += 1
+        elif needle_injection > 0 and valve_pos == self.needle_valve_number:
+            self.ref['pos'].start_move_to_target(needle_position)
+            while self.ref['pos'].moving is True:
+                sleep(0.1)
+            needle_injection += 1
+            needle_position += 1
+            self.ref['pos'].disable_positioning_actions()
+
+        return needle_position, needle_injection
+
+    def perform_injection(self, target_flowrate, target_volume, transfer=False):
+        """ Perform the injection according to the values of target flowrate and volume.
+        N.B All the commented lines were previoulsy used for bokeh
+
+        @param target_flowrate: (float) indicate the average flow-rate that should be used for the injection
+        @param target_volume: (int) indicate the target volume for the current injection
+        @param transfer: (bool) indicate whether data transfer should be performed during the waiting time
+        """
+        # pressure regulation
+        # create lists containing pressure and volume data and initialize first value to 0
+        # pressure = [0]
+        # volume = [0]
+        # flowrate = self.ref['flow'].get_flowrate()
+
+        start_time = time()
+        self.ref['flow'].set_pressure(0.0)  # as initial value
+        self.ref['flow'].start_pressure_regulation_loop(target_flowrate)
+
+        # start counting the volume of buffer or probe
+        self.ref['flow'].start_volume_measurement(target_volume)
+        ready = self.ref['flow'].target_volume_reached
+
+        while not ready:
+            if self.aborted:
+                break
+
+            sleep(1)
+            ready = self.ref['flow'].target_volume_reached
+            # if data are ready to be saved and the option was selected, launch a worker
+            if transfer:
+                self.launch_data_uploading()
+
+            # retrieve data for data saving at the end of interation
+            # self.append_flow_data(pressure, volume, flowrate)
+
+        self.ref['flow'].stop_pressure_regulation_loop()
+        sleep(1)  # time to wait until last regulation step is finished, afterward reset pressure to 0
+        # get the last data points for flow data
+        # self.append_flow_data(pressure, volume, flowrate)
+        self.ref['flow'].set_pressure(0.0)
+
+        # indicate in the log how long was the injection and compare it to the expected time
+        end_time = time()
+        expected_time = np.round(target_volume / target_flowrate * 60)
+        self.log.info(f'Injection time was {np.round(end_time - start_time)}s and the expected time was '
+                      f'{expected_time}s')
+
+        # # save pressure and volume data to file
+        # complete_path = create_path_for_injection_data(self.directory,
+        #                                                probe_name,
+        #                                                'hybridization', step)
+        # save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
+
+    def incubation(self, t, transfer=False):
+        """ Perform an incubation step.
+
+        @param t: (int) indicate the duration of the incubation step in seconds
+        @param transfer: (bool) indicate whether data transfer should be performed during the waiting time
+        """
+
+        # allow abort by splitting the waiting time into small intervals of 30 s
+        num_steps = t // 30
+        remainder = t % 30
+        for i in range(num_steps):
+            # if data are ready to be saved, launch a worker
+            if transfer:
+                self.launch_data_uploading()
+
+            if not self.aborted:
+                sleep(30)
+                print(f"Elapsed time : {(i + 1) * 30}s")
+
+        sleep(remainder)
+        self.log.info('Incubation time finished')
+
+    def reset_valves_after_injection(self):
+        """ Make sure the injection valves are in their default positions.
+        """
+        self.ref['valves'].set_valve_position('a', 1)  # 8 way valve
+        self.ref['valves'].wait_for_idle()
+        self.ref['valves'].set_valve_position('b', 1)  # RT rinsing valve: Inject probe
+        self.ref['valves'].wait_for_idle()
+
+    def rinse_needle(self):
+        self.log.info('Rinsing needle')
+        self.ref['valves'].set_valve_position('a', self.needle_valve_number)  # Towards probe
+        self.ref['valves'].wait_for_idle()
+        self.ref['valves'].set_valve_position('b', 2)  # RT rinsing valve: rinse needle
+        self.ref['valves'].wait_for_idle()
+        self.ref['flow'].start_rinsing(self.needle_rinsing_duration)
+        sleep(self.needle_rinsing_duration + 5)
 
     # ------------------------------------------------------------------------------------------------------------------
     # communication with ZEN
@@ -915,15 +849,30 @@ class Task(InterruptableTask):
         counter = 0
         error = False
 
-        while bit_value != value and error is False and not self.aborted:
+        while (bit_value != value) and (error is False) and (not self.aborted):
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
             if counter > 10000:
-                self.log.warning(
-                    'No trigger was detected during the past 60s... experiment is aborted')
                 error = True
 
         return error
+
+    def launch_zen_focus_search(self):
+        """ Send trigger to ZEN to launch the focus search procedure. Wait for a trigger from ZEN to confirm the
+        procedure is done.
+        """
+        self.log.info('Sending trigger to start the focus search')
+        sleep(5)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+        sleep(0.1)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
+
+        # wait for ZEN trigger indicating the task is completed
+        trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+        while trigger == 0 and not self.aborted:
+            sleep(.1)
+            trigger = self.ref['daq'].read_di_channel(self.OUT8_ZEN, 1)
+        self.log.info('Focus search procedure completed')
 
     # ------------------------------------------------------------------------------------------------------------------
     # data for imaging cycle with Lumencor
@@ -986,24 +935,72 @@ class Task(InterruptableTask):
     #     self.ao_channel_sequence = ao_channel_sequence
     #     self.lumencor_channel_sequence = lumencor_channel_sequence
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for injection tracking
-    # ------------------------------------------------------------------------------------------------------------------
-    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
-        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
-        append them to lists storing all values.
-        :param: list pressure_list
-        :param: list volume_list
-        :param: list flowrate_list
+    def move_to_roi(self, roi_name):
+        """ Move to the indicated ROI and add an entry in the log file.
 
-        :return: None
+        @param roi_name: (str) indicate the number of the roi
         """
-        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
-        new_total_volume = self.ref['flow'].total_volume
-        new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(round(new_pressure, 1))
-        volume_list.append(round(new_total_volume, 1))
-        flowrate_list.append(round(new_flowrate, 1))
+        self.ref['roi'].active_roi = None
+        self.ref['roi'].set_active_roi(name=roi_name)
+        self.ref['roi'].go_to_roi_xy()
+        self.ref['roi'].stage_wait_for_idle()
+        self.log.info(f'Moved to {roi_name}')
+
+        # if self.bokeh:
+        #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi_name}')
+
+    def check_focus(self, roi, roi_number):
+        """  Check the autofocus image is in focus. This is performed as follows :
+                1- wait for a new autofocus output image to be saved by ZEN
+                2- calculate the correlation score between the new image and the reference
+                3- if the correlation score is too low, the experiment is put on hold
+
+            @return (bool) indicate if an error was encountered (the correlation score is lower than expected)
+        """
+        ref_image = self.focus_ref_images[roi_number]
+        new_autofocus_image_path = self.check_for_new_autofocus_images()
+        new_image = imread(new_autofocus_image_path[0])
+        correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
+
+        self.log.info(f'The correlation score for {roi} was {correlation_score}')
+        self.correlation_score[self.probe_counter - 1, roi_number] = correlation_score
+
+        if correlation_score < self.correlation_threshold:
+            return True
+        else:
+            return False
+
+    def start_acquisition(self):
+        """ Launch the acquisition procedure for ZEN. When the acquisition starts, the camera will continuously send
+        triggers when exposure is ON. Triggers are detected, allowing for the synchronization of the laser source.
+        """
+        # send trigger to ZEN to launch the stack acquisition
+        sleep(5)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 1)
+        sleep(0.1)
+        self.ref['daq'].write_to_do_channel(self.IN7_ZEN, 1, 0)
+
+        # laser synchronization
+        for plane in range(self.num_z_planes):
+            for i in range(len(self.imaging_sequence)):
+
+                # daq waiting for global_exposure trigger from the camera
+                error = self.wait_for_camera_trigger(1)
+                if error is True:
+                    return True
+
+                # switch the selected laser line ON
+                self.ref['daq'].write_to_ao_channel(5, self.ao_channel_sequence[i])
+
+                # daq waiting for global_exposure trigger from the camera to end
+                error = self.wait_for_camera_trigger(0)
+                if error is True:
+                    return True
+
+                # switch the selected laser line OFF
+                self.ref['daq'].write_to_ao_channel(0, self.ao_channel_sequence[i])
+
+        return False
 
     # ------------------------------------------------------------------------------------------------------------------
     # file path handling
@@ -1086,181 +1083,23 @@ class Task(InterruptableTask):
         else:
             self.log.warning('Connection to the local server is lost')
             return False
-    # ------------------------------------------------------------------------------------------------------------------
-    # metadata
-    # ------------------------------------------------------------------------------------------------------------------
-    def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text easy readable format.
 
-        :return: dict metadata
+    def check_data_transfer(self):
+        """ Before launching an acquisition, check no data is being transferred. If an error occurred during a transfer,
+         the global variable "data_saved" will remain False. A timeout of 5 minutes is used. If the timeout is reached,
+         we proceed with the acquisition but the transfer is cancelled.
         """
-        metadata = {'Sample name': self.sample_name, 'Scan number of planes (um)': self.num_z_planes,
-                    'Number laserlines': self.num_laserlines}
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
-
-        for roi in self.roi_names:
-            pos = self.ref['roi'].get_roi_position(roi)
-            metadata[roi] = f'X = {pos[0]} - Y = {pos[1]}'
-
-        return metadata
-
-    def save_metadata_file(self, metadata, path):
-        """ Save a txt file containing the metadata dictionary.
-
-        :param dict metadata: dictionary containing the metadata
-        :param str path: pathname
-        """
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(metadata, outfile, default_flow_style=False)
-        self.log.info('Saved metadata to {}'.format(path))
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # autofocus check helper functions
-    # ------------------------------------------------------------------------------------------------------------------
-    def init_autofocus_safety(self):
-        """ Initialize the data for the autofocus safety procedure (comparing reference images with the newest ones)
-
-        """
-        # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
-        # list
-        ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
-        for im_name in ref_im_name_list:
-            ref_image = imread(im_name)
-            ref_image = ref_image[0, 0, :, :, 0]
-            self.ref_images.append(ref_image)
-
-        # define the correlation array where the data will be saved
-        self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
-
-    @staticmethod
-    def sort_czi_path_list(folder):
-        """ Specific function sorting the name of the czi file in "human" order, that is in the order of acquisition.
-
-        @param folder: folder where to look for the czi files
-        @return: list the content of the folder in the acquisition order
-        """
-        path_list = glob(os.path.join(folder, '*.czi'))
-        file_list = [os.path.basename(path) for path in path_list]
-
-        pt_list = np.zeros((len(file_list),))
-        sorted_path_list = [None] * len(file_list)
-
-        for n, file in enumerate(file_list):
-            digit = re.findall('\d+', file)
-            pt_list[n] = int(digit[-1])
-
-        for n, idx in enumerate(np.argsort(pt_list)):
-            sorted_path_list[n] = path_list[idx]
-
-        return sorted_path_list
-
-    def check_for_new_autofocus_images(self):
-        """ Check whether a new autofocus image was saved by ZEN by comparing the content of the folder before and after
-        launching the autofocus procedure. When the autofocus procedure is performed, two new files are added : a
-        temporary file and an empty image. When the procedure is completed, the temporary file is destroyed.
-
-        @return: the path pointing toward the newly acquired autofocus images
-        """
-        # analyze the content of the folder until a new autofocus image is detected
-        new_image_found = False
-        while not new_image_found:
-            save_path_content_after = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
-                                           recursive=True)
-            print(self.save_path_content_before)
-            print(save_path_content_after)
-            new_autofocus_image_path = list(set(save_path_content_after) - set(self.save_path_content_before))
-
-            if len(new_autofocus_image_path) > 1:
-                sleep(0.5)
-                print('temporary file')
-            elif len(new_autofocus_image_path) == 0:
-                sleep(0.5)
-                print('no file')
-            else:
-                new_image_found = True
-
-        # update the content of the folder for the next acquisition
-        self.save_path_content_before = save_path_content_after
-
-        return new_autofocus_image_path
-
-    @staticmethod
-    def calculate_correlation_score(ref_image, new_image):
-        """ Compute a correlation score (1 = perfectly correlated - 0 = no correlation) between two images
-
-        @param ref_image: reference image (specific of the roi)
-        @param new_image: newly acquired autofocus image
-        @return: correlation score
-        """
-        # bin the two images from 2048x2048 to 512x512
-        shape = (512, 4, 512, 4)
-        ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
-        new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
-
-        # select the central portion of the reference image. The idea is to use a smaller image to compute the
-        # correlation faster but also to be less sensitive to any translational variations between the two images.
-        ref_image_bin_roi = ref_image_bin[128:384, 128:384]
-
-        # calculate the correlation between the two images and compute a score (with respect to the reference)
-        correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
-        correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
-        correlation_score = np.max(correlation_new) / np.max(correlation_ref)
-
-        return correlation_score
-
-# ======================================================================================================================
-#    DEPRECATED FUNCTIONS
-# ======================================================================================================================
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # Bokeh help function
-    # ------------------------------------------------------------------------------------------------------------------
-    def init_bokeh(self):
-        """ This function was previously used for initializing the log for bokeh. This code was kept for history but is
-        no longer used.
-        """
-        self.log_folder = os.path.join(self.directory, 'hi_m_log')
-        os.makedirs(self.log_folder)  # recursive creation of all directories on the path
-
-        # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
-        self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
-        # the status dict 'current_status.yaml' contains basic information and updates regularly
-        self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
-        # the log file contains more detailed information about individual steps and is a user readable format.
-        # It is also useful after the experiment has finished.
-        self.log_path = os.path.join(self.log_folder, 'log.csv')
-
-        if self.bokeh:
-            # initialize the status dict yaml file
-            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
-            write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            # initialize the log file
-            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
-            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-            df.to_csv(self.log_path, index=False, header=True)
-
-        # update the default_info file that is necessary to run the bokeh app
-        if self.bokeh:
-            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
-            last_roi_number = int(self.roi_names[-1].strip('ROI_'))
-            update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
-                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)
+        timeout_t0 = time()
+        if self.transfer_data:
+            global data_saved
+            print('Checking there is no data being transferred ...')
+            while not data_saved:
+                sleep(1)
+                dt = time() - timeout_t0
+                if dt > 300:
+                    self.log.error("Time out was reached for data transfer. Transfer is cancelled from now on.")
+                    self.transfer_data = False
+                    break
 
     def check_acquired_data(self):
         """ List all the acquired data in the directory and all the data already uploaded on the network. Compare the
@@ -1316,39 +1155,37 @@ class Task(InterruptableTask):
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
         return list(path_to_upload_sorted)
 
-    def launch_data_uploading(self, path_to_upload):
+    def launch_data_uploading(self):
         """ Look for the next file to upload and start the worker on a specific thread to launch the transfer
-
-        @param path_to_upload: list of all the files in the local directory
         """
-        global data_saved
+        if self.check_local_network():
 
-        if data_saved and path_to_upload:
+            global data_saved
 
-            path = path_to_upload.pop(0)
+            if data_saved and self.path_to_upload:
 
-            # rewrite the path to the server, following the same hierarchy. Note that npy and yml files can be saved as
-            # they are. However, the czi files needs to be converted, renamed and saved as tif. The following part is
-            # handling the renaming of the czi files.
-            _, file_extension = os.path.splitext(path)
-            if file_extension != '.czi':
-                relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
-                network_dir = os.path.join(self.network_directory, relative_dir)
-                os.makedirs(network_dir, exist_ok=True)
-            else:
-                czi_renamed = self.rename_czi(path)
-                network_dir = os.path.join(self.network_directory, czi_renamed)
+                path = self.path_to_upload.pop(0)
 
-            # launch the worker to start the transfer
-            data_saved = False
-            print(f"uploading {path}")
-            worker = UploadDataWorker(path, network_dir)
-            self.threadpool.start(worker)
+                # rewrite the path to the server, following the same hierarchy. Note that npy and yml files can be saved
+                # as they are. However, the czi files needs to be converted, renamed and saved as tif. The following
+                # part is handling the renaming of the czi files.
+                _, file_extension = os.path.splitext(path)
+                if file_extension != '.czi':
+                    relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
+                    network_dir = os.path.join(self.network_directory, relative_dir)
+                    os.makedirs(network_dir, exist_ok=True)
+                else:
+                    czi_renamed = self.rename_czi(path)
+                    network_dir = os.path.join(self.network_directory, czi_renamed)
 
-            # update the uploaded_files list
-            self.uploaded_files.append(path)
+                # launch the worker to start the transfer
+                data_saved = False
+                self.log.info(f"Uploading {path}")
+                worker = UploadDataWorker(path, network_dir)
+                self.threadpool.start(worker)
 
-        return path_to_upload
+                # update the uploaded_files list
+                self.uploaded_files.append(path)
 
     def rename_czi(self, movie_path):
         """ According to the experiment's parameters defined on Qudi, each czi file is associated to a unique file name.
@@ -1381,6 +1218,207 @@ class Task(InterruptableTask):
         # data_name
         idx = sorted_czi_path.index(movie_path)
         return data_name[idx] + '.tif'
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # metadata
+    # ------------------------------------------------------------------------------------------------------------------
+    def get_metadata(self):
+        """ Get a dictionary containing the metadata in a plain text easy readable format.
+
+        :return: dict metadata
+        """
+        metadata = {'Sample name': self.sample_name, 'Scan number of planes (um)': self.num_z_planes,
+                    'Number laserlines': self.num_laserlines}
+        for i in range(self.num_laserlines):
+            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
+
+        for roi in self.roi_names:
+            pos = self.ref['roi'].get_roi_position(roi)
+            metadata[roi] = f'X = {pos[0]} - Y = {pos[1]}'
+
+        return metadata
+
+    def save_metadata_file(self, metadata, path):
+        """ Save a txt file containing the metadata dictionary.
+
+        :param dict metadata: dictionary containing the metadata
+        :param str path: pathname
+        """
+        with open(path, 'w') as outfile:
+            yaml.safe_dump(metadata, outfile, default_flow_style=False)
+        self.log.info('Saved metadata to {}'.format(path))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # autofocus check helper functions
+    # ------------------------------------------------------------------------------------------------------------------
+    def init_autofocus_safety(self):
+        """ Initialize the data for the autofocus safety procedure (comparing reference images with the newest ones).
+        From the folder containing all the reference images for the focus (brightfield images acquired during a first
+        acquisition for the DAPI), open all the images in the order of acquisition and store them in a list.
+        """
+        # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
+        # list
+        ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
+        for im_name in ref_im_name_list:
+            ref_image = imread(im_name)
+            ref_image = ref_image[0, 0, :, :, 0]
+            self.focus_ref_images.append(ref_image)
+
+        # define the correlation array where the data will be saved
+        self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
+
+    @staticmethod
+    def sort_czi_path_list(folder):
+        """ Specific function sorting the name of the czi file in "human" order, that is in the order of acquisition.
+
+        @param folder: folder where to look for the czi files
+        @return: list the content of the folder in the acquisition order
+        """
+        path_list = glob(os.path.join(folder, '*.czi'))
+        file_list = [os.path.basename(path) for path in path_list]
+
+        pt_list = np.zeros((len(file_list),))
+        sorted_path_list = [None] * len(file_list)
+
+        for n, file in enumerate(file_list):
+            digit = re.findall('\d+', file)
+            pt_list[n] = int(digit[-1])
+
+        for n, idx in enumerate(np.argsort(pt_list)):
+            sorted_path_list[n] = path_list[idx]
+
+        return sorted_path_list
+
+    def check_for_new_autofocus_images(self):
+        """ Check whether a new autofocus image was saved by ZEN by comparing the content of the folder before and after
+        launching the autofocus procedure. When the autofocus procedure is performed, two new files are added : a
+        temporary file and an empty image. When the procedure is completed, the temporary file will be destroyed.
+
+        @return: the path pointing toward the newly acquired autofocus images
+        """
+        # analyze the content of the folder until a new autofocus image is detected
+        new_focus_folder_content = []
+        new_autofocus_image_path = []
+        new_image_found = False
+        while not new_image_found:
+            new_focus_folder_content = glob(os.path.join(self.zen_directory, '**', '*_AcquisitionBlock1_pt*.czi'),
+                                            recursive=True)
+            new_autofocus_image_path = list(set(new_focus_folder_content) - set(self.focus_folder_content))
+
+            if len(new_autofocus_image_path) > 1:
+                sleep(0.5)  # temporary files are still detected, indicating that the procedure is still on going
+            elif len(new_autofocus_image_path) == 0:
+                sleep(0.5)  # no file found, indicating the procedure did not start yet
+            else:
+                new_image_found = True
+
+        # update the content of the folder for the next acquisition
+        self.focus_folder_content = new_focus_folder_content
+
+        return new_autofocus_image_path
+
+    @staticmethod
+    def calculate_correlation_score(ref_image, new_image):
+        """ Compute a correlation score (1 = perfectly correlated - 0 = no correlation) between two images
+
+        @param ref_image: reference image (specific of the roi)
+        @param new_image: newly acquired autofocus image
+        @return: correlation score
+        """
+        # bin the two images from 2048x2048 to 512x512
+        shape = (512, 4, 512, 4)
+        ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
+        new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
+
+        # select the central portion of the reference image. The idea is to use a smaller image to compute the
+        # correlation faster but also to be less sensitive to any translational variations between the two images.
+        ref_image_bin_roi = ref_image_bin[128:384, 128:384]
+
+        # calculate the correlation between the two images
+        correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
+        correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
+
+        # compute the position where the maximum of correlation was detected (where the laplacian is the highest) - this
+        # was introduced since local maxima where sometimes observed but on quite large area. The Laplacian is used to
+        # detect the bins where the variation of correlation is the highest.
+        correlation_laplacian = laplace(correlation_new)
+        idx = np.argmax(np.abs(correlation_laplacian))
+        x, y = np.unravel_index(idx, correlation_laplacian.shape)
+
+        # compute a score (with respect to the reference)
+        correlation_score = correlation_new[x, y] / np.max(correlation_ref)
+
+        return correlation_score
+
+# ======================================================================================================================
+#    DEPRECATED FUNCTIONS
+# ======================================================================================================================
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Bokeh help function
+    # ------------------------------------------------------------------------------------------------------------------
+    def init_bokeh(self):
+        """ This function was previously used for initializing the log for bokeh. This code was kept for history but is
+        no longer used.
+        """
+        self.log_folder = os.path.join(self.directory, 'hi_m_log')
+        os.makedirs(self.log_folder)  # recursive creation of all directories on the path
+
+        # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
+        self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
+        # the status dict 'current_status.yaml' contains basic information and updates regularly
+        self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
+        # the log file contains more detailed information about individual steps and is a user readable format.
+        # It is also useful after the experiment has finished.
+        self.log_path = os.path.join(self.log_folder, 'log.csv')
+
+        if self.bokeh:
+            # initialize the status dict yaml file
+            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
+            write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            # initialize the log file
+            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
+            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+            df.to_csv(self.log_path, index=False, header=True)
+
+        # update the default_info file that is necessary to run the bokeh app
+        if self.bokeh:
+            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+            last_roi_number = int(self.roi_names[-1].strip('ROI_'))
+            update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
+                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
+
+    @staticmethod
+    def calculate_save_projection(num_channel, image_array, saving_path):
+
+        # According to the number of channels acquired, split the stack accordingly
+        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+
+        # For each channel, the projection is calculated and saved as a npy file
+        for n_channel in range(num_channel):
+            image_array = deinterleaved_array_list[n_channel]
+            projection = np.max(image_array, axis=0)
+            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+            np.save(path, projection)
+
+    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+        append them to lists storing all values.
+        :param: list pressure_list
+        :param: list volume_list
+        :param: list flowrate_list
+
+        :return: None
+        """
+        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
+        new_total_volume = self.ref['flow'].total_volume
+        new_flowrate = self.ref['flow'].get_flowrate()[0]
+        pressure_list.append(round(new_pressure, 1))
+        volume_list.append(round(new_total_volume, 1))
+        flowrate_list.append(round(new_flowrate, 1))
+
 
 
 
