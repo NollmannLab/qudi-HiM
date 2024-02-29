@@ -206,6 +206,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
         self.config_dict['axial_calibration_path'] = ''
+        self.config_dict['email'] = None
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
 
@@ -310,7 +311,7 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'transfer_data',
                                    'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
-                                   'roi_list_path', 'injections_path', 'dapi_path', 'email']
+                                   'roi_list_path', 'injections_path', 'email']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Lumencor':

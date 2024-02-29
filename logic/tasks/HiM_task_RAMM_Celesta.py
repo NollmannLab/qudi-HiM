@@ -7,6 +7,7 @@ An extension to Qudi.
 This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @todo: Save the injection data together with the log.
+@todo: Wash IB if experiment is aborted during acquisition
 
 @authors: JB.Fiche (based of F.Barho initial script)
 
@@ -39,6 +40,8 @@ import shutil
 import logging
 import platform
 import subprocess
+import smtplib
+from email.message import EmailMessage
 from datetime import datetime
 from tqdm import tqdm
 from logic.generic_task import InterruptableTask
@@ -115,6 +118,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
         self.needle_rinsing_duration: int = 30  # time in seconds for rinsing the injection needle
         self.FPGA_bitfile: str = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        self.email: str = None
 
         # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
@@ -229,7 +233,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 logging.warning(f"Network connection is unavailable. The directory for transferring the data "
                                 f"({self.save_network_path}) cannot be created. The experiment is aborted.")
                 self.aborted = True
-                return
 
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
@@ -250,6 +253,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['cycle_no'] = self.probe_counter
             #     self.status_dict['cycle_start_time'] = time()
@@ -304,6 +308,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['process'] = 'Imaging'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -331,12 +336,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 autofocus_lost = self.perform_autofocus()
                 if autofocus_lost:
                     self.aborted = True
+                    self.send_alert_email()
                     break
 
                 # reset piezo position to default starting position if too close to the limits of travel range.
                 self.correct_piezo()
 
                 # imaging sequence -------------------------------------------------------------------------------------
+                if self.aborted:
+                    break
+
                 # prepare the daq: set the digital output to 0 before starting the task
                 self.ref['daq'].write_to_do_channel(self.ref['daq']._daq.start_acquisition_taskhandle, 1,
                                                     np.array([0], dtype=np.uint8))
@@ -375,6 +384,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['process'] = 'Photobleaching'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -424,7 +434,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.ref['valves'].wait_for_idle()
 
             # rinse needle
-            self.rinse_needle()
+            if not self.aborted:
+                self.rinse_needle()
 
             # set valves to default positions
             self.reset_valves_after_injection()
@@ -617,7 +628,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.file_format = self.user_param_dict['file_format']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.injections_path = self.user_param_dict['injections_path']
-                self.dapi_path = self.user_param_dict['dapi_path']
+                # self.dapi_path = self.user_param_dict['dapi_path']
+                self.email = self.user_param_dict['email']
 
         except Exception as e:  # add the type of exception
             self.log.warning(f'Could not load user parameters for task {self.name}: {e}')
@@ -654,6 +666,31 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # methods for mails
+    # ------------------------------------------------------------------------------------------------------------------
+    def send_alert_email(self):
+        """ Email user warning him/her that the experiment was aborted.
+        """
+        if self.email:
+            msg = EmailMessage()
+            msg.set_content("Cycle done")
+
+            msg['Subject'] = 'Focus lost - experiment aborted'
+            msg['From'] = 'Qudi_HiM@cbs.cnrs.fr'
+            msg['To'] = self.email
+
+            with smtplib.SMTP('194.167.34.218') as s:
+                try:
+                    s.send_message(msg)
+                    self.log.info(f'Email to {self.email} was sent.')
+                except smtplib.SMTPRecipientsRefused as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to a refused recipient error : {err}.')
+                except smtplib.SMTPResponseException as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to a reception error : {err}.')
+                except Exception as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to the following error : {err}.')
 
     # ------------------------------------------------------------------------------------------------------------------
     # methods for initializing piezo & laser

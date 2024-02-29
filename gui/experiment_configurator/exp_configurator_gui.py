@@ -560,6 +560,8 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.get_gain_PushButton.setVisible(False)
             self._mw.num_frames_Label.setVisible(False)
             self._mw.num_frames_SpinBox.setVisible(False)
+            self._mw.mail_LineEdit.setVisible(True)
+            self._mw.mail_Label.setVisible(True)
 
         elif experiment == 'Hi-M Airyscan Lumencor Tissue':
             # chose the right the listview model
@@ -588,6 +590,8 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.z_step_Label.setVisible(False)
             self._mw.z_step_DSpinBox.setVisible(False)
             self._mw.centered_focal_plane_CheckBox.setVisible(False)
+            self._mw.mail_LineEdit.setVisible(True)
+            self._mw.mail_Label.setVisible(True)
 
         elif experiment == 'Hi-M Airyscan Lumencor':
             # chose the right the listview model
@@ -619,6 +623,8 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.z_step_Label.setVisible(False)
             self._mw.z_step_DSpinBox.setVisible(False)
             self._mw.centered_focal_plane_CheckBox.setVisible(False)
+            self._mw.mail_LineEdit.setVisible(True)
+            self._mw.mail_Label.setVisible(True)
 
         elif experiment == 'Hi-M Airyscan Confocal':
             # chose the right the listview model
@@ -650,6 +656,8 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.z_step_Label.setVisible(False)
             self._mw.z_step_DSpinBox.setVisible(False)
             self._mw.centered_focal_plane_CheckBox.setVisible(False)
+            self._mw.mail_LineEdit.setVisible(True)
+            self._mw.mail_Label.setVisible(True)
 
         elif experiment == 'Photobleaching RAMM' or experiment == 'Photobleaching Airyscan':
             # chose the right the listview model
@@ -844,12 +852,13 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.general_Label.setVisible(visible)
         self._mw.sample_name_Label.setVisible(visible)
         self._mw.sample_name_LineEdit.setVisible(visible)
-        self._mw.mail_LineEdit.setVisible(visible)
-        self._mw.mail_Label.setVisible(visible)
 
         # the dapi and rna checkboxes are needed only for the ROI Multicolor scan RAMM. Set them invisible as default.
         self._mw.dapi_CheckBox.setVisible(False)
         self._mw.rna_CheckBox.setVisible(False)
+        # same for the mail. It is only required for the HiM tasks
+        self._mw.mail_LineEdit.setVisible(False)
+        self._mw.mail_Label.setVisible(False)
 
     def set_visibility_camera_settings(self, visible):
         """ Show or hide the block with the camera settings widgets.
@@ -922,9 +931,11 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.injections_list_Label.setVisible(visible)
         self._mw.injections_list_LineEdit.setVisible(visible)
         self._mw.load_injections_PushButton.setVisible(visible)
-        self._mw.dapi_path_Label.setVisible(visible)
-        self._mw.dapi_data_LineEdit.setVisible(visible)
-        self._mw.load_dapi_PushButton.setVisible(visible)
+
+        # the following items were used for Bokeh - DEPRECATED
+        self._mw.dapi_path_Label.setVisible(False)
+        self._mw.dapi_data_LineEdit.setVisible(False)
+        self._mw.load_dapi_PushButton.setVisible(False)
 
     def set_visibility_prebleaching_settings(self, visible):
         """ Show or hide the block with the prebleaching settings widgets
