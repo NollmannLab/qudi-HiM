@@ -90,12 +90,15 @@ class UploadDataWorker(QtCore.QRunnable):
         n_channel = movie.shape[1]
         n_z = movie.shape[2]
 
-        with TiffWriter(self.data_network_path) as tf:
-            for z in range(n_z):
-                for c in range(n_channel):
-                    im = movie[0, c, z, :, :, 0]
-                    im = np.array(im)
-                    tf.save(im.astype(np.uint16))
+        try:
+            with TiffWriter(self.data_network_path) as tf:
+                for z in range(n_z):
+                    for c in range(n_channel):
+                        im = movie[0, c, z, :, :, 0]
+                        im = np.array(im)
+                        tf.save(im.astype(np.uint16))
+        except Exception as err:
+            print(f"An error occurred while transferring the movie : {err}")
 
 
 class Task(InterruptableTask):

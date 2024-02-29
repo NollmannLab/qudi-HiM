@@ -502,7 +502,7 @@ class BasicGUI(GUIBase):
         # internal signals
         self._mw.filter_ComboBox.activated[str].connect(self.change_filter)
         # remark: signals currentIndexChanged vs activated:
-        # currentIndexChanged is sent regardless of being done programatically or by user interaction whereas
+        # currentIndexChanged is sent regardless of being done programmatically or by user interaction whereas
         # activated is only sent on user interaction.
         # activated seems the better option, then the signal is only sent when a new value is selected,
         # whereas the slot change_filter is called twice when using currentIndexChanged, once for the old index,
@@ -1180,12 +1180,12 @@ class BasicGUI(GUIBase):
         self._mw.filter_ComboBox.setCurrentIndex(index)
 
         # disable the laser control spinboxes of lasers that are not allowed to be used with the selected filter
-        key = 'filter'+str(current_filter_position)  # create the key which allows to access the corresponding entry in the filter_dict
+        key = 'filter'+str(current_filter_position)  # create key which allows to access the corresponding entry in the filter_dict
         self._disable_laser_control(self._filterwheel_logic.filter_dict[key]['lasers'])  # get the corresponding bool list from the logic module
 
     def change_filter(self):
-        """ Slot connected to the filter selection combobox. It sends the (int) number of the selected filter to the filterwheel logic.
-        Triggers also the deactivation of forbidden laser control spinboxes for the given filter.
+        """ Slot connected to the filter selection combobox. It sends the (int) number of the selected filter to the
+        filterwheel logic. Triggers also the deactivation of forbidden laser control spinboxes for the given filter.
         """
         # get current index of the filter selection combobox
         index = self._mw.filter_ComboBox.currentIndex()
@@ -1193,7 +1193,7 @@ class BasicGUI(GUIBase):
         self.sigFilterChanged.emit(filter_pos)
 
         # disable the laser control spinboxes of lasers that are not allowed to be used with the selected filter
-        key = 'filter'+str(filter_pos)  # create the key which allows to access the corresponding entry in the filter_dict
+        key = 'filter'+str(filter_pos)  # create key which allows to access the corresponding entry in the filter_dict
         self._disable_laser_control(self._filterwheel_logic.filter_dict[key]['lasers'])  # get the corresponding bool list from the logic module
 
     def update_filter_display(self, position):
@@ -1206,7 +1206,8 @@ class BasicGUI(GUIBase):
     def _disable_laser_control(self, bool_list):        
         """ Disables the control spinboxes of the lasers which are not allowed for a given filter
         
-        :param: bool_list: list with entries corresponding to laser1 - laserN [True False True False ... True] -> Laser1, laser3 and laserN allowed, laser2 and laser4 forbidden
+        :param: bool_list: list with entries corresponding to laser1 - laserN [True False True False ... True] means
+        that Laser1, laser3 and laserN are allowed, laser2 and laser4 are forbidden.
         
         :return: None
         """

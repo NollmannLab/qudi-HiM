@@ -71,7 +71,7 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
     _conversion_factor = 10.0  # user will send positions in um, stage uses 0.1 um
     axis_list = None
     _serial_connection = None
-    _timeout = 15
+    _timeout = 30
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -345,10 +345,10 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
         :return None
         """
         status = self.get_status()
-        waiting_time = 0
+        t0 = time()
         while status != "N":
-            sleep(0.1)
-            waiting_time = waiting_time + 0.1
+            sleep(0.5)
+            waiting_time = time() - t0
             status = self.get_status()
             if waiting_time >= self._timeout:
                 self.log.error("ASI MS2000 translation stage timeout occurred")

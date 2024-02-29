@@ -27,20 +27,24 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import logging
+
+import numpy as np
 from core.connector import Connector
 from core.configoption import ConfigOption
 # from core.util.mutex import Mutex
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 from time import sleep, time
-import numpy as np
 from numpy.polynomial import Polynomial as Poly
 from functools import partial
+
+# use global variable "verbose" during debugging in order to follow which methods the program is performing
+verbose = True
 
 # ======================================================================================================================
 # Worker classes
 # ======================================================================================================================
-
 
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread. """
@@ -79,6 +83,19 @@ class Worker(QtCore.QRunnable):
 
 
 # ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    global verbose
+
+    def new_function(*args, **kwargs):
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
+
+
+# ======================================================================================================================
 # Logic class
 # ======================================================================================================================
 
@@ -100,6 +117,7 @@ class FocusLogic(GenericLogic):
     # declare connectors
     piezo = Connector(interface='MotorInterface')
     autofocus = Connector(interface='AutofocusLogic')
+    shutter = Connector(interface='ShutterInterface', optional=True)
 
     # config options
     _init_position: float = ConfigOption('init_position', 10, missing='warn')
@@ -107,6 +125,7 @@ class FocusLogic(GenericLogic):
     _rescue_autofocus_possible: bool = ConfigOption('rescue_autofocus_possible', False, missing='warn')
     _min_piezo_step: float = ConfigOption('minimum_piezo_displacement_autofocus', 0.02, missing='warn')
     experiments: list = ConfigOption('experiments', [], missing='warn')
+    _laser_shutter = ConfigOption('laser_shutter', False)
 
     # signals
     sigStepChanged = QtCore.Signal(float)
@@ -124,6 +143,10 @@ class FocusLogic(GenericLogic):
     sigFocusFound = QtCore.Signal()
     sigDisableFocusActions = QtCore.Signal()
     sigEnableFocusActions = QtCore.Signal()
+
+    # IR laser shutter attributes. If a shutter is associated to the setup, disable the focus stabilization function
+    # (cannot be used while acquiring data)
+    _laser_shutter_initialize: bool = False
 
     # piezo attributes
     _step: float = 0.01  # in µm
@@ -160,6 +183,7 @@ class FocusLogic(GenericLogic):
         self.threadpool = QtCore.QThreadPool()
         self._piezo = None
         self._autofocus_logic = None
+        self._shutter = None
 
         # uncomment if needed:
         # self.threadlock = Mutex()
@@ -181,6 +205,9 @@ class FocusLogic(GenericLogic):
         # initialize the autofocus class
         self._autofocus_logic = self.autofocus()
 
+        # initialize the shutter class
+        self._shutter = self.shutter()
+
         # signals to autofocus logic
         self.sigDoStageMovement.connect(self._autofocus_logic.do_position_correction)
 
@@ -190,9 +217,11 @@ class FocusLogic(GenericLogic):
 
     def on_deactivate(self):
         """ Perform required deactivation.
-        Reset the piezo to the zero position.
+        Reset the piezo to the zero position. If a shutter for the laser is used, close the shutter.
         """
         self.go_to_position(0.5)
+        if self._shutter is not None:
+            self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for manual focus setting (manual focus dockwidget and toolbar)
@@ -256,7 +285,7 @@ class FocusLogic(GenericLogic):
         """
         if direct:
             self._piezo.move_abs({self._axis: position})
-            sleep(0.035)
+            sleep(0.03)  # The piezo response for its maximum displacement is 20ms (from spec sheet)
         else:
             self.piezo_ramp(position)
 
@@ -375,6 +404,9 @@ class FocusLogic(GenericLogic):
         """ Start the camera live display. """
         self.live_display_enabled = True
         self._autofocus_logic.start_camera_live()
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
 
         worker = Worker(self.live_update_time)
         worker.signals.sigFinished.connect(self.live_display_loop)
@@ -403,6 +435,24 @@ class FocusLogic(GenericLogic):
         """ Stop the camera live image. """
         self._autofocus_logic.stop_camera_live()
         self.live_display_enabled = False
+        if self._shutter is not None:
+            self._shutter.close_shutter()
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods for the 3-axis motor stage (only for the RAMM microscope)
+# ----------------------------------------------------------------------------------------------------------------------
+    @decorator_print_function
+    def stage_move_z_relative(self, dz):
+        """ Do a relative movement of the translation stage.
+        @param: float dz: target relative movement
+        """
+        self._autofocus_logic.stage_move_z(dz)
+
+    @decorator_print_function
+    def stage_wait_for_idle(self):
+        """ This method waits that the connected translation stage is in idle state.
+        """
+        self._autofocus_logic.stage_wait_for_idle()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for autofocus (autofocus dockwidget and toolbar)
@@ -434,7 +484,6 @@ class FocusLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus calibration
 # ----------------------------------------------------------------------------------------------------------------------
-
     def calibrate_focus_stabilization(self):
         """ Calibrate the focus stabilization by performing a quick 2 µm ramp with the piezo and measuring the
         autofocus signal (either camera or QPD) for each position.
@@ -443,6 +492,13 @@ class FocusLogic(GenericLogic):
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.start_camera_live()
 
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
+
+        # Compute the piezo ramp parameters
         z0 = self.get_position()
         dz = self._calibration_range // 2
         z = np.arange(z0 - dz, z0 + dz, 0.1)
@@ -463,6 +519,10 @@ class FocusLogic(GenericLogic):
             piezo_position[n] = self.get_position()
             # Read the latest QPD signal
             autofocus_signal[n] = self.read_detector_signal()
+
+        # Close the shutter if the live display mode is off
+        if (not self.live_display_enabled) and (self._shutter is not None):
+            self._shutter.close_shutter()
 
         # Calculate the slope of the calibration curve
         p = Poly.fit(piezo_position, autofocus_signal, deg=1)
@@ -497,14 +557,21 @@ class FocusLogic(GenericLogic):
         """ From the present piezo position, read the detector signal and keep the value as reference for the pid.
         @return: None
         """
+        if self._shutter is not None:
+            self._shutter.open_shutter()
+
         setpoint = self._autofocus_logic.define_pid_setpoint()
         self._setpoint_defined = True
         self.sigSetpointDefined.emit(setpoint)
 
+        # Close the shutter if the live display mode is off
+        if (not self.live_display_enabled) and (self._shutter is not None):
+            self._shutter.close_shutter()
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus
 # ----------------------------------------------------------------------------------------------------------------------
-
+    @decorator_print_function
     def start_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ This method starts the autofocus. This can only be done if the piezo was calibrated and a setpoint defined.
         A check is also performed in order to make sure there is enough signal detected.
@@ -532,6 +599,10 @@ class FocusLogic(GenericLogic):
             self.sigAutofocusError.emit()
             return
 
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
+
         # autofocus can be started
         self.autofocus_enabled = True
         self.check_autofocus()  # this updates self._autofocus_lost
@@ -552,7 +623,7 @@ class FocusLogic(GenericLogic):
                     # if the search focus option is True, move the offset back to its initial position
                     if search_focus:
                         offset = self._autofocus_logic._focus_offset
-                        self._autofocus_logic.stage_move_z(-offset)
+                        self.stage_move_z_relative(-offset)
                         self.focus_search_running = False
                         self.focus_search_aborted = True
                     return
@@ -614,7 +685,7 @@ class FocusLogic(GenericLogic):
                         # if the search focus option is True, move the offset back to its initial position
                         if search_focus:
                             offset = self._autofocus_logic._focus_offset
-                            self._autofocus_logic.stage_move_z(-offset)
+                            self.stage_move_z_relative(-offset)
                             self.focus_search_running = False
                             self.focus_search_aborted = True
                         return
@@ -666,12 +737,18 @@ class FocusLogic(GenericLogic):
                                                        search_focus=search_focus))
             self.threadpool.start(worker)
 
+    @decorator_print_function
     def stop_autofocus(self):
         """ Stop the autofocus loop.
         """
         self.autofocus_enabled = False
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.stop_camera_live()
+
+        # Close the shutter if the live display mode is off
+        if (not self.live_display_enabled) and (self._shutter is not None):
+            self._shutter.close_shutter()
+
         self.sigAutofocusStopped.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -684,8 +761,18 @@ class FocusLogic(GenericLogic):
         is inspired from the LSM-Zeiss microscope and is used when the sample (such as embryos) is interfering too much
         with the IR signal and makes the regular focus stabilization unstable.
         """
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return
+
         offset = self._autofocus_logic.calibrate_offset()
         self.sigOffsetCalibration.emit(offset)
+
+        # Close the shutter if the live display mode is off
+        if (not self.live_display_enabled) and (self._shutter is not None):
+            self._shutter.close_shutter()
 
     def update_autofocus_offset_parameters(self, offset, setpoint):
         """ From the gui, it is possible to manually indicate which offset and setpoint should be used for the
@@ -701,13 +788,27 @@ class FocusLogic(GenericLogic):
         self.sigSetpointDefined.emit(setpoint)
         self._autofocus_logic._setpoint = setpoint
 
+    @decorator_print_function
     def rescue_autofocus(self):
         """ When the autofocus signal is lost, launch a rescuing procedure by using the 3-axes translation stage.
         The stage moves along the z axis until the signal is found.
         @return: bool success: True: rescue was successful, signal was found. False: Signal not found during rescue.
         """
-        return self._autofocus_logic.rescue_autofocus()
+        # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # calibration is aborted. - For all other setup, nothing will happen.
+        if self._shutter is not None:
+            if self._shutter.open_shutter():
+                return False
 
+        success = self._autofocus_logic.rescue_autofocus()
+
+        # Close the shutter if the live display mode is off
+        if (not self.live_display_enabled) and (self._shutter is not None):
+            self._shutter.close_shutter()
+
+        return success
+
+    @decorator_print_function
     def do_piezo_position_correction(self):
         """ When the piezo position is too close to the limits (< 10 um, > 50 um), a slow movement of the translation
         stage is started while autofocus is on, so that piezo will follow back into the central range (to 25 um).
@@ -720,12 +821,12 @@ class FocusLogic(GenericLogic):
 
         piezo_pos = self.get_position()
 
-        if (piezo_pos < 10) or (piezo_pos > 50):  # correction necessary
+        if (piezo_pos < (self._min_z + 10)) or (piezo_pos > (self._max_z - 50)):  # correction necessary
             print('doing piezo position correction.')
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
-            self._autofocus_logic.stage_move_z(offset)
-            self._autofocus_logic.stage_wait_for_idle()
+            self.stage_move_z_relative(offset)
+            self.stage_wait_for_idle()
 
             # check if there is enough signal to perform the piezo position correction
             if not self._autofocus_logic.autofocus_check_signal():
@@ -739,14 +840,15 @@ class FocusLogic(GenericLogic):
                 self.sigDoStageMovement.emit(step)
             else:  # no signal found
                 self.log.warning('Position correction could not be done because autofocus signal not found!')
-                self._autofocus_logic.stage_move_z(-offset)
-                self._autofocus_logic.stage_wait_for_idle()
+                self.stage_move_z_relative(-offset)
+                self.stage_wait_for_idle()
                 self.piezo_correction_running = False
 
         else:  # position does not need to be corrected
             print('Piezo repositioning correction is not required.')
             self.piezo_correction_running = False
 
+    @decorator_print_function
     def finish_piezo_position_correction(self):
         """ Slot called by the signal sigStageMoved from the autofocus_logic. Handles the stopping of the autofocus
         and resets the indicator variable. Moves also the stage back to the sample surface plane, as the piezo position
@@ -755,10 +857,11 @@ class FocusLogic(GenericLogic):
         self.stop_autofocus()
         # move stage back to surface plane
         offset = self._autofocus_logic._focus_offset
-        self._autofocus_logic.stage_move_z(-offset)
-        self._autofocus_logic.stage_wait_for_idle()
+        self.stage_move_z_relative(-offset)
+        self.stage_wait_for_idle()
         self.piezo_correction_running = False
 
+    @decorator_print_function
     def start_search_focus(self):
         """ Search the IR reflection signal on a reference plane at a distance 'offset' from the current position.
         Autofocus is programmatically stopped once the signal was found and is stable.
@@ -767,31 +870,52 @@ class FocusLogic(GenericLogic):
         an offset of 0 is considered so that the focus is searched on the usual surface, not at a reference plane.
         This has the same effect as using the start_autofocus method with stop_when_stable=True.
         """
+        # # (for the RAMM) Open the shutter in front of the IR laser. If a positive error message is return, the
+        # # calibration is aborted. - For all other setup, nothing will happen.
+        # if self._shutter.open_shutter():
+        #     self.sigFocusFound.emit()
+        #     return
+
         if self._calibrated and self._setpoint_defined:
             self.focus_search_running = True  # set this flag as indicator that the search focus procedure is running
             self.focus_search_aborted = False  # set this flag as indicator of an error during the procedure
             self._stage_is_positioned = False  # set this flag as indicator that the focus position is not defined yet
             offset = self._autofocus_logic._focus_offset
             if offset != 0:
-                self._autofocus_logic.stage_move_z(offset)
-                self._autofocus_logic.stage_wait_for_idle()
+                self.stage_move_z_relative(offset)
+                self.stage_wait_for_idle()
                 sleep(1)
             self.start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=True)
         else:
             self.log.warn('Search focus can not be used. Calibration or setpoint missing.')
             self.sigFocusFound.emit()  # signal is sent although focus not found, just to reset toolbutton state
 
+    @decorator_print_function
     def search_focus_finished(self):
         """ Ensure the return of the 3-axes stage to the surface plane after finding focus based on the signal on
         a reference plane.
         """
+        # security : make sure the autofocus is properly stopped before proceeding
+        t0 = time()
+        while self.autofocus_enabled:
+            sleep(0.5)
+            t1 = time()
+            if t1 - t0 > 30:
+                logging.warning("Timeout : the autofocus did not stop properly - finishing the search focus anyway!")
+                break
+
+        # move the z-stage by the offset
         offset = self._autofocus_logic._focus_offset
         if offset != 0:
-            self._autofocus_logic.stage_move_z(-offset)
-            self._autofocus_logic.stage_wait_for_idle()
+            self.stage_move_z_relative(-offset)
+            self.stage_wait_for_idle()
         self._stage_is_positioned = True
         self.focus_search_running = False
         self.sigFocusFound.emit()
+
+        # # Close the shutter if the live display mode is off
+        # if not self.live_display_enabled:
+        #     self._shutter.close_shutter()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
@@ -896,5 +1020,3 @@ class FocusLogic(GenericLogic):
             busy = self.autofocus_enabled
             if counter > 500:
                 break
-
-

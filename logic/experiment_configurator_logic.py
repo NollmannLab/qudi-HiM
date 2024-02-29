@@ -206,6 +206,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['num_iterations'] = 0
         self.config_dict['time_step'] = 0
         self.config_dict['axial_calibration_path'] = ''
+        self.config_dict['email'] = None
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
 
@@ -250,6 +251,12 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'multicolor_scan_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'file_format', 'imaging_sequence',
                                    'num_z_planes', 'z_step', 'centered_focal_plane']
+                config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
+            if experiment == 'PAINT RAMM':
+                if not filename:
+                    filename = 'PAINT_task_RAMM.yml'
+                keys_to_extract = ['sample_name', 'exposure', 'save_path', 'imaging_sequence', 'num_z_planes']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Multicolor scan Airyscan':
@@ -304,7 +311,7 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_RAMM.yml'
                 keys_to_extract = ['sample_name', 'exposure', 'save_path', 'save_network_path', 'transfer_data',
                                    'file_format', 'imaging_sequence', 'num_z_planes', 'z_step', 'centered_focal_plane',
-                                   'roi_list_path', 'injections_path', 'dapi_path']
+                                   'roi_list_path', 'injections_path', 'email']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Lumencor':
@@ -319,7 +326,7 @@ class ExpConfigLogic(GenericLogic):
                     filename = 'hi_m_task_AIRYSCAN_tissue.yml'
                     keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
                                        'injections_path', 'dapi_path', 'zen_ref_images_path', 'zen_saving_path',
-                                       'save_network_path', 'transfer_data']
+                                       'save_network_path', 'transfer_data', 'email', 'correlation_threshold']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             elif experiment == 'Hi-M Airyscan Confocal':
@@ -452,6 +459,15 @@ class ExpConfigLogic(GenericLogic):
         :return: None
         """
         self.config_dict['sample_name'] = name
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_mail_address(self, address):
+        """ Updates the dictionary entry 'email'
+        :param: str name: email address
+        :return: None
+        """
+        self.config_dict['email'] = address
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(int)
@@ -630,6 +646,14 @@ class ExpConfigLogic(GenericLogic):
         :param: str path: complete path to the folder where the data will be saved
         :return: None"""
         self.config_dict['zen_saving_path'] = path
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(float)
+    def update_correlation_threshold(self, corr):
+        """ Updates the dictionary entry 'correlation_threshold' (used only for the Airyscan)
+        :param: float corr: minimum threshold value for the correlation
+        :return: None"""
+        self.config_dict['correlation_threshold'] = corr
         self.sigConfigDictUpdated.emit()
 
     @QtCore.Slot(str)

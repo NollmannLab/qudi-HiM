@@ -35,29 +35,31 @@ from qtpy import QtCore
 from core.configoption import ConfigOption
 from time import sleep
 
-import numpy as np
-
 
 # ======================================================================================================================
 # Logic class
 # ======================================================================================================================
 
 class LaserControlLogic(GenericLogic):
-    """ Controls the DAQ analog output and allows to set a digital output line for triggering
-    or controls the FPGA output
+    """ This class combines all the methods for controlling the laser illumination and synchronization with the camera.
+    It calls for a controller, which is either a hardware (FPGA, DAQ, CELESTA) or a logic combining two hardwares (FPGA
+    + CELESTA).
 
     Example config for copy-paste:
         lasercontrol_logic:
         module.Class: 'lasercontrol_logic.LaserControlLogic'
-        controllertype: 'daq'  # 'fpga'
+        controllertype: 'daq'
         connect:
             controller: 'dummy_daq'
     """
-    # declare connectors
-    controller = Connector(interface='LasercontrolInterface')  # can be a daq, an fpga or the celesta laser source
+    # declare connectors (which device is allowing laser control on the Basic Imaging Gui). It can be a daq, a fpga, the
+    # celesta laser source or a mix of both (for the RAMM microscope, celesta is the main controller but the FPGA is
+    # required for TTL synchronization)
+    controller = Connector(interface='LasercontrolInterface')  # can be a daq, a fpga or the celesta laser source
 
-    # config options
-    controllertype = ConfigOption('controllertype', missing='error')  # allows to select between DAQ, FPGA and CELESTA
+    # config options - allows selecting between DAQ, FPGA, CELESTA or CELESTA-FPGA. Depending on the type of controller
+    # specified, specific options will be available.
+    controllertype = ConfigOption('controllertype', missing='error')  # allows selecting between DAQ, FPGA and CELESTA
 
     # signals
     sigIntensityChanged = QtCore.Signal()  # if intensity dict is changed programmatically, this updates the GUI
@@ -176,13 +178,14 @@ class LaserControlLogic(GenericLogic):
 
         if self.controllertype == 'daq':
             for key in self._laser_dict:
-                self._controller.apply_voltage(self._intensity_dict[key] * self._laser_dict[key]['ao_voltage_range'][1] / 100,
-                                    self._laser_dict[key]['channel'])
+                self._controller.apply_voltage(
+                    self._intensity_dict[key] * self._laser_dict[key]['ao_voltage_range'][1] / 100,
+                    self._laser_dict[key]['channel'])
                 # conversion factor: user indicates values in percent of max voltage
         elif self.controllertype == 'fpga':
             for key in self._laser_dict:
                 self._controller.apply_voltage(self._intensity_dict[key], self._laser_dict[key]['channel'])
-        elif self.controllertype == 'celesta':
+        elif (self.controllertype == 'celesta') or (self.controllertype == 'celesta_fpga'):
             intensity, laser_on = self.lumencor_read_intensity_dict(self._intensity_dict)
             self._controller.apply_voltage(intensity, laser_on)
         else:
@@ -207,13 +210,12 @@ class LaserControlLogic(GenericLogic):
         :return: None
         """
         self.enabled = False
-        if self.controllertype == 'daq' or self.controllertype == 'fpga':
+        if (self.controllertype == 'daq') or (self.controllertype == 'fpga'):
             for key in self._laser_dict:
                 self._controller.apply_voltage(0.0, self._laser_dict[key]['channel'])
-        elif self.controllertype == 'celesta':
+        elif (self.controllertype == 'celesta') or (self.controllertype == 'celesta_fpga'):
             intensity, laser_on = self.lumencor_read_intensity_dict(self._intensity_dict)
             self._controller.apply_voltage(intensity, [x * 0 for x in laser_on])
-
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods used in tasks for synchronization between lightsource and camera in external trigger mode
@@ -253,13 +255,13 @@ class LaserControlLogic(GenericLogic):
             pass
 
 # FPGA specific methods ------------------------------------------------------------------------------------------------
-        
+
     def close_default_session(self):
         """ This method is called before another bitfile than the default one shall be loaded. It closes the default
         session, where the default bitfile runs. Only applicable if connected device is a FPGA.
         :return: None
         """
-        if self.controllertype == 'fpga':
+        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
             self._controller.close_default_session()
         else:
             pass
@@ -268,17 +270,17 @@ class LaserControlLogic(GenericLogic):
         """ This method allows to restart the default FPGA session. Only applicable if connected device is a FPGA.
         :return: None
         """
-        if self.controllertype == 'fpga':
+        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
             self._controller.restart_default_session()
         else:
             pass
 
     def start_task_session(self, bitfile):
-        """ Load a bitfile used for a specific task. Only applicable if connected device is a FPGA.
+        """ Load a bitfile used for a specific task. Only applicable if connected device is FPGA or CELESTA_FPGA.
         :param: str bitfile: complete path to the bitfile used for the task session.
         :return: None
         """
-        if self.controllertype == 'fpga':
+        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
             self._controller.start_task_session(bitfile)
         else:
             pass
@@ -288,7 +290,7 @@ class LaserControlLogic(GenericLogic):
         Only applicable if connected device is a FPGA.
         :return: None
         """
-        if self.controllertype == 'fpga':
+        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
             self._controller.end_task_session()
         else:
             pass
@@ -301,7 +303,7 @@ class LaserControlLogic(GenericLogic):
         session.
         :return: None
         """
-        if self.controllertype == 'fpga':
+        if (self.controllertype == 'fpga') or (self.controllertype == 'celesta_fpga'):
             self._controller.run_test_task_session(data)
         else:
             pass
@@ -326,6 +328,19 @@ class LaserControlLogic(GenericLogic):
         else:
             pass
 
+    def run_celesta_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
+        if self.controllertype == 'celesta_fpga':
+            self._controller.run_celesta_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines, exposure)
+        else:
+            pass
+
+    def run_celesta_roi_multicolor_imaging_task_session(self, z_planes, wavelength, num_laserlines, exposure):
+        if self.controllertype == 'celesta_fpga':
+            self._controller.run_celesta_roi_multicolor_imaging_task_session(z_planes, wavelength, num_laserlines,
+                                                                             exposure)
+        else:
+            pass
+
 # Lumencor celesta specific methods ------------------------------------------------------------------------------------
 
     def lumencor_wakeup(self):
@@ -345,7 +360,7 @@ class LaserControlLogic(GenericLogic):
         :return: list laser_on - contains the emission state of each laser line
         """
         intensity, laser_on = self.lumencor_read_intensity_dict(intensity_dict)
-        self._controller.apply_voltage(intensity, [x * 0 for x in laser_on])
+        self._controller.apply_voltage(intensity, [0] * len(intensity))
 
     def lumencor_set_laser_line_emission(self, laser_on):
         """ Set the emission state of all the laser lines without changing the intensity values
@@ -354,7 +369,8 @@ class LaserControlLogic(GenericLogic):
 
     @staticmethod
     def lumencor_read_intensity_dict(intensity_dict):
-        """ Define the intensity of each laser lines of the celesta source. Set emission states of all laser lines to O.
+        """ Define the intensity of each laser lines of the celesta source. Set emission states of all laser lines to 1
+        if the intensity is above zero.
         """
         intensity = []
         laser_on = []

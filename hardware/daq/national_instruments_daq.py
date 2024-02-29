@@ -10,7 +10,8 @@ An extension to Qudi.
 
 @author: F. Barho
 
-Created on Tue Jun 30 2020
+Created on Tue Jun 30 2020.
+Modified by JB Fiche the 15-01-2024 to add new channels controlling the IR laser shutter for the RAMM setup.
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -35,7 +36,7 @@ from core.module import Base
 from interface.lasercontrol_interface import LasercontrolInterface
 from core.configoption import ConfigOption
 import numpy as np
-from time import sleep
+from time import sleep, time
 
 
 class NIDAQMSeries(Base, LasercontrolInterface):
@@ -98,6 +99,8 @@ class NIDAQMSeries(Base, LasercontrolInterface):
     _pump_write_ao_channel = ConfigOption('pump_write_ao_channel', None)
     _start_acquisition_do_channel = ConfigOption('start_acquisition_do_channel', None)
     _acquisition_done_di_channel = ConfigOption('acquisition_done_di_channel', None)
+    _shutter_write_do_channel = ConfigOption('shutter_write_channel', None)
+    _shutter_read_di_channel = ConfigOption('shutter_read_channel', None)
 
     # add here eventually other used channels following the naming convention used above
 
@@ -111,6 +114,8 @@ class NIDAQMSeries(Base, LasercontrolInterface):
         self.pump_write_taskhandle = None
         self.start_acquisition_taskhandle = None
         self.acquisition_done_taskhandle = None
+        self.shutter_write_taskhandle = None
+        self.shutter_read_taskhandle = None
 
     def on_activate(self):
         """ Initialization steps when module is called.
@@ -134,34 +139,38 @@ class NIDAQMSeries(Base, LasercontrolInterface):
             try:
                 self.trigger_write_taskhandle = self.create_taskhandle()
                 self.set_up_do_channel(self.trigger_write_taskhandle,
-                                       self._trigger_write_do_channel)
+                                       self._trigger_write_do_channel, name="trigger")
                 print('Trigger write digital out channel created!')
-            except Exception:
-                print('Failed to create do channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create do channel for the trigger : {err}')
 
         if self._trigger_read_ai_channel:
             try:
                 self.trigger_read_taskhandle = self.create_taskhandle()
                 self.set_up_ai_channel(self.trigger_read_taskhandle, self._trigger_read_ai_channel, self._ao_voltage_range)
                 print('Trigger read analog in channel created!')
-            except Exception:
-                print('Failed to create ai channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create ai channel for trigger : {err}')
 
         if self._piezo_write_ao_channel:
             try:
                 self.piezo_write_taskhandle = self.create_taskhandle()
                 self.set_up_ao_channel(self.piezo_write_taskhandle, self._piezo_write_ao_channel, self._ao_voltage_range)
                 print('Piezo write created!')
-            except Exception:
-                print('Failed to create ao channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create ao channel for the piezo : {err}')
 
         if self._piezo_read_ai_channel:
             try:
                 self.piezo_read_taskhandle = self.create_taskhandle()
                 self.set_up_ai_channel(self.piezo_read_taskhandle, self._piezo_read_ai_channel, self._ao_voltage_range)
                 print('Piezo read created!')
-            except Exception:
-                print('Failes to create ai channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create ai channel for the piezo : {err}')
 
         if self._pump_write_ao_channel:
             try:
@@ -169,26 +178,45 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 self.set_up_ao_channel(self.pump_write_taskhandle, self._pump_write_ao_channel, [-10, 10])
                 # custom ao voltage range for this channel !
                 print('Pump write created!')
-            except Exception:
-                print('Failed to create ao channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create ao channel for the pump : {err}')
 
         if self._start_acquisition_do_channel:
             try:
                 self.start_acquisition_taskhandle = self.create_taskhandle()
                 self.set_up_do_channel(self.start_acquisition_taskhandle, self._start_acquisition_do_channel)  # DIO3 in bitfile for fpga
                 print('Start acquisition digital out channel created!')
-            except Exception:
-                print('Failed to create do channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create do channel for starting the acquisition : {err}')
 
         if self._acquisition_done_di_channel:
             try:
                 self.acquisition_done_taskhandle = self.create_taskhandle()
                 self.set_up_di_channel(self.acquisition_done_taskhandle, self._acquisition_done_di_channel)
                 print('Acquisition done digital in channel created')
-            except Exception:
-                print('Failed to create di channel')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                self.log.error(f'Failed to create di channel to detect the end of acquisition : {err}')
 
-        # add here creation of taskhandles and of the virtual channel for other channels specified in the config
+        if self._shutter_write_do_channel:
+            try:
+                self.shutter_write_taskhandle = self.create_taskhandle()
+                self.set_up_do_channel(self.shutter_write_taskhandle, self._shutter_write_do_channel, name="shutter")
+                print('Shutter write digital in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create do channel for shutter : {err}')
+
+        if self._shutter_read_di_channel:
+            try:
+                self.shutter_read_taskhandle = self.create_taskhandle()
+                self.set_up_di_channel(self.shutter_read_taskhandle, self._shutter_read_di_channel, name="shutter")
+                print('Shutter read digital in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create di channel for shutter : {err}')
 
     def on_deactivate(self):
         """ Required deactivation when module is closed. Close all tasks and reset taskhandles to null pointers.
@@ -197,50 +225,72 @@ class NIDAQMSeries(Base, LasercontrolInterface):
             try:
                 for channel in self._laser_write_ao_channels:
                     self.close_task(self.laser_ao_taskhandles[channel])
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 self.log.exception('Could not clear laser analog out task.')
 
         if self._trigger_write_do_channel:
             try:
                 self.close_task(self.trigger_write_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close do channel')
 
         if self._trigger_read_ai_channel:
             try:
                 self.close_task(self.trigger_read_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close ai channel')
 
         if self._piezo_write_ao_channel:
             try:
                 self.close_task(self.piezo_write_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close ao channel')
 
         if self._piezo_read_ai_channel:
             try:
                 self.close_task(self.piezo_read_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close ai channel')
 
         if self._pump_write_ao_channel:
             try:
                 self.close_task(self.pump_write_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close ao channel')
 
         if self._start_acquisition_do_channel:
             try:
                 self.close_task(self.start_acquisition_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close do channel')
 
         if self._acquisition_done_di_channel:
             try:
                 self.close_task(self.acquisition_done_taskhandle)
-            except Exception:
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close di channel')
+
+        if self._shutter_write_do_channel:
+            try:
+                self.close_task(self.shutter_write_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close do channel for shutter')
+
+        if self._shutter_read_di_channel:
+            try:
+                self.close_task(self.shutter_read_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close di channel for shutter')
 
         # continue here closing tasks if additional channels are added in the config
 
@@ -318,7 +368,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
 
 # Digital output channels ----------------------------------------------------------------------------------------------
     @staticmethod
-    def set_up_do_channel(taskhandle, channel):
+    def set_up_do_channel(taskhandle, channel, name=""):
         """ Create a digital output virtual channel.
 
         :param: DAQmx.Taskhandle object taskhandle: pointer to the virtual channel
@@ -326,7 +376,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
 
         :return: None
         """
-        daq.DAQmxCreateTask('DigitalOut', daq.byref(taskhandle))
+        daq.DAQmxCreateTask(f'DigitalOut_{name}', daq.byref(taskhandle))
         daq.DAQmxCreateDOChan(taskhandle, channel, '', daq.DAQmx_Val_ChanForAllLines)  # last argument: line grouping
 
     def write_to_do_channel(self, taskhandle, num_samp, digital_write):
@@ -355,7 +405,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
 
 # Digital input channels -----------------------------------------------------------------------------------------------
     @staticmethod
-    def set_up_di_channel(taskhandle, channel):
+    def set_up_di_channel(taskhandle, channel, name=""):
         """ Create a digital input virtual channel.
 
         :param: DAQmx.Taskhandle object taskhandle: pointer to the virtual channel
@@ -363,7 +413,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
 
         :return: None
         """
-        daq.DAQmxCreateTask('DigitalIn', daq.byref(taskhandle))
+        daq.DAQmxCreateTask(f'DigitalIn_{name}', daq.byref(taskhandle))
         daq.DAQmxCreateDIChan(taskhandle, channel, '', daq.DAQmx_Val_ChanPerLine)  # last argument: line grouping
 
     def read_di_channel(self, taskhandle, num_samp):
@@ -550,7 +600,26 @@ class NIDAQMSeries(Base, LasercontrolInterface):
 
         :return: None
         """
-        if -10 <= voltage <= 10:  # allow here a different range from the ao range given in config..
+        if -10 <= voltage <= 10:  # allow here a different range from the ao range given in config.
             self.write_to_ao_channel(self.pump_write_taskhandle, voltage)
         else:
             self.log.warning('Voltage not in allowed range.')
+
+    def write_laser_shutter(self, state):
+        """ Control the state of the laser shutter placed in front of the IR laser.
+
+        @param state: (int) 0 = close the shutter / 1 = open the shutter
+        """
+        if state:
+            self.write_to_do_channel(self.shutter_write_taskhandle, 1, np.array([1], dtype=np.uint8))
+        else:
+            self.write_to_do_channel(self.shutter_write_taskhandle, 1, np.array([0], dtype=np.uint8))
+
+    def read_laser_shutter(self):
+        """ Read the state of the laser shutter. In the TSC001 default mode, trigger input and output have opposite
+         senses. Therefore, when the shutter is open (trigger IN equal to 1), trigger OUT will be equal to 0.
+
+        @return: shutter_state(bool): 0 : shutter is close / 1 : shutter is open
+        """
+        shutter_state = 1 - self.read_di_channel(self.shutter_read_taskhandle, 1)[0]
+        return shutter_state

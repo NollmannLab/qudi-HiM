@@ -8,7 +8,7 @@ An extension to Qudi.
 
 @author: F. Barho
 
-Created on Thu Mars 4 2021
+Created on Thu March 4 2021
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
