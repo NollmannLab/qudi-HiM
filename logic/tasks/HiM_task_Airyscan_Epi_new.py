@@ -9,7 +9,6 @@ This module contains the Hi-M Experiment for the Airyscan experimental setup usi
 Airyscan microscope and used for epi-fluorescence
 
 @todo set the TTL of the lumencor to reverse (that is 0V is the base state and TTL are activated only when switched to +5V)
-@todo check the initialization of the lumencor is working properly
 @todo check the task can be aborted even before launching ZEN
 @todo check the behaviour of the error during acquisition when no exposure trigger is detected
 @todo should we skip the ROI where the autofocus did not work and abort the acquisition at the end of the acquisition procedure?
@@ -57,7 +56,7 @@ from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
-# from logic.task_helper_functions import get_entry_nested_dict
+from logic.task_helper_functions import get_entry_nested_dict
 from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
 from tkinter import messagebox
 from qtpy import QtCore
@@ -151,7 +150,6 @@ class Task(InterruptableTask):
         self.zen_ref_images_path: str = ""
         self.zen_saving_path: str = ""
         self.focus_ref_images: list = []
-        self.ao_channel_sequence: list = []
 
         # parameter for handling experiment configuration
         self.user_config_path: str = self.config['path_to_user_config']
@@ -159,7 +157,7 @@ class Task(InterruptableTask):
 
         # parameters for logging
         self.file_handler: object = None
-        self.email: str = None
+        self.email: str = ''
 
         # parameters for bokeh - DEPRECATED -
         self.bokeh: bool = True
@@ -185,14 +183,16 @@ class Task(InterruptableTask):
         self.imaging_sequence: list = []
         self.celesta_laser_dict: dict = {}
         self.num_laserlines: int = 0
-        self.intensity_dict: dict = {}
-        self.lumencor_channel_sequence: list = []
+        # self.intensity_dict: dict = {}
+        # self.lumencor_channel_sequence: list = []
         self.IN7_ZEN: int = self.config['IN7_ZEN']
         self.OUT7_ZEN: int = self.config['OUT7_ZEN']
         self.OUT8_ZEN: int = self.config['OUT8_ZEN']
         self.camera_global_exposure: float = self.config['camera_global_exposure']
         self.correlation_threshold: float = 0
         self.correlation_score: list = []
+        self.celesta_intensity_dict = {}
+        self.ao_channel_sequence: list = []
 
         # parameters for roi
         self.roi_list_path: str = ""
@@ -218,19 +218,16 @@ class Task(InterruptableTask):
         self.load_user_parameters()
         self.directory = self.create_directory(self.save_path)
 
-        # initialize the logger for the task
-        self.init_logger()
-
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & DAQ).
         self.celesta_laser_dict = self.ref['laser']._laser_dict
-        self.format_imaging_sequence()  #### A VERIFIER !!!!!!!!!!
+        self.format_imaging_sequence()
 
         # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line - same for the daq
         self.ref['laser'].lumencor_wakeup()
-        self.ref['daq'].initialize_ao_channels() ### Will be removed when the Lumencor TTL polarity will be updated
+        self.ref['daq'].initialize_ao_channels()
         self.ref['laser'].lumencor_set_ttl(True)
-        self.ref['laser'].lumencor_set_laser_line_intensities(self.intensity_dict)
-
+        self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
+        print(f'Celesta dict {self.celesta_intensity_dict}')
         # initialize the parameters required for the autofocus safety (where to locate the reference images, the
         # correlation, etc.)
         self.init_autofocus_safety()
@@ -246,6 +243,10 @@ class Task(InterruptableTask):
         # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
         # folder where the czi data will be saved is defined.
         self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
+        self.directory = self.zen_directory
+
+        # initialize the logger for the task
+        self.init_logger()
 
         # initialize the list containing the name of all the in-focus images. During an experiment, ZEN will acquire a
         # single brightfield image before launching the acquisition of the stack. This image will be acquired at the end
@@ -292,6 +293,7 @@ class Task(InterruptableTask):
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['cycle_no'] = self.probe_counter
             #     self.status_dict['cycle_start_time'] = time()
@@ -347,6 +349,7 @@ class Task(InterruptableTask):
         # --------------------------------------------------------------------------------------------------------------
         # Imaging for all ROI
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
             # if self.bokeh:
             #     self.status_dict['process'] = 'Imaging'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -403,6 +406,7 @@ class Task(InterruptableTask):
         # --------------------------------------------------------------------------------------------------------------
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
+        if not self.aborted:
         #     if self.bokeh:
         #         self.status_dict['process'] = 'Photobleaching'
         #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
@@ -885,37 +889,44 @@ class Task(InterruptableTask):
         """
         self.celesta_intensity_dict = {}
 
-    # count the number of lightsources for each plane
+        # count the number of lightsources for each plane
         self.num_laserlines = len(self.imaging_sequence)
 
-    # from _laser_dict, list all the available laser sources in a dictionary and associate a unique integer value for
-    # each line. In parallel, initialize the dictionary containing the intensity of each laser line of the Celesta.
-        available_laser_dict = {}
+        # from _laser_dict, list all the available laser sources for the Celesta and initialize the dictionary
+        # containing the intensity of each laser line. The imaging sequence is also modified by adding a field 'laserX'
+        # that will be used to associate to each laser line, the corresponding AO channel for the TTL control.
+        updated_imaging_sequence = self.imaging_sequence
         for laser in range(len(self.celesta_laser_dict)):
             key = self.celesta_laser_dict[f'laser{laser + 1}']['wavelength']
-            available_laser_dict[key] = laser + 1
             self.celesta_intensity_dict[key] = 0
+            for line in range(self.num_laserlines):
+                if key in updated_imaging_sequence[line]:
+                    updated_imaging_sequence[line].append(f'laser{laser + 1}')
 
-    # # Load the laser and intensity dictionary used in lasercontrol_logic
-    #     laser_dict = self.ref['laser'].get_laser_dict()
-    #     intensity_dict = self.ref['laser'].init_intensity_dict()
-    #     imaging_sequence = [(*get_entry_nested_dict(laser_dict, self.imaging_sequence[i][0], 'label'),
-    #                          self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
+        # # Load the laser and intensity dictionary used in lasercontrol_logic
+        # laser_dict_old = self.ref['laser'].get_laser_dict()
+        # intensity_dict_old = self.ref['laser'].init_intensity_dict()
+        # imaging_sequence_old = [(*get_entry_nested_dict(laser_dict_old, self.imaging_sequence[i][0], 'label'),
+        #                      self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
 
-    # Load the daq dictionary for ttl
+        # Load the daq dictionary for ttl - this dictionary is similar to the celesta_laser_dict, except it also
+        # contains the AO TTL channel associated to each laser line (if it exists, else the field is empty).
         daq_dict = self.ref['daq']._daq.get_dict()
         ao_channel_sequence = []
 
-    # convert the imaging_sequence given by the user into format required for the DAQ
+        # convert the imaging_sequence given by the user into format required for the DAQ
         for line in range(self.num_laserlines):
-            line_source = self.imaging_sequence[line][0]
+            line_wavelength = self.imaging_sequence[line][0]
             line_intensity = self.imaging_sequence[line][1]
+            line_source = self.imaging_sequence[line][2]
             if daq_dict[line_source]['channel']:
                 ao_channel_sequence.append(daq_dict[line_source]['channel'])
-                self.celesta_intensity_dict[line_source] = line_intensity
+                self.celesta_intensity_dict[line_wavelength] = line_intensity
             else:
                 self.log.warning(f'The wavelength {self.laser_dict[line_source]} is not configured for external trigger'
                                  f'mode with DAQ')
+
+        self.ao_channel_sequence = ao_channel_sequence
 
     # # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
     #     for i in range(len(imaging_sequence)):
