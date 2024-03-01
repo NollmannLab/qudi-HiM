@@ -471,6 +471,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.save_remote_path_Label.setVisible(False)
             self._mw.save_network_path_LineEdit.setVisible(False)
             self._mw.TransferData_checkBox.setVisible(False)
+            self._mw.z_step_Label.setVisible(False)
+            self._mw.z_step_DSpinBox.setVisible(False)
+            self._mw.centered_focal_plane_CheckBox.setVisible(False)
 
         elif experiment == 'ROI multicolor scan Airyscan confocal':
             # chose the right the listview model
@@ -509,6 +512,9 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.TransferData_checkBox.setVisible(False)
             self._mw.fileformat_Label.setVisible(False)
             self._mw.fileformat_ComboBox.setVisible(False)
+            self._mw.z_step_Label.setVisible(False)
+            self._mw.z_step_DSpinBox.setVisible(False)
+            self._mw.centered_focal_plane_CheckBox.setVisible(False)
 
         elif experiment == 'Fluidics RAMM' or experiment == 'Fluidics Airyscan':
             # chose the right the listview model
@@ -563,7 +569,7 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.mail_LineEdit.setVisible(True)
             self._mw.mail_Label.setVisible(True)
 
-        elif experiment == 'Hi-M Airyscan Lumencor Tissue':
+        elif experiment == 'Hi-M Airyscan Epi':
             # chose the right the listview model
             self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
             self._exp_logic.is_timelapse_ramm = False
@@ -593,38 +599,38 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.mail_LineEdit.setVisible(True)
             self._mw.mail_Label.setVisible(True)
 
-        elif experiment == 'Hi-M Airyscan Lumencor':
-            # chose the right the listview model
-            self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
-            self._exp_logic.is_timelapse_ramm = False
-            self._exp_logic.is_timelapse_palm = False
-
-            self._mw.formWidget.setVisible(True)
-            self.set_visibility_general_settings(True)
-            self.set_visibility_camera_settings(False)
-            self.set_visibility_filter_settings(False)
-            self.set_visibility_imaging_settings(True)
-            self.set_visibility_save_settings(True)
-            self.set_visibility_scan_settings(True)
-            self.set_visibility_documents_settings(True)
-            self.set_visibility_prebleaching_settings(False)
-            self.set_visibility_timelapse_settings(False)
-            self.set_visibility_ZEN_security_settings(False)
-
-            # additional visibility settings
-            self._mw.gain_Label.setVisible(False)
-            self._mw.gain_SpinBox.setVisible(False)
-            self._mw.get_gain_PushButton.setVisible(False)
-            self._mw.num_frames_Label.setVisible(False)
-            self._mw.num_frames_SpinBox.setVisible(False)
-            self._mw.save_remote_path_Label.setVisible(False)
-            self._mw.save_network_path_LineEdit.setVisible(False)
-            self._mw.TransferData_checkBox.setVisible(False)
-            self._mw.z_step_Label.setVisible(False)
-            self._mw.z_step_DSpinBox.setVisible(False)
-            self._mw.centered_focal_plane_CheckBox.setVisible(False)
-            self._mw.mail_LineEdit.setVisible(True)
-            self._mw.mail_Label.setVisible(True)
+        # elif experiment == 'Hi-M Airyscan Lumencor':
+        #     # chose the right the listview model
+        #     self._mw.imaging_sequence_ListView.setModel(self._exp_logic.img_sequence_model)
+        #     self._exp_logic.is_timelapse_ramm = False
+        #     self._exp_logic.is_timelapse_palm = False
+        #
+        #     self._mw.formWidget.setVisible(True)
+        #     self.set_visibility_general_settings(True)
+        #     self.set_visibility_camera_settings(False)
+        #     self.set_visibility_filter_settings(False)
+        #     self.set_visibility_imaging_settings(True)
+        #     self.set_visibility_save_settings(True)
+        #     self.set_visibility_scan_settings(True)
+        #     self.set_visibility_documents_settings(True)
+        #     self.set_visibility_prebleaching_settings(False)
+        #     self.set_visibility_timelapse_settings(False)
+        #     self.set_visibility_ZEN_security_settings(False)
+        #
+        #     # additional visibility settings
+        #     self._mw.gain_Label.setVisible(False)
+        #     self._mw.gain_SpinBox.setVisible(False)
+        #     self._mw.get_gain_PushButton.setVisible(False)
+        #     self._mw.num_frames_Label.setVisible(False)
+        #     self._mw.num_frames_SpinBox.setVisible(False)
+        #     self._mw.save_remote_path_Label.setVisible(False)
+        #     self._mw.save_network_path_LineEdit.setVisible(False)
+        #     self._mw.TransferData_checkBox.setVisible(False)
+        #     self._mw.z_step_Label.setVisible(False)
+        #     self._mw.z_step_DSpinBox.setVisible(False)
+        #     self._mw.centered_focal_plane_CheckBox.setVisible(False)
+        #     self._mw.mail_LineEdit.setVisible(True)
+        #     self._mw.mail_Label.setVisible(True)
 
         elif experiment == 'Hi-M Airyscan Confocal':
             # chose the right the listview model

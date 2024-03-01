@@ -321,9 +321,9 @@ class ExpConfigLogic(GenericLogic):
                                        'injections_path', 'dapi_path']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
-            elif experiment == 'Hi-M Airyscan Lumencor Tissue':
+            elif experiment == 'Hi-M Airyscan Epi':
                 if not filename:
-                    filename = 'hi_m_task_AIRYSCAN_tissue.yml'
+                    filename = 'hi_m_task_AIRYSCAN_epi.yml'
                     keys_to_extract = ['sample_name', 'save_path', 'imaging_sequence', 'num_z_planes', 'roi_list_path',
                                        'injections_path', 'dapi_path', 'zen_ref_images_path', 'zen_saving_path',
                                        'save_network_path', 'transfer_data', 'email', 'correlation_threshold']
