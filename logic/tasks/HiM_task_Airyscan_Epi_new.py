@@ -8,10 +8,10 @@ This module contains the Hi-M Experiment for the Airyscan experimental setup usi
 (For confocal configuration, use HiM_task_Airyscan_confocal.) It is a modification of the HiM task created for the
 Airyscan microscope and used for epi-fluorescence
 
-@todo set the TTL of the lumencor to reverse (that is 0V is the base state and TTL are activated only when switched to +5V)
 @todo check the task can be aborted even before launching ZEN
 @todo check the behaviour of the error during acquisition when no exposure trigger is detected
-@todo should we skip the ROI where the autofocus did not work and abort the acquisition at the end of the acquisition procedure?
+@todo should we skip the ROI where the autofocus did not work and abort the acquisition at the end of the acquisition
+        procedure?
 @todo update the reference image with the newest one -> to avoid loosing the correlation overtime.
 
 @author: JB. Fiche
@@ -47,6 +47,8 @@ import shutil
 import logging
 import platform
 import subprocess
+import smtplib
+from email.message import EmailMessage
 from time import sleep, time
 from datetime import datetime
 from scipy.signal import correlate
@@ -55,9 +57,10 @@ from czifile import imread
 from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
-from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
-from logic.task_helper_functions import get_entry_nested_dict
-from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
+# from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
+# from logic.task_helper_functions import get_entry_nested_dict
+from logic.task_logging_functions import update_default_info, write_status_dict_to_file
+# from logic.task_logging_functions import add_log_entry
 from tkinter import messagebox
 from qtpy import QtCore
 
@@ -149,14 +152,15 @@ class Task(InterruptableTask):
         self.start: float = 0
         self.zen_ref_images_path: str = ""
         self.zen_saving_path: str = ""
-        self.focus_ref_images: list = []
+        self.focus_ref_images: iter = None
 
         # parameter for handling experiment configuration
         self.user_config_path: str = self.config['path_to_user_config']
         self.user_param_dict: dict = {}
 
         # parameters for logging
-        self.file_handler: object = None
+        self.metadata_dir: str = ''
+        self.file_handler: iter = None
         self.email: str = ''
 
         # parameters for bokeh - DEPRECATED -
@@ -190,7 +194,8 @@ class Task(InterruptableTask):
         self.OUT8_ZEN: int = self.config['OUT8_ZEN']
         self.camera_global_exposure: float = self.config['camera_global_exposure']
         self.correlation_threshold: float = 0
-        self.correlation_score: list = []
+        self.correlation_score: iter = None
+        self.ref_filename: str = ""
         self.celesta_intensity_dict = {}
         self.ao_channel_sequence: list = []
 
@@ -216,7 +221,7 @@ class Task(InterruptableTask):
         # the acquisition parameters as well as a small txt file with the name of each stack, according to the ROI and
         # RT being processed)
         self.load_user_parameters()
-        self.directory = self.create_directory(self.save_path)
+        # self.directory = self.create_directory(self.save_path)
 
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & DAQ).
         self.celesta_laser_dict = self.ref['laser']._laser_dict
@@ -228,9 +233,6 @@ class Task(InterruptableTask):
         self.ref['laser'].lumencor_set_ttl(True)
         self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
         print(f'Celesta dict {self.celesta_intensity_dict}')
-        # initialize the parameters required for the autofocus safety (where to locate the reference images, the
-        # correlation, etc.)
-        self.init_autofocus_safety()
 
         # return the list of immediate subdirectories in self.zen_saving_path (this is important since ZEN will
         # automatically create a folder at the start of a new acquisition)
@@ -244,6 +246,12 @@ class Task(InterruptableTask):
         # folder where the czi data will be saved is defined.
         self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
         self.directory = self.zen_directory
+        self.metadata_dir = os.path.join(self.directory, "metadata")
+        os.makedirs(self.metadata_dir)
+
+        # initialize the parameters required for the autofocus safety (where to locate the reference images, the
+        # correlation, etc.)
+        self.init_autofocus_safety()
 
         # initialize the logger for the task
         self.init_logger()
@@ -253,8 +261,7 @@ class Task(InterruptableTask):
         # of the focus search procedure and will be used to check the sample is still in-focus.
         self.focus_folder_content = []
 
-        # create a directory in which all the metadata will be saved (for zen the acquisition parameters and file name
-        # are saved on a separate computer) and create the network directory as well
+        # if the transfer_data option was selected, create the network directory as well
         if (self.save_network_path is not None) and self.transfer_data:
             if self.check_local_network():
                 self.network_directory = self.create_directory(self.save_network_path)
@@ -281,15 +288,6 @@ class Task(InterruptableTask):
         :return: bool: True if the task should continue running, False if it should finish.
         """
 
-        if not self.aborted:
-            self.probe_counter += 1
-            probe_name = self.probe_list[self.probe_counter - 1][1]
-            self.log.info(f'Probe number {self.probe_counter}: {probe_name}')
-
-            # list all the files that were already acquired and uploaded
-            if self.transfer_data:
-                self.path_to_upload = self.check_acquired_data()
-
         # --------------------------------------------------------------------------------------------------------------
         # Hybridization
         # --------------------------------------------------------------------------------------------------------------
@@ -302,6 +300,15 @@ class Task(InterruptableTask):
             #     self.status_dict['process'] = 'Hybridization'
             #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
             #     add_log_entry(self.log_path, self.probe_counter, 1, 'Started Hybridization', 'info')
+
+            # indicate the probe name
+            self.probe_counter += 1
+            probe_name = self.probe_list[self.probe_counter - 1][1]
+            self.log.info(f'Probe number {self.probe_counter}: {probe_name}')
+
+            # list all the files that were already acquired and uploaded
+            if self.transfer_data:
+                self.path_to_upload = self.check_acquired_data()
 
             # position the needle in the tube associated to the selected probe
             needle_pos = self.probe_list[self.probe_counter - 1][0]
@@ -378,6 +385,7 @@ class Task(InterruptableTask):
                     if not answer:
                         self.log.warn(f'The correlation score was too low for {roi} - experiment was aborted by user.')
                         self.aborted = True
+                        self.send_alert_email()
                         break
                     else:
                         self.log.warn(f'The correlation score was too low for {roi} - proceed with experiment by '
@@ -400,6 +408,10 @@ class Task(InterruptableTask):
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
             self.ref['roi'].go_to_roi_xy()
 
+            # save the reference images
+            ref_file = os.path.join(self.metadata_dir, f'reference_images_{probe_name}.npy')
+            np.save(ref_file, self.focus_ref_images)
+
             # if self.bokeh:
             #     add_log_entry(self.log_path, self.probe_counter, 2, 'Finished Imaging', 'info')
 
@@ -407,10 +419,10 @@ class Task(InterruptableTask):
         # Photobleaching
         # --------------------------------------------------------------------------------------------------------------
         if not self.aborted:
-        #     if self.bokeh:
-        #         self.status_dict['process'] = 'Photobleaching'
-        #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
-        #         add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
+            # if self.bokeh:
+            #     self.status_dict['process'] = 'Photobleaching'
+            #     write_status_dict_to_file(self.status_dict_path, self.status_dict)
+            #     add_log_entry(self.log_path, self.probe_counter, 3, 'Started Photobleaching', 'info')
 
             # list all the files that were already acquired and uploaded
             if self.transfer_data:
@@ -484,7 +496,7 @@ class Task(InterruptableTask):
         #         pass
 
         # save correlation score
-        np.save(os.path.join(self.directory, 'correlation.npy'), self.correlation_score)
+        np.save(os.path.join(self.metadata_dir, 'correlation.npy'), self.correlation_score)
 
         # if the task was not aborted, make sure all the files were properly transferred (if the online transfer option
         # was selected by the user)
@@ -573,7 +585,7 @@ class Task(InterruptableTask):
         be written in the log file, together with the task specific messages.
         """
         # define the handler for the log file
-        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, 'HiM_task_log.log'))
+        self.file_handler = logging.FileHandler(filename=os.path.join(self.metadata_dir, 'HiM_task_log.log'))
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         self.file_handler.setFormatter(formatter)
 
@@ -600,7 +612,7 @@ class Task(InterruptableTask):
                 self.sample_name = self.user_param_dict['sample_name']
                 self.num_z_planes = self.user_param_dict['num_z_planes']
                 self.imaging_sequence = self.user_param_dict['imaging_sequence']
-                self.save_path = self.user_param_dict['save_path']
+                # self.save_path = self.user_param_dict['save_path']
                 self.injections_path = self.user_param_dict['injections_path']
                 self.roi_list_path = self.user_param_dict['roi_list_path']
                 self.zen_ref_images_path = self.user_param_dict['zen_ref_images_path']
@@ -642,6 +654,31 @@ class Task(InterruptableTask):
         # reset the lumencor state
         self.ref['laser'].lumencor_set_ttl(False)
         self.ref['laser'].voltage_off()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # methods for mails
+    # ------------------------------------------------------------------------------------------------------------------
+    def send_alert_email(self):
+        """ Email user warning him/her that the experiment was aborted.
+        """
+        if self.email:
+            msg = EmailMessage()
+            msg.set_content("Cycle done")
+
+            msg['Subject'] = 'Focus lost - experiment aborted'
+            msg['From'] = 'Qudi_HiM@cbs.cnrs.fr'
+            msg['To'] = self.email
+
+            with smtplib.SMTP('194.167.34.218') as s:
+                try:
+                    s.send_message(msg)
+                    self.log.info(f'Email to {self.email} was sent.')
+                except smtplib.SMTPRecipientsRefused as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to a refused recipient error : {err}.')
+                except smtplib.SMTPResponseException as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to a reception error : {err}.')
+                except Exception as err:
+                    self.log.err(f'Email to {self.email} could not be sent due to the following error : {err}.')
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for the injections
@@ -829,20 +866,20 @@ class Task(InterruptableTask):
             if len(new_zen_directory) == 1:
                 new_zen_directory = new_zen_directory[0]
                 self.log.info(f'ZEN will save the data in the following folder : {new_zen_directory}')
-                break
+                return new_zen_directory
             elif len(new_zen_directory) == 0:
                 sleep(1)
             else:
                 self.log.error('More than one folder were found. The acquisition is aborted')
                 self.aborted = True
+                return ""
 
         if attempt == 10:
             self.log.error('No new file was created by ZEN - check if the reference folder indicated in the parameters '
                            'is correct')
             self.log.error('The acquisition is aborted')
             self.aborted = True
-
-        return new_zen_directory
+            return ""
 
     def wait_for_camera_trigger(self, value):
         """ This method contains a loop to wait for the camera exposure starts or stops.
@@ -928,7 +965,7 @@ class Task(InterruptableTask):
 
         self.ao_channel_sequence = ao_channel_sequence
 
-    # # Update the intensity dictionary and defines the sequence of ao channels for the daq ------------------------------
+    # # Update the intensity dictionary and defines the sequence of ao channels for the daq ----------------------------
     #     for i in range(len(imaging_sequence)):
     #         key = imaging_sequence[i][0]
     #         intensity_dict[key] = imaging_sequence[i][1]
@@ -965,6 +1002,7 @@ class Task(InterruptableTask):
                 1- wait for a new autofocus output image to be saved by ZEN
                 2- calculate the correlation score between the new image and the reference
                 3- if the correlation score is too low, the experiment is put on hold
+                4- if the correlation score is OK, the new image will replace the previous one and the file is updated
 
             @return (bool) indicate if an error was encountered (the correlation score is lower than expected)
         """
@@ -977,6 +1015,8 @@ class Task(InterruptableTask):
         self.correlation_score[self.probe_counter - 1, roi_number] = correlation_score
 
         if correlation_score < self.correlation_threshold:
+            self.focus_ref_images[roi_number] = new_image[0, 0, :, :, 0]
+            np.save(self.ref_filename, self.focus_ref_images)
             return True
         else:
             return False
@@ -1159,9 +1199,9 @@ class Task(InterruptableTask):
                 idx_czi.append(n)
 
         # build the final list of file to transfer
-        path_to_upload_sorted = [selected_path_to_upload[i] for i in idx_npy] \
-                                + [selected_path_to_upload[i] for i in idx_txt] \
-                                + [selected_path_to_upload[i] for i in idx_czi]
+        path_to_upload_sorted = ([selected_path_to_upload[i] for i in idx_npy] +
+                                 [selected_path_to_upload[i] for i in idx_txt] +
+                                 [selected_path_to_upload[i] for i in idx_czi])
 
         print(f'Number of files to upload : {len(path_to_upload_sorted)}')
         return list(path_to_upload_sorted)
@@ -1221,7 +1261,7 @@ class Task(InterruptableTask):
             sorted_czi_path.append(czi_path[n])
 
         # list all the names of the movie from the txt file updated during acquisition
-        with open(os.path.join(self.directory, 'movie_name.txt')) as f:
+        with open(os.path.join(self.metadata_dir, 'movie_name.txt')) as f:
             data_name = f.readlines()
             data_name = [x.strip() for x in data_name]
 
@@ -1266,15 +1306,34 @@ class Task(InterruptableTask):
     def init_autofocus_safety(self):
         """ Initialize the data for the autofocus safety procedure (comparing reference images with the newest ones).
         From the folder containing all the reference images for the focus (brightfield images acquired during a first
-        acquisition for the DAPI), open all the images in the order of acquisition and store them in a list.
+        acquisition for the DAPI), open all the images in the order of acquisition and store them in a numpy array.
         """
-        # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
-        # list
-        ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
-        for im_name in ref_im_name_list:
-            ref_image = imread(im_name)
-            ref_image = ref_image[0, 0, :, :, 0]
-            self.focus_ref_images.append(ref_image)
+        # check whether a numpy reference file already exists in the folder
+        self.ref_filename = os.path.join(self.metadata_dir, "autofocus_reference.npy")
+        ref_files = glob(self.ref_filename)
+
+        if len(ref_files) == 1:
+            self.focus_ref_images = np.load(self.ref_filename)
+
+        elif len(ref_files) == 0:
+            # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
+            # list
+            ref_im_name_list = self.sort_czi_path_list(self.zen_ref_images_path)
+            focus_ref_images = []
+            for im_name in ref_im_name_list:
+                ref_image = imread(im_name)
+                ref_image = ref_image[0, 0, :, :, 0]
+                focus_ref_images.append(ref_image)
+
+            # convert the list into a numpy array and save it
+            self.focus_ref_images = np.array(focus_ref_images)
+            np.save(self.ref_filename, self.focus_ref_images)
+
+        else:
+            self.log.error(f'There is an error with the reference folder, too many reference files '
+                           f'(autofocus_reference.npy) were found. The experiment is aborted. ')
+            self.aborted = True
+            return
 
         # define the correlation array where the data will be saved
         self.correlation_score = np.zeros((len(self.probe_list), len(self.roi_names)))
@@ -1290,7 +1349,7 @@ class Task(InterruptableTask):
         file_list = [os.path.basename(path) for path in path_list]
 
         pt_list = np.zeros((len(file_list),))
-        sorted_path_list = [None] * len(file_list)
+        sorted_path_list = [] * len(file_list)
 
         for n, file in enumerate(file_list):
             digit = re.findall('\d+', file)
@@ -1429,7 +1488,3 @@ class Task(InterruptableTask):
         pressure_list.append(round(new_pressure, 1))
         volume_list.append(round(new_total_volume, 1))
         flowrate_list.append(round(new_flowrate, 1))
-
-
-
-
