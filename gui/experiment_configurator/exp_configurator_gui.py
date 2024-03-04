@@ -596,8 +596,14 @@ class ExpConfiguratorGUI(GUIBase):
             self._mw.z_step_Label.setVisible(False)
             self._mw.z_step_DSpinBox.setVisible(False)
             self._mw.centered_focal_plane_CheckBox.setVisible(False)
+            self._mw.save_path_Label.setVisible(False)
+            self._mw.save_path_LineEdit.setVisible(False)
+
             self._mw.mail_LineEdit.setVisible(True)
             self._mw.mail_Label.setVisible(True)
+            self._mw.Zen_saving_folder_Label.setVisible(True)
+            self._mw.Zen_saving_folder_lineEdit.setVisible(True)
+            self._mw.Zen_saving_folder_pushButton.setVisible(True)
 
         # elif experiment == 'Hi-M Airyscan Lumencor':
         #     # chose the right the listview model
@@ -915,6 +921,11 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.fileformat_ComboBox.setVisible(visible)
         self._mw.TransferData_checkBox.setVisible(visible)
 
+        # the saving settings for ZEN have been added here. By default, they are set to invisible.
+        self._mw.Zen_saving_folder_Label.setVisible(False)
+        self._mw.Zen_saving_folder_lineEdit.setVisible(False)
+        self._mw.Zen_saving_folder_pushButton.setVisible(False)
+
     def set_visibility_scan_settings(self, visible):
         """ Show or hide the block with the scan settings widgets.
         :param bool visible: show widgets = True, hide widgets = False
@@ -968,11 +979,8 @@ class ExpConfiguratorGUI(GUIBase):
         :param bool visible: show widgets = True, hide widgets = False """
         self._mw.Autofocus_security_Label.setVisible(visible)
         self._mw.reference_image_folder_Label.setVisible(visible)
-        self._mw.Zen_saving_folder_Label.setVisible(visible)
         self._mw.reference_images_lineEdit.setVisible(visible)
-        self._mw.Zen_saving_folder_lineEdit.setVisible(visible)
         self._mw.reference_images_pushButton.setVisible(visible)
-        self._mw.Zen_saving_folder_pushButton.setVisible(visible)
         self._mw.Correlation_threshold_Label.setVisible(visible)
         self._mw.Zen_correlation_DSpinBox.setVisible(visible)
 
