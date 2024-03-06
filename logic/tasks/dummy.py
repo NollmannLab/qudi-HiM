@@ -35,6 +35,14 @@ class Task(InterruptableTask):
         """ Dummy start """
         print('Start')
         self.ctr = 0
+        roi_pos = self.ref['roi'].roi_positions
+        roi_keys = roi_pos.keys()
+        for roi in roi_keys:
+            X = roi_pos[roi][0]
+            Y = roi_pos[roi][1]
+            Z = roi_pos[roi][2]
+            print(f"{roi} : X={X} - Y={Y} - Z={Z}")
+
         self._result = '{0} lines printed!'.format(self.ctr)
         self.file_handler = logging.FileHandler(filename=os.path.join('/home/jb/Desktop', 'HiM_task.log'))
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
