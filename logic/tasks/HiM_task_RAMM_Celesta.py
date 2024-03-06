@@ -47,7 +47,8 @@ from tqdm import tqdm
 from logic.generic_task import InterruptableTask
 # from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
 #     create_path_for_injection_data
-from logic.task_logging_functions import update_default_info, write_status_dict_to_file, add_log_entry
+from logic.task_logging_functions import update_default_info, write_status_dict_to_file
+# from logic.task_logging_functions import add_log_entry
 from qtpy import QtCore
 from glob import glob
 from time import sleep, time
@@ -187,6 +188,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # initialize the logger for the task
         self.init_logger()
+
+        # save all the experiment parameters into a single file
+        self.save_parameters()
 
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
         self.celesta_laser_dict = self.ref['laser']._laser_dict
@@ -476,11 +480,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if self.transfer_data:
                 self.path_to_upload = self.check_acquired_data()
 
-            while self.path_to_upload and (not self.aborted):
-                sleep(1)
-                self.launch_data_uploading()
-                if not self.check_local_network():
-                    break
+                while self.path_to_upload and (not self.aborted):
+                    sleep(1)
+                    self.launch_data_uploading()
+                    if not self.check_local_network():
+                        break
 
         # reset GUI and hardware
         self.task_ending()
@@ -667,6 +671,34 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
 
+    def save_parameters(self):
+        """ All the parameters are saved in the metadata folder as a yaml file.
+        """
+        param_filepath = os.path.join(self.directory, "HiM_parameters.yml")
+
+        # shape the ROIs into a dictionary
+        roi_pos = self.ref['roi'].roi_positions
+        roi_dict = {}
+        for roi in roi_pos.keys():
+            X = roi_pos[roi][0]
+            Y = roi_pos[roi][1]
+            Z = roi_pos[roi][2]
+            roi_dict[roi] = f"X={X} - Y={Y} - Z={Z}"
+
+        # save all parameters into a yaml file
+        param = {'1- global parameters': self.user_param_dict,
+                 '2- fluidic parameters': {'probes': self.probe_dict,
+                                             'hybridization list': self.hybridization_list,
+                                             'photobleaching list': self.photobleaching_list},
+                 '3- imaging parameters': {'number of laser lines': self.num_laserlines,
+                                             'celesta intensity dict': self.celesta_intensity_dict,
+                                             'daq analogic output sequence': self.ao_channel_sequence},
+                 '4- ROIs': roi_dict
+                 }
+
+        with open(param_filepath, 'w') as outfile:
+            yaml.dump(param, outfile, default_flow_style=False)
+
     # ------------------------------------------------------------------------------------------------------------------
     # methods for mails
     # ------------------------------------------------------------------------------------------------------------------
@@ -675,7 +707,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         if self.email:
             msg = EmailMessage()
-            msg.set_content("Cycle done")
+            msg.set_content("Focus lost twice - experiment was aborted")
 
             msg['Subject'] = 'Focus lost - experiment aborted'
             msg['From'] = 'Qudi_HiM@cbs.cnrs.fr'
