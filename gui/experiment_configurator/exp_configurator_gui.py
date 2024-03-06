@@ -1161,6 +1161,8 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.num_iterations_SpinBox.setValue(self._exp_logic.config_dict.get('num_iterations', 0))
         self._mw.time_step_SpinBox.setValue(self._exp_logic.config_dict.get('time_step', 0))
         self._mw.axial_calibration_path_lineEdit.setText(self._exp_logic.config_dict.get('axial_calibration_path', ''))
+        self._mw.mail_LineEdit.setText(self._exp_logic.config_dict.get('email', ''))
+        self._mw.Zen_correlation_DSpinBox.setValue(self._exp_logic.config_dict.get('correlation_threshold', 0.85))
 
     def update_listview(self):
         """ Callback of the signal sigImagingListChanged sent from the logic. Updates the items displayed in the
