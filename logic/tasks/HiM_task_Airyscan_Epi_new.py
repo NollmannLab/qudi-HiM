@@ -8,16 +8,12 @@ This module contains the Hi-M Experiment for the Airyscan experimental setup usi
 (For confocal configuration, use HiM_task_Airyscan_confocal.) It is a modification of the HiM task created for the
 Airyscan microscope and used for epi-fluorescence
 
-@todo check the task can be aborted even before launching ZEN
 @todo check the behaviour of the error during acquisition when no exposure trigger is detected
-@todo should we skip the ROI where the autofocus did not work and abort the acquisition at the end of the acquisition
-        procedure?
-@todo update the reference image with the newest one -> to avoid loosing the correlation overtime.
 
 @author: JB. Fiche
 
 Created on Mon May 16 2021
-Last update Tue Feb 27 2024
+Last update Tue Mar 05 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -39,7 +35,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import yaml
 import numpy as np
-import pandas as pd
+# import pandas as pd
 import os
 import re
 import tkinter as tk
@@ -52,18 +48,17 @@ from email.message import EmailMessage
 from time import sleep, time
 from datetime import datetime
 from scipy.signal import correlate
-from scipy.ndimage import laplace
+from scipy.ndimage import laplace, gaussian_filter
 from czifile import imread
 from tifffile import TiffWriter
 from glob import glob
 from logic.generic_task import InterruptableTask
 # from logic.task_helper_functions import save_injection_data_to_csv, create_path_for_injection_data
 # from logic.task_helper_functions import get_entry_nested_dict
-from logic.task_logging_functions import update_default_info, write_status_dict_to_file
+# from logic.task_logging_functions import update_default_info, write_status_dict_to_file
 # from logic.task_logging_functions import add_log_entry
 from tkinter import messagebox
 from qtpy import QtCore
-
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
 
@@ -95,6 +90,7 @@ class UploadDataWorker(QtCore.QRunnable):
                 print(f"An error occurred while transferring {self.data_local_path} : {e}")
         else:
             self.save_czi_to_tif()
+            data_saved = True
 
     def save_czi_to_tif(self):
         """ Convert the czi file and save it on the network as a tif
@@ -135,6 +131,7 @@ class Task(InterruptableTask):
                     OUT8_ZEN : 3
                     camera_global_exposure : 2
     """
+
     # ==================================================================================================================
     # Generic Task methods
     # ==================================================================================================================
@@ -145,7 +142,7 @@ class Task(InterruptableTask):
         self.threadpool = QtCore.QThreadPool()
 
         # specific task parameters
-        self.directory: str = ""
+        # self.directory: str = ""
         self.zen_directory: str = ""
         self.probe_counter: int = 0
         self.sample_name: str = ""
@@ -153,6 +150,7 @@ class Task(InterruptableTask):
         self.zen_ref_images_path: str = ""
         self.zen_saving_path: str = ""
         self.focus_ref_images: iter = None
+        self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
 
         # parameter for handling experiment configuration
         self.user_config_path: str = self.config['path_to_user_config']
@@ -162,14 +160,15 @@ class Task(InterruptableTask):
         self.metadata_dir: str = ''
         self.file_handler: iter = None
         self.email: str = ''
+        self.log_file: str = 'HiM_task.log'
 
         # parameters for bokeh - DEPRECATED -
-        self.bokeh: bool = True
-        self.log_folder: str = ""
-        self.default_info_path: str = ""
-        self.status_dict_path: str = ""
-        self.log_path: str = ""
-        self.status_dict: dict = {}
+        # self.bokeh: bool = True
+        # self.log_folder: str = ""
+        # self.default_info_path: str = ""
+        # self.status_dict_path: str = ""
+        # self.log_path: str = ""
+        # self.status_dict: dict = {}
 
         # parameters for data handling
         self.save_path: str = ""
@@ -187,17 +186,16 @@ class Task(InterruptableTask):
         self.imaging_sequence: list = []
         self.celesta_laser_dict: dict = {}
         self.num_laserlines: int = 0
-        # self.intensity_dict: dict = {}
-        # self.lumencor_channel_sequence: list = []
         self.IN7_ZEN: int = self.config['IN7_ZEN']
         self.OUT7_ZEN: int = self.config['OUT7_ZEN']
         self.OUT8_ZEN: int = self.config['OUT8_ZEN']
         self.camera_global_exposure: float = self.config['camera_global_exposure']
         self.correlation_threshold: float = 0
         self.correlation_score: iter = None
-        self.ref_filename: str = ""
+        self.ref_filepath: str = ""
         self.celesta_intensity_dict = {}
         self.ao_channel_sequence: list = []
+        self.autofocus_failed: int = 0
 
         # parameters for roi
         self.roi_list_path: str = ""
@@ -245,9 +243,11 @@ class Task(InterruptableTask):
         # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
         # folder where the czi data will be saved is defined.
         self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
-        self.directory = self.zen_directory
-        self.metadata_dir = os.path.join(self.directory, "metadata")
+        self.metadata_dir = os.path.join(self.zen_directory, "metadata")
         os.makedirs(self.metadata_dir)
+
+        # save all the experiment parameters into a single file
+        self.save_parameters()
 
         # initialize the parameters required for the autofocus safety (where to locate the reference images, the
         # correlation, etc.)
@@ -273,7 +273,7 @@ class Task(InterruptableTask):
 
         # # save the acquisition parameters
         # metadata = self.get_metadata()
-        # self.save_metadata_file(metadata, os.path.join(self.directory, "parameters.yml"))
+        # self.save_metadata_file(metadata, os.path.join(self.zen_directory, "parameters.yml"))
 
         # log file paths
         # Previous version was set for bokeh and required access to a directory on a distant server. Log file is now
@@ -380,17 +380,29 @@ class Task(InterruptableTask):
                 self.launch_zen_focus_search()
                 autofocus_error = self.check_focus(roi, n_roi)
 
-                if autofocus_error:
-                    answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
-                    if not answer:
-                        self.log.warn(f'The correlation score was too low for {roi} - experiment was aborted by user.')
-                        self.aborted = True
-                        self.send_alert_email()
-                        break
-                    else:
-                        self.log.warn(f'The correlation score was too low for {roi} - proceed with experiment by '
-                                      f'skipping the roi')
-                        messagebox.showinfo("Proceed with experiment", "The experiment will move to the next ROI...")
+                if autofocus_error and self.autofocus_failed == 0:
+                    self.log.warning('The correlation is below the threshold. Proceeding but autofocus might be lost.')
+                    self.autofocus_failed += 1
+                elif autofocus_error and self.autofocus_failed > 0:
+                    self.log.error('The correlation score was too low for two consecutive times. The HiM experiment is '
+                                   'aborted.')
+                    self.send_alert_email()
+                    self.aborted = True
+                    break
+                else:
+                    self.autofocus_failed = 0
+
+                # if autofocus_error:
+                #     answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
+                #     if not answer:
+                #         self.log.warn(f'The correlation score was too low for {roi} - experiment was aborted by user')
+                #         self.aborted = True
+                #         self.send_alert_email()
+                #         break
+                #     else:
+                #         self.log.warn(f'The correlation score was too low for {roi} - proceed with experiment by '
+                #                       f'skipping the roi')
+                #         messagebox.showinfo("Proceed with experiment", "The experiment will move to the next ROI...")
 
                 # imaging sequence -------------------------------------------------------------------------------------
                 # launch the acquisition task
@@ -402,7 +414,7 @@ class Task(InterruptableTask):
                 # define the name of the stack that was acquired according to the roi number and cycle - save it locally
                 # in a txt file
                 scan_name = self.file_name(roi, probe_name)
-                self.save_file_name(os.path.join(self.directory, 'movie_name.txt'), scan_name)
+                self.save_file_name(os.path.join(self.metadata_dir, 'movie_name.txt'), scan_name)
 
             # go back to first ROI (to avoid a long displacement just before restarting imaging)
             self.ref['roi'].set_active_roi(name=self.roi_names[0])
@@ -511,11 +523,11 @@ class Task(InterruptableTask):
             if self.transfer_data:
                 self.path_to_upload = self.check_acquired_data()
 
-            while self.path_to_upload and (not self.aborted):
-                sleep(1)
-                self.launch_data_uploading()
-                if not self.check_local_network():
-                    break
+                while self.path_to_upload and (not self.aborted):
+                    sleep(1)
+                    self.launch_data_uploading()
+                    if not self.check_local_network():
+                        break
 
         # destroy the tkinter window
         self.root.destroy()
@@ -527,6 +539,10 @@ class Task(InterruptableTask):
         total = time() - self.start
         self.log.info(f'HiM experiment finished - total time : {total}')
         self.log.removeHandler(self.file_handler)
+
+        # if the transfer option was selected, upload the log file
+        if self.transfer_data:
+            self.upload_log()
 
     # ==================================================================================================================
     # Helper functions
@@ -585,7 +601,7 @@ class Task(InterruptableTask):
         be written in the log file, together with the task specific messages.
         """
         # define the handler for the log file
-        self.file_handler = logging.FileHandler(filename=os.path.join(self.metadata_dir, 'HiM_task_log.log'))
+        self.file_handler = logging.FileHandler(filename=os.path.join(self.metadata_dir, self.log_file))
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         self.file_handler.setFormatter(formatter)
 
@@ -634,6 +650,34 @@ class Task(InterruptableTask):
         # injections
         self.load_injection_parameters()
 
+    def save_parameters(self):
+        """ All the parameters are saved in the metadata folder as a yaml file.
+        """
+        param_filepath = os.path.join(self.metadata_dir, "HiM_parameters.yml")
+
+        # shape the ROIs into a dictionary
+        roi_pos = self.ref['roi'].roi_positions
+        roi_dict = {}
+        for roi in roi_pos.keys():
+            x = roi_pos[roi][0]
+            y = roi_pos[roi][1]
+            z = roi_pos[roi][2]
+            roi_dict[roi] = f"X={x} - Y={y} - Z={z}"
+
+        # save all parameters into a yaml file
+        param = {'1- global parameters': self.user_param_dict,
+                 '2- fluidic parameters': {'probes': self.probe_dict,
+                                           'hybridization list': self.hybridization_list,
+                                           'photobleaching list': self.photobleaching_list},
+                 '3- imaging parameters': {'number of laser lines': self.num_laserlines,
+                                           'celesta intensity dict': self.celesta_intensity_dict,
+                                           'daq analogic output sequence': self.ao_channel_sequence},
+                 '4- ROIs': roi_dict
+                 }
+
+        with open(param_filepath, 'w') as outfile:
+            yaml.dump(param, outfile, default_flow_style=False)
+
     def task_ending(self):
         """ Perform all actions in order to properly end the task and make sure all hardware and GUI will remain
         available.
@@ -663,7 +707,7 @@ class Task(InterruptableTask):
         """
         if self.email:
             msg = EmailMessage()
-            msg.set_content("Cycle done")
+            msg.set_content("Focus lost twice - experiment was aborted")
 
             msg['Subject'] = 'Focus lost - experiment aborted'
             msg['From'] = 'Qudi_HiM@cbs.cnrs.fr'
@@ -784,7 +828,7 @@ class Task(InterruptableTask):
                       f'{expected_time}s')
 
         # # save pressure and volume data to file
-        # complete_path = create_path_for_injection_data(self.directory,
+        # complete_path = create_path_for_injection_data(self.zen_directory,
         #                                                probe_name,
         #                                                'hybridization', step)
         # save_injection_data_to_csv(pressure, volume, flowrate, complete_path)
@@ -940,12 +984,6 @@ class Task(InterruptableTask):
                 if key in updated_imaging_sequence[line]:
                     updated_imaging_sequence[line].append(f'laser{laser + 1}')
 
-        # # Load the laser and intensity dictionary used in lasercontrol_logic
-        # laser_dict_old = self.ref['laser'].get_laser_dict()
-        # intensity_dict_old = self.ref['laser'].init_intensity_dict()
-        # imaging_sequence_old = [(*get_entry_nested_dict(laser_dict_old, self.imaging_sequence[i][0], 'label'),
-        #                      self.imaging_sequence[i][1]) for i in range(len(self.imaging_sequence))]
-
         # Load the daq dictionary for ttl - this dictionary is similar to the celesta_laser_dict, except it also
         # contains the AO TTL channel associated to each laser line (if it exists, else the field is empty).
         daq_dict = self.ref['daq']._daq.get_dict()
@@ -964,24 +1002,6 @@ class Task(InterruptableTask):
                                  f'mode with DAQ')
 
         self.ao_channel_sequence = ao_channel_sequence
-
-    # # Update the intensity dictionary and defines the sequence of ao channels for the daq ----------------------------
-    #     for i in range(len(imaging_sequence)):
-    #         key = imaging_sequence[i][0]
-    #         intensity_dict[key] = imaging_sequence[i][1]
-    #         if daq_dict[key]['channel']:
-    #             ao_channel_sequence.append(daq_dict[key]['channel'])
-    #         else:
-    #             self.log.warning('The wavelength {} is not configured for external trigger mode with DAQ'.format(
-    #                 laser_dict[key]['wavelength']))
-    #
-    #         emission_state = np.zeros((len(laser_dict), ), dtype=int)
-    #         emission_state[laser_dict[key]['channel']] = 1
-    #         lumencor_channel_sequence.append(emission_state.tolist())
-    #
-    #     self.intensity_dict = intensity_dict
-    #     self.ao_channel_sequence = ao_channel_sequence
-    #     self.lumencor_channel_sequence = lumencor_channel_sequence
 
     def move_to_roi(self, roi_name):
         """ Move to the indicated ROI and add an entry in the log file.
@@ -1014,12 +1034,13 @@ class Task(InterruptableTask):
         self.log.info(f'The correlation score for {roi} was {correlation_score}')
         self.correlation_score[self.probe_counter - 1, roi_number] = correlation_score
 
-        if correlation_score < self.correlation_threshold:
+        if correlation_score >= self.correlation_threshold:
             self.focus_ref_images[roi_number] = new_image[0, 0, :, :, 0]
-            np.save(self.ref_filename, self.focus_ref_images)
-            return True
-        else:
+            with open(self.ref_filepath, 'wb') as f:
+                np.save(f, self.focus_ref_images)
             return False
+        else:
+            return True
 
     def start_acquisition(self):
         """ Launch the acquisition procedure for ZEN. When the acquisition starts, the camera will continuously send
@@ -1160,13 +1181,15 @@ class Task(InterruptableTask):
         @return: path_to_upload : list of all the files in the local directory
         """
         # look for all the czi/txt/npy/yml files in the folder
-        path_to_upload_npy = glob(self.directory + '/*.npy', recursive=True)
-        print(f'Number of npy files found : {len(path_to_upload_npy)}')
-        path_to_upload_txt = glob(self.directory + '/*.txt', recursive=True)
-        print(f'Number of txt files found : {len(path_to_upload_txt)}')
+        path_to_upload_npy = glob(self.zen_directory + '/**/*.npy', recursive=True)
+        # print(f'Number of npy files found : {len(path_to_upload_npy)}')
+        path_to_upload_txt = glob(self.zen_directory + '/**/*.txt', recursive=True)
+        # print(f'Number of txt files found : {len(path_to_upload_txt)}')
+        path_to_upload_yml = glob(self.zen_directory + '/**/*.yml', recursive=True)
+        # print(f'Number of yaml files found : {len(path_to_upload_yml)}')
         path_to_upload_czi = glob(self.zen_directory + '/**/*_AcquisitionBlock2_pt*.czi', recursive=True)
-        print(f'Number of czi files found : {len(path_to_upload_czi)}')
-        path_to_upload = path_to_upload_npy + path_to_upload_txt + path_to_upload_czi
+        # print(f'Number of czi files found : {len(path_to_upload_czi)}')
+        path_to_upload = path_to_upload_yml + path_to_upload_npy + path_to_upload_txt + path_to_upload_czi
 
         # # look for all the tif/npy/yml files in the destination folder
         # uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
@@ -1222,7 +1245,7 @@ class Task(InterruptableTask):
                 # part is handling the renaming of the czi files.
                 _, file_extension = os.path.splitext(path)
                 if file_extension != '.czi':
-                    relative_dir = os.path.relpath(os.path.dirname(path), start=self.directory)
+                    relative_dir = os.path.relpath(os.path.dirname(path), start=self.zen_directory)
                     network_dir = os.path.join(self.network_directory, relative_dir)
                     os.makedirs(network_dir, exist_ok=True)
                 else:
@@ -1231,12 +1254,25 @@ class Task(InterruptableTask):
 
                 # launch the worker to start the transfer
                 data_saved = False
-                self.log.info(f"Uploading {path}")
+                self.log.info(f"Uploading {os.path.basename(path)} as {os.path.basename(network_dir)}")
                 worker = UploadDataWorker(path, network_dir)
                 self.threadpool.start(worker)
 
                 # update the uploaded_files list
                 self.uploaded_files.append(path)
+
+    def upload_log(self):
+        """ At the end of the experiment, upload the log file.
+        """
+        global data_saved
+        data_saved = False
+
+        log_path = os.path.join(self.metadata_dir, self.log_file)
+        relative_dir = os.path.relpath(os.path.dirname(log_path), start=self.zen_directory)
+        network_dir = os.path.join(self.network_directory, relative_dir)
+
+        worker = UploadDataWorker(log_path, network_dir)
+        self.threadpool.start(worker)
 
     def rename_czi(self, movie_path):
         """ According to the experiment's parameters defined on Qudi, each czi file is associated to a unique file name.
@@ -1308,12 +1344,17 @@ class Task(InterruptableTask):
         From the folder containing all the reference images for the focus (brightfield images acquired during a first
         acquisition for the DAPI), open all the images in the order of acquisition and store them in a numpy array.
         """
-        # check whether a numpy reference file already exists in the folder
-        self.ref_filename = os.path.join(self.metadata_dir, "autofocus_reference.npy")
-        ref_files = glob(self.ref_filename)
+        # define the path where the reference images (for the autofocus) will be saved
+        self.ref_filepath = os.path.join(self.metadata_dir, "autofocus_reference.npy")
+
+        # check whether a numpy reference file already exists in the reference folder indicated in the HiM parameters
+        init_ref_filepath = os.path.join(self.zen_ref_images_path, "autofocus_reference.npy")
+        ref_files = glob(init_ref_filepath)
+        print(f"ref_files : {ref_files}")
 
         if len(ref_files) == 1:
-            self.focus_ref_images = np.load(self.ref_filename)
+            self.focus_ref_images = np.load(init_ref_filepath)
+            np.save(self.ref_filepath, self.focus_ref_images)
 
         elif len(ref_files) == 0:
             # check the reference image for the autofocus - sort them in the right acquisition order and store them in a
@@ -1327,7 +1368,7 @@ class Task(InterruptableTask):
 
             # convert the list into a numpy array and save it
             self.focus_ref_images = np.array(focus_ref_images)
-            np.save(self.ref_filename, self.focus_ref_images)
+            np.save(self.ref_filepath, self.focus_ref_images)
 
         else:
             self.log.error(f'There is an error with the reference folder, too many reference files '
@@ -1347,16 +1388,20 @@ class Task(InterruptableTask):
         """
         path_list = glob(os.path.join(folder, '*.czi'))
         file_list = [os.path.basename(path) for path in path_list]
+        print(f"file_list : {file_list}")
 
         pt_list = np.zeros((len(file_list),))
-        sorted_path_list = [] * len(file_list)
+        sorted_path_list = [""] * len(file_list)
 
         for n, file in enumerate(file_list):
             digit = re.findall('\d+', file)
+            print(f"digit : {digit}")
             pt_list[n] = int(digit[-1])
 
         for n, idx in enumerate(np.argsort(pt_list)):
             sorted_path_list[n] = path_list[idx]
+
+        print(f"sorted_path_list : {sorted_path_list}")
 
         return sorted_path_list
 
@@ -1396,14 +1441,20 @@ class Task(InterruptableTask):
         @param new_image: newly acquired autofocus image
         @return: correlation score
         """
-        # bin the two images from 2048x2048 to 512x512
-        shape = (512, 4, 512, 4)
+        # bin the two images from 2048x2048 to 1024x1024
+        shape = (1024, 2, 1024, 2)
+        # shape = (512, 4, 512, 4)
         ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
         new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
 
+        # apply a gaussian blur in order to remove the background
+        ref_image_bin = ref_image_bin - gaussian_filter(ref_image_bin, sigma=10)
+        new_image_bin = new_image_bin - gaussian_filter(new_image_bin, sigma=10)
+
         # select the central portion of the reference image. The idea is to use a smaller image to compute the
         # correlation faster but also to be less sensitive to any translational variations between the two images.
-        ref_image_bin_roi = ref_image_bin[128:384, 128:384]
+        ref_image_bin_roi = ref_image_bin[262:762, 262:762]
+        # ref_image_bin_roi = ref_image_bin[128:384, 128:384]
 
         # calculate the correlation between the two images
         correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
@@ -1421,70 +1472,71 @@ class Task(InterruptableTask):
 
         return correlation_score
 
-# ======================================================================================================================
-#    DEPRECATED FUNCTIONS
-# ======================================================================================================================
+    # ==================================================================================================================
+    #    DEPRECATED FUNCTIONS
+    # ==================================================================================================================
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # Bokeh help function
-    # ------------------------------------------------------------------------------------------------------------------
-    def init_bokeh(self):
-        """ This function was previously used for initializing the log for bokeh. This code was kept for history but is
-        no longer used.
-        """
-        self.log_folder = os.path.join(self.directory, 'hi_m_log')
-        os.makedirs(self.log_folder)  # recursive creation of all directories on the path
-
-        # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
-        self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
-        # the status dict 'current_status.yaml' contains basic information and updates regularly
-        self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
-        # the log file contains more detailed information about individual steps and is a user readable format.
-        # It is also useful after the experiment has finished.
-        self.log_path = os.path.join(self.log_folder, 'log.csv')
-
-        if self.bokeh:
-            # initialize the status dict yaml file
-            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
-            write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            # initialize the log file
-            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
-            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-            df.to_csv(self.log_path, index=False, header=True)
-
-        # update the default_info file that is necessary to run the bokeh app
-        if self.bokeh:
-            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
-            last_roi_number = int(self.roi_names[-1].strip('ROI_'))
-            update_default_info(self.default_info_path, self.user_param_dict, self.directory, 'czi',
-                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)
-
-    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
-        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
-        append them to lists storing all values.
-        :param: list pressure_list
-        :param: list volume_list
-        :param: list flowrate_list
-
-        :return: None
-        """
-        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
-        new_total_volume = self.ref['flow'].total_volume
-        new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(round(new_pressure, 1))
-        volume_list.append(round(new_total_volume, 1))
-        flowrate_list.append(round(new_flowrate, 1))
+    # # ----------------------------------------------------------------------------------------------------------------
+    # # Bokeh help function
+    # # ----------------------------------------------------------------------------------------------------------------
+    # def init_bokeh(self):
+    #     """ This function was previously used for initializing the log for bokeh. This code was kept for history but
+    #     is no longer used.
+    #     """
+    #     self.log_folder = os.path.join(self.zen_directory, 'hi_m_log')
+    #     os.makedirs(self.log_folder)  # recursive creation of all directories on the path
+    #
+    #     # default info file is used on start of the bokeh app to configure its display elements. It is needed only
+    #     once
+    #     self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
+    #     # the status dict 'current_status.yaml' contains basic information and updates regularly
+    #     self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
+    #     # the log file contains more detailed information about individual steps and is a user readable format.
+    #     # It is also useful after the experiment has finished.
+    #     self.log_path = os.path.join(self.log_folder, 'log.csv')
+    #
+    #     if self.bokeh:
+    #         # initialize the status dict yaml file
+    #         self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
+    #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
+    #         # initialize the log file
+    #         log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
+    #         df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+    #         df.to_csv(self.log_path, index=False, header=True)
+    #
+    #     # update the default_info file that is necessary to run the bokeh app
+    #     if self.bokeh:
+    #         # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+    #         # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+    #         last_roi_number = int(self.roi_names[-1].strip('ROI_'))
+    #         update_default_info(self.default_info_path, self.user_param_dict, self.zen_directory, 'czi',
+    #                             self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
+    #
+    # @staticmethod
+    # def calculate_save_projection(num_channel, image_array, saving_path):
+    #
+    #     # According to the number of channels acquired, split the stack accordingly
+    #     deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+    #
+    #     # For each channel, the projection is calculated and saved as a npy file
+    #     for n_channel in range(num_channel):
+    #         image_array = deinterleaved_array_list[n_channel]
+    #         projection = np.max(image_array, axis=0)
+    #         path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+    #         np.save(path, projection)
+    #
+    # def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+    #     """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+    #     append them to lists storing all values.
+    #     :param: list pressure_list
+    #     :param: list volume_list
+    #     :param: list flowrate_list
+    #
+    #     :return: None
+    #     """
+    #     new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list. Just need the first element
+    #     new_total_volume = self.ref['flow'].total_volume
+    #     new_flowrate = self.ref['flow'].get_flowrate()[0]
+    #     pressure_list.append(round(new_pressure, 1))
+    #     volume_list.append(round(new_total_volume, 1))
+    #     flowrate_list.append(round(new_flowrate, 1))
