@@ -1121,8 +1121,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].active_roi = None
         self.ref['roi'].set_active_roi(name=roi_name)
         self.ref['roi'].go_to_roi_xy()
-        self.ref['roi'].stage_wait_for_idle()
-        self.log.info(f'Moved to {roi_name}')
+        timeout = self.ref['roi'].stage_wait_for_idle()
+        if timeout:
+            self.log.error(f'Timeout reach for ASI stage while moving to {roi_name}')
+        else:
+            self.log.info(f'Moved to {roi_name}')
         # if self.bokeh:
         #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi_name}')
 
@@ -1135,10 +1138,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pass
         else:
             dz = self.dz[n_roi]
-            print(f'modifying axial position by {dz}')
             self.ref['focus'].stage_move_z_relative(dz)
-            self.ref['focus'].stage_wait_for_idle()
-            self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
+            timeout = self.ref['focus'].stage_wait_for_idle()
+            if timeout:
+                self.log.error(f'Timeout reach for ASI stage while correcting objective axial position '
+                               f'dz={np.around(dz, decimals=1)}µm')
+            else:
+                self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
 
     def perform_autofocus(self):
         """ Launch the search focus procedure.

@@ -1084,9 +1084,10 @@ class RoiLogic(GenericLogic):
         """ Wait until the stage status is idle. This method is needed for tasks to make the corresponding method
         in the hardware module accessible from the logic layer.
 
-        :return: None
+        @return timeout (bool) indicate whether the timeout limit was reach while waiting for the movement to stop
         """
-        self._stage.wait_for_idle()
+        timeout = self._stage.wait_for_idle()
+        return timeout
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
