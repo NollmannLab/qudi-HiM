@@ -6,7 +6,7 @@ A module to control The Fly Arena odor system from NI USB-6211 DAQ.
 
 An extension to Qudi.
 
-@author: F. Guerin, JB. Fiche
+@author: D. Guerin, JB. Fiche
 
 Created on Fry may 24, 2024
 -----------------------------------------------------------------------------------

@@ -6,9 +6,9 @@ It is used to control digital output that can be used as trigger for a connected
 
 An extension to Qudi.
 
-@author: D. Guerin, JB Fiche
+@author: D. Guerin, JB. Fiche
 
-Created on Tue may 18 2024.
+Created on Tue may 28, 2024.
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -29,42 +29,41 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 
-import serial
 import time
+import serial
+
 from core.configoption import ConfigOption
+from core.module import Base
 
 
-class ArduinoUno:
+class ArduinoUno(Base):
     _arduino_port = ConfigOption('arduino_port', None)
 
-    def __init__(self):
+    def __init__(self, config, **kwargs):
+        super().__init__(config=config, **kwargs)
+        try:
+            self.arduino = serial.Serial(self._arduino_port, 9600, timeout=1)
+        except Exception as err:
+            print('if could not open port : Verify that the arduino is connected on COM3')
+            print('if access refused: close every arduino user software')
+            self.arduino.close()
 
+    def on_activate(self):
+        """initialize the arduino uno device
+        """
+    def on_deactivate(self):
         pass
 
-    def on_activate(self, _arduino_port=None):
-        try:
-            arduino = serial.Serial(_arduino_port, 9600, timeout=1)
-        except serial.SerialException as e:
-            print(f"Erreur lors de l'ouverture du port série : {e}")
-            exit()
-
-    def on_deactivate(self):
-        arduino.close()
-
-    def send_command(self,pin, state):
+    def send_command(self, pin, state):
+        """send command to the arduino uno device. print what the command does
+        """
         command = f'{pin}{state}\n'
-        arduino.write(command.encode())
-        response = arduino.readline().decode('utf-8').strip()
+        self.arduino.write(command.encode())
+        response = self.arduino.readline().decode('utf-8').strip()
         print(response)
 
     def pin_on(self, pin):
-
-        str(pin)
-        self.send_command('1', pin)
-        time.sleep(1)
+        self.send_command(pin, '1')
 
     def pin_off(self, pin):
-
-        str(pin)
-        self.send_command('0', pin)
-        time.sleep(1)
+        self.send_command(pin, '0')
