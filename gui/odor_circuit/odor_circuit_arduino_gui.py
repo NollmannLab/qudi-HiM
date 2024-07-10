@@ -30,36 +30,44 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 
 import os
+
+import numpy as np
 from qtpy import QtWidgets, uic, QtCore
 from qtpy.QtCore import Signal
 from gui.guibase import GUIBase
 from core.connector import Connector
 
 
-# Define the path to the .ui file
-this_dir = os.path.dirname(__file__)
-ui_file = os.path.join(this_dir, 'odor_circuit_window.ui')
-
-
-class ButtonWindow(QtWidgets.QDialog):
+class MainWindow(QtWidgets.QMainWindow):
     """ Class defined for the main window for odor control.
     """
 
-    def __init__(self):
+    def __init__(self, close_function):
         super().__init__()
+        this_dir = os.path.dirname(__file__)
+        ui_file = os.path.join(this_dir, 'odor_circuit_window.ui')
         uic.loadUi(ui_file, self)
         self.show()
+        self.close_function = close_function
+
+
+    def closeEvent(self, event):
+        self.close_function()
+        event.accept()
 
 
 class OdorCircuitGUI(GUIBase):
-    """ Main GUI class to handle interactions with buttons.
+    """ Main GUI class to handle interactions with MFCs and Valves.
     """
+    # connector
+    odor_circuit_arduino_logic = Connector(interface='OdorCircuitArduinoLogic')
+
+    MFC_status=False
+
+    sigStartFlowMeasure = QtCore.Signal()
+    sigStopFlowMeasure = QtCore.Signal()
     # define the default language option as English (to make sure all float have a point as a separator)
     QtCore.QLocale.setDefault(QtCore.QLocale("English"))
-
-    # connector
-    #odor_circuit_logic = Connector(interface='OdorCircuitLogic')
-    odor_circuit_arduino_logic= Connector(interface='OdorCircuitArduinoLogic')
 
     # Declaration of custom signals
     sigButton1Clicked = Signal()
@@ -69,20 +77,25 @@ class OdorCircuitGUI(GUIBase):
     sigButton5Clicked = Signal()
     sigButton6Clicked = Signal()
     sigButton7Clicked = Signal()
-    # attributes
-    _odor_circuit_logic = None
+    sigMFC_ON = Signal()
+    sigMFC_OFF = Signal()
 
-    def __init__(self,config, **kwargs):
+
+    def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self._odor_circuit_arduino_logic = None
         self._mw = None
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
         """
-        self._odor_circuit_logic = self.odor_circuit_logic()
+        self._odor_circuit_arduino_logic = self.odor_circuit_arduino_logic()
 
         # Window
-        self._mw = ButtonWindow()
+        self._mw = MainWindow(self.close_function)
+        self._mw.centralwidget.hide()  # everything is in dockwidgets
+
+        self.init_flowcontrol()
 
         # Connecting signals of the buttons to the methods.
         self._mw.toolButton_1.clicked.connect(self.on_button1_clicked)
@@ -92,22 +105,27 @@ class OdorCircuitGUI(GUIBase):
         self._mw.toolButton_5.clicked.connect(self.on_button5_clicked)
         self._mw.toolButton_6.clicked.connect(self.on_button6_clicked)
         self._mw.toolButton_7.clicked.connect(self.on_button7_clicked)
+        self._mw.checkBox.stateChanged.connect(self.check_box_changed)
+        self._mw.checkBox_2.stateChanged.connect(self.check_box_changed)
+        self._mw.checkBox_M.stateChanged.connect(self.check_box_changed)
+        self._mw.checkBox_F.stateChanged.connect(self.check_box_changed)
 
         # Connect custom signals to functions.
-        self.sigButton1Clicked.connect(lambda: self._odor_circuit_logic.prepare_odor(1))
-        # not available yet
-        self.sigButton2Clicked.connect(lambda: self._odor_circuit_logic.prepare_odor(2))
-        self.sigButton3Clicked.connect(lambda: self._odor_circuit_logic.prepare_odor(3))
-        self.sigButton4Clicked.connect(lambda: self._odor_circuit_logic.prepare_odor(4))
-        ###
-        self.sigButton5Clicked.connect(lambda: self._odor_circuit_logic.final_valve(1))
-        self.sigButton6Clicked.connect(lambda: self._odor_circuit_logic.flush_odor())
+        self.sigButton1Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(1))
+        self.sigButton2Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(2))
+        self.sigButton3Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(3))
+        self.sigButton4Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(4))
+        self.sigButton5Clicked.connect(lambda: self._odor_circuit_arduino_logic.valve(4, 1))
+        self.sigButton6Clicked.connect(lambda: self._odor_circuit_arduino_logic.flush_odor())
         self.sigButton7Clicked.connect(lambda: self.on_deactivate())
+
+
 
     def on_deactivate(self):
         """ Steps of deactivation required.
         """
-        self._odor_circuit_logic.flush_odor()
+
+        self._odor_circuit_arduino_logic.flush_odor()
         self._mw.toolButton_1.clicked.disconnect()
         self._mw.toolButton_2.clicked.disconnect()
         self._mw.toolButton_3.clicked.disconnect()
@@ -117,29 +135,77 @@ class OdorCircuitGUI(GUIBase):
         self._mw.toolButton_7.clicked.disconnect()
         self._mw.close()
 
+    def show(self):
+        """ To make the window visible and bring it to the front.
+        """
+        QtWidgets.QMainWindow.show(self._mw)
+        self._mw.activateWindow()
+        self._mw.raise_()
+
+    def init_flowcontrol(self):
+        """ This method initializes the flowcontrol dockwidget.
+        It initializes the line plot and sets an adapted text on the labels on the flowcontrol dockwidget.
+        It establishes the signal-slot connections for the toolbar actions.
+        """
+        # initialize the line plot
+        # data for flowrate plot initialization
+        self.t_data = []
+        self.flowrate1_data = []
+        self.flowrate2_data = []
+        self.flowrate3_data = []
+        # create a reference to the line object (this is returned when calling plot method of pg.PlotWidget)
+        self._mw.flowrate_PlotWidget_1.setLabel('left', 'Flowrate', units='L/min')
+        self._mw.flowrate_PlotWidget_1.setLabel('bottom', 'Time', units='s')
+        self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
+
+        self._mw.flowrate_PlotWidget_1.addLegend()
+
+        # Initial plot setup
+        self._flowrate1_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate1_data, pen=(255, 0, 0), name='MFC1')
+        self._flowrate2_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate2_data, pen=(0, 255, 0), name='MFC2')
+        self._flowrate3_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate3_data, pen=(0, 0, 255), name='MFC_purge')
+
+        # toolbar actions: internal signals
+        self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
+        self._mw.actionMFC_ON_OFF.triggered.connect(self.mfc_on_off)
+        # signals to logic
+        self.sigStartFlowMeasure.connect(self._odor_circuit_arduino_logic.start_flow_measurement)
+        self.sigStopFlowMeasure.connect(self._odor_circuit_arduino_logic.stop_flow_measurement)
+
+        # signals from logic
+        self._odor_circuit_arduino_logic.sigUpdateFlowMeasurement.connect(self.update_flowrate)
+        self._odor_circuit_arduino_logic.sigDisableFlowActions.connect(self.disable_flowcontrol_buttons)
+        self._odor_circuit_arduino_logic.sigEnableFlowActions.connect(self.enable_flowcontrol_buttons)
+        self.sigMFC_ON.connect(self.mfc_on)
+        self.sigMFC_OFF.connect(self._odor_circuit_arduino_logic.close_air)
+
+
     def on_button1_clicked(self):
-        """ First odor
+        """ Open valves for odor 1 in and out
         """
         print("Odor 1 chosen")
         self.sigButton1Clicked.emit()
         self.disable_odor_buttons()
 
+
     def on_button2_clicked(self):
-        """ Second odor
+        """ Open valves for odor 2 in and out
         """
         print("Odor 2 chosen")
         self.sigButton2Clicked.emit()
         self.disable_odor_buttons()
 
+
     def on_button3_clicked(self):
-        """ Third Odor
+        """ Open valves for odor 3 in and out
         """
         print("Odor 3 chosen")
         self.sigButton3Clicked.emit()
         self.disable_odor_buttons()
 
+
     def on_button4_clicked(self):
-        """ Fourth Odor
+        """ Open valves for odor 4 in and out
         """
         print("Odor 4 chosen")
         self.sigButton4Clicked.emit()
@@ -150,6 +216,7 @@ class OdorCircuitGUI(GUIBase):
         """
         print("Sending odor...")
         self.sigButton5Clicked.emit()
+        self._mw.toolButton_5.setDisabled(True)
 
     def on_button6_clicked(self):
         """ Wipe the odor from th fly arena
@@ -157,21 +224,68 @@ class OdorCircuitGUI(GUIBase):
         print("Cleaning system in progress...")
         self.sigButton6Clicked.emit()
         self.enable_odor_buttons()
-
+        self._mw.toolButton_5.setDisabled(False)
     def on_button7_clicked(self):
         """ Shutdown properly the system
         """
         self.sigButton7Clicked.emit()
+        self._odor_circuit_arduino_logic.flush_odor()
 
-    def show(self):
-        """ To make the window visible and bring it to the front.
+    def check_box_changed(self, state):
         """
-        QtWidgets.QMainWindow.show(self._mw)
-        self._mw.activateWindow()
-        self._mw.raise_()
+        Get the valve open when checkbox is checked and close when checkbox is unchecked
+        """
+        sender = self._mw.sender()
+
+        if sender == self._mw.checkBox:
+            if state == 2:
+                self._odor_circuit_arduino_logic.valve(1, 1)
+            else:
+                self._odor_circuit_arduino_logic.valve(1, 0)
+        elif sender == self._mw.checkBox_2:
+            if state == 2:
+                self._odor_circuit_arduino_logic.valve(2, 1)
+            else:
+                self._odor_circuit_arduino_logic.valve(2, 0)
+        elif sender == self._mw.checkBox_M:
+            if state == 2:
+                self._odor_circuit_arduino_logic.valve(3, 1)
+            else:
+                self._odor_circuit_arduino_logic.valve(3, 0)
+        elif sender == self._mw.checkBox_F:
+            if state == 2:
+                self._odor_circuit_arduino_logic.valve(4, 1)
+            else:
+                self._odor_circuit_arduino_logic.valve(4, 0)
+
+
+
+
+    def mfc_on(self):
+        value1 = self._mw.doubleSpinBox.value()
+        value2 = self._mw.doubleSpinBox_2.value()
+        value3 = self._mw.doubleSpinBox_3.value()
+        self._odor_circuit_arduino_logic.open_air(value1, value2, value3)
+
+    def mfc_on_off(self):
+        """ Turn the MFCs on or off switching the MFC status
+        """
+        if not self.MFC_status:
+            print("Opening air...")
+            self.sigMFC_ON.emit()
+            self._mw.actionMFC_ON_OFF.setText('MFC : ON')
+            self.MFC_status=True
+
+        else:
+            print("Closing air...")
+            self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
+            self.sigMFC_OFF.emit()
+            self.MFC_status = False
+
+
 
     def disable_odor_buttons(self):
-        """ Disables buttons, to not mixe all odors.
+        """ Disables buttons, to not mix all odors.
         """
         self._mw.toolButton_1.setDisabled(True)
         self._mw.toolButton_2.setDisabled(True)
@@ -185,3 +299,79 @@ class OdorCircuitGUI(GUIBase):
         self._mw.toolButton_2.setDisabled(False)
         self._mw.toolButton_3.setDisabled(False)
         self._mw.toolButton_4.setDisabled(False)
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Slots related to the flowcontrol
+    # ----------------------------------------------------------------------------------------------------------------------
+
+    def measure_flow_clicked(self):
+        """ Callback of start flow measurement toolbutton. Handles the toolbutton state and initiates the start / stop
+        of flowrate and pressure measurements.
+        """
+        if self._odor_circuit_arduino_logic.measuring_flowrate:  # measurement already running
+            self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
+            self.sigStopFlowMeasure.emit()
+            self._mw.actionMFC_ON_OFF.setDisabled(False)
+            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC1', self.flowrate1_data)
+            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC2', self.flowrate2_data)
+            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC3', self.flowrate3_data)
+        else:
+            self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
+            self.t_data = []
+            self.flowrate1_data = []
+            self.flowrate2_data = []
+            self.flowrate3_data = []
+            self.sigStartFlowMeasure.emit()
+            self._mw.actionMFC_ON_OFF.setDisabled(True)
+
+    @QtCore.Slot(list, list, list)
+    def update_flowrate(self, flowrate1, flowrate2, flowrate3):
+        """ Callback of a signal emitted from logic informing the GUI about the new flowrate values.
+        :param float flowrate: current flowrate retrieved from hardware
+        """
+        self.update_flowrate_timetrace(flowrate1[0], flowrate2[0], flowrate3[0])
+
+    def update_flowrate_timetrace(self, flowrate1, flowrate2, flowrate3):
+        """ Add a new data point to the  flowrate timetraces.
+        :param float flowrate: current flowrate retrieved from hardware
+        """
+
+        if len(self.flowrate1_data) < 100:
+            self.t_data.append(len(self.t_data))
+            self.flowrate1_data.append(flowrate1)
+            self.flowrate2_data.append(flowrate2)
+            self.flowrate3_data.append(flowrate3)
+
+        else:
+            self.t_data[:-1] = self.t_data[1:]
+            self.t_data[-1] += 1
+
+            self.flowrate1_data[:-1] = self.flowrate1_data[1:]  # shift data one position to the left
+            self.flowrate1_data[-1] = flowrate1
+            self.flowrate2_data[:-1] = self.flowrate2_data[1:]  # shift data one position to the left
+            self.flowrate2_data[-1] = flowrate2
+            self.flowrate3_data[:-1] = self.flowrate3_data[1:]  # shift data one position to the left
+            self.flowrate3_data[-1] = flowrate3
+
+        self._flowrate1_timetrace.setData(self.t_data, self.flowrate1_data)  # t axis running with time
+        self._flowrate2_timetrace.setData(self.t_data, self.flowrate2_data)
+        self._flowrate3_timetrace.setData(self.t_data, self.flowrate3_data)
+
+    @QtCore.Slot()
+    def disable_flowcontrol_buttons(self):
+        """ Disables flowrate measurement  """
+
+        self._mw.start_flow_measurement_Action.setDisabled(True)
+
+    @QtCore.Slot()
+    def enable_flowcontrol_buttons(self):
+        """ Enables flowcontrol toolbuttons. """
+        self._mw.start_flow_measurement_Action.setDisabled(False)
+
+    def close_function(self):
+        """ This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
+        when the main window is closed. """
+        if self._odor_circuit_arduino_logic.measuring_flowrate:
+            self.sigStopFlowMeasure.emit()
+            self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
+            self._mw.start_flow_measurement_Action.setChecked(False)

@@ -51,19 +51,25 @@ class ArduinoUno(Base):
     def on_activate(self):
         """initialize the arduino uno device
         """
+        arduino_port = 'COM3'
+        baud_rate = 9600
+
     def on_deactivate(self):
         pass
 
-    def send_command(self, pin, state):
-        """send command to the arduino uno device. print what the command does
-        """
-        command = f'{pin}{state}\n'
+    def send_command(self,pin, state):
+        # Create the command string
+        command = f"{pin}{state}\n"
+        # Send the command to the Arduino
         self.arduino.write(command.encode())
-        response = self.arduino.readline().decode('utf-8').strip()
-        print(response)
+        # Wait for a response from the Arduino
+        time.sleep(0.1)
+        while self.arduino.in_waiting:
+            response = self.arduino.readline().decode().strip()
+            print("Arduino:", response)
 
     def pin_on(self, pin):
-        self.send_command(pin, '1')
+        self.send_command(pin, 1)
 
     def pin_off(self, pin):
-        self.send_command(pin, '0')
+        self.send_command(pin, 0)

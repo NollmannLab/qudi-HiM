@@ -24,10 +24,18 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-const int pin1 = 8;
-const int pin2 = 9;
-const int pin3 = 10;
-const int pin4 = 11;
+const int pin1 = 2;
+const int pin2 = 3;
+const int pin3 = 4;
+const int pin4 = 5;
+const int pin5 = 6;
+const int pin6 = 7;
+const int pin7 = 8;
+const int pin8 = 9;
+const int pin9 = 10;
+const int pin10 = 11;
+const int pin11 = 12;
+const int pin12 = 13;
 
 void setup() {
   Serial.begin(9600);
@@ -35,33 +43,63 @@ void setup() {
   pinMode(pin2, OUTPUT);
   pinMode(pin3, OUTPUT);
   pinMode(pin4, OUTPUT);
+  pinMode(pin5, OUTPUT);
+  pinMode(pin6, OUTPUT);
+  pinMode(pin7, OUTPUT);
+  pinMode(pin8, OUTPUT);
+  pinMode(pin9, OUTPUT);
+  pinMode(pin10, OUTPUT);
+  pinMode(pin11, OUTPUT);
+  pinMode(pin12, OUTPUT);
+
   digitalWrite(pin1, LOW);
   digitalWrite(pin2, LOW);
-  digitalWrite(pin3, LOW);
+  digitalWrite(pin3, HIGH);
   digitalWrite(pin4, LOW);
+  digitalWrite(pin5, LOW);
+  digitalWrite(pin6, LOW);
+  digitalWrite(pin7, LOW);
+  digitalWrite(pin8, LOW);
+  digitalWrite(pin9, LOW);
+  digitalWrite(pin10, LOW);
+  digitalWrite(pin11, LOW);
+  digitalWrite(pin12, LOW);
 }
 
 void loop() {
   if (Serial.available() > 0) {
     String command = Serial.readStringUntil('\n');
-    if (command.length() == 2) {
-      char pin = command.charAt(0);
-      char state = command.charAt(1);
+    if (command.length() == 2 || command.length() == 3) {
+      String pinStr = command.substring(0, command.length() - 1);
+      char state = command.charAt(command.length() - 1);
 
-      int pinNumber;
-      if (pin == '1') pinNumber = pin1;
-      else if (pin == '2') pinNumber = pin2;
-      else if (pin == '3') pinNumber = pin3;
-      else if (pin == '4') pinNumber = pin4;
-      else return;
+      int pinNumber = pinStr.toInt();
+
+      int arduinoPin;
+      switch(pinNumber) {
+        case 1: arduinoPin = pin1; break;
+        case 2: arduinoPin = pin2; break;
+        case 3: arduinoPin = pin3; break;
+        case 4: arduinoPin = pin4; break;
+        case 5: arduinoPin = pin5; break;
+        case 6: arduinoPin = pin6; break;
+        case 7: arduinoPin = pin7; break;
+        case 8: arduinoPin = pin8; break;
+        case 9: arduinoPin = pin9; break;
+        case 10: arduinoPin = pin10; break;
+        case 11: arduinoPin = pin11; break;
+        case 12: arduinoPin = pin12; break;
+        default: return;
+      }
 
       if (state == '1') {
-        digitalWrite(pinNumber, HIGH);
-        Serial.println("Pin " + String(pin) + " ON");
+        digitalWrite(arduinoPin, HIGH);
+        Serial.println("pin" + String(pinNumber) + " ON");
       } else if (state == '0') {
-        digitalWrite(pinNumber, LOW);
-        Serial.println("Pin " + String(pin) + " OFF");
+        digitalWrite(arduinoPin, LOW);
+        Serial.println("pin" + String(pinNumber) + " OFF");
       }
     }
   }
 }
+
