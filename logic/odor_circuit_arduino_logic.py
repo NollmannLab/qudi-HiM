@@ -86,6 +86,17 @@ class OdorCircuitArduinoLogic(GenericLogic):
     time_since_start = 0
     # declare connectors
 
+    _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
+    _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
+    _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
+    _valve_odor_4_in = ConfigOption('valve_odor_4_in', 10)
+    _valve_odor_1_out = ConfigOption('valve_odor_1_in', 7)
+    _valve_odor_2_out = ConfigOption('valve_odor_2_in', 6)
+    _valve_odor_3_out = ConfigOption('valve_odor_3_in', 5)
+    _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
+    _mixing_valve = ConfigOption('mixing_valve', 9)
+    _final_valve = ConfigOption('final_valve', 8)
+
     _MFC_purge = ConfigOption('MFC_purge', 2)
     _MFC_1 = ConfigOption('MFC_1', 0)
     _MFC_2 = ConfigOption('MFC_2', 1)
@@ -105,20 +116,20 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         self._ard = self.arduino_uno()
         self._MFC = self.MFC()
-        self._ard.pin_on(3)
+
     def on_deactivate(self):
         """ Perform required deactivation. """
 
-    def valve(self, NbValve, state):
+    def valve(self, pin, state):
         """ Open only 1 valve 
         @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
         input example: ' 'state' '
-        @param NbValve : The ^pin number link to the valve
+        @param NbValve : The pin link to the valve
         """
         if state == 1:
-            self._ard.pin_on(NbValve)
+            self._ard.pin_on(pin)
         elif state == 0:
-            self._ard.pin_off(NbValve)
+            self._ard.pin_off(pin)
 
     def prepare_odor(self, odor_number):
         """
@@ -127,45 +138,36 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
 
         if odor_number == 1:
-
-            self._ard.pin_on(1)
-            self._ard.pin_on(2)
-            self._ard.pin_off(3)
+            self.valve(self._valve_odor_1_in,1)
+            self.valve(self._valve_odor_1_out, 1)
+            self.valve(self._mixing_valve, 0)
         elif odor_number == 2:
-            self._ard.pin_on(6)
-            self._ard.pin_on(7)
-            self._ard.pin_off(3)
+            self.valve(self._valve_odor_2_in, 1)
+            self.valve(self._valve_odor_2_out, 1)
+            self.valve(self._mixing_valve, 0)
         elif odor_number == 3:
-            self._ard.pin_on(8)
-            self._ard.pin_on(9)
-            self._ard.pin_off(3)
+            self.valve(self._valve_odor_3_in, 1)
+            self.valve(self._valve_odor_3_out, 1)
+            self.valve(self._mixing_valve, 0)
         elif odor_number == 4:
-            self._ard.pin_on(10)
-            self._ard.pin_on(11)
-            self._ard.pin_off(3)
-        #elif odor_number == 5:
-        #self._ard.pin_on('12')
-        #self._ard.pin_on('13')
-        #self._ard.pin_on('3')
+            self.valve(self._valve_odor_4_in, 1)
+            self.valve(self._valve_odor_4_out, 1)
+            self.valve(self._mixing_valve, 0)
         else:
             print('4 odor only')
 
     def flush_odor(self):
         """ Close all the valves that need to be closed
         """
-        self._ard.pin_off(1)
-        self._ard.pin_off(2)
-        self._ard.pin_on(3)
-        self._ard.pin_off(4)
-        self._ard.pin_off(5)
-        self._ard.pin_off(6)
-        self._ard.pin_off(7)
-        self._ard.pin_off(8)
-        self._ard.pin_off(9)
-        self._ard.pin_off(10)
-        self._ard.pin_off(11)
-        self._ard.pin_off(12)
-        self._ard.pin_off(13)
+        self.valve(self._valve_odor_1_in, 0)
+        self.valve(self._valve_odor_1_out, 0)
+        self.valve(self._valve_odor_2_in, 0)
+        self.valve(self._valve_odor_2_out, 0)
+        self.valve(self._valve_odor_3_in, 0)
+        self.valve(self._valve_odor_3_out, 0)
+        self.valve(self._valve_odor_4_in, 0)
+        self.valve(self._mixing_valve, 0)
+        self.valve(self._final_valve, 0)
         print('Odor circuit off')
 
     def open_air(self, flow1, flow2, flow3):
@@ -199,6 +201,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         A3 = self._MFC.average_measure(self._MFC_2, 20)
 
         return A1, A2, A3
+
     def get_flowrate(self):
         """
         """

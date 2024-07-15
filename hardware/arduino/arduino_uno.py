@@ -57,16 +57,18 @@ class ArduinoUno(Base):
     def on_deactivate(self):
         pass
 
-    def send_command(self,pin, state):
+    def send_command(self, pin, state):
         # Create the command string
         command = f"{pin}{state}\n"
         # Send the command to the Arduino
         self.arduino.write(command.encode())
         # Wait for a response from the Arduino
         time.sleep(0.1)
+        # Read and print all available responses from the Arduino
         while self.arduino.in_waiting:
             response = self.arduino.readline().decode().strip()
             print("Arduino:", response)
+
 
     def pin_on(self, pin):
         self.send_command(pin, 1)

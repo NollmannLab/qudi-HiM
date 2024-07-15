@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1335</width>
-    <height>1026</height>
+    <width>1404</width>
+    <height>1130</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -37,7 +37,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1335</width>
+     <width>1404</width>
      <height>21</height>
     </rect>
    </property>
@@ -68,8 +68,8 @@
     <widget class="QToolButton" name="toolButton_2">
      <property name="geometry">
       <rect>
-       <x>820</x>
-       <y>90</y>
+       <x>920</x>
+       <y>150</y>
        <width>141</width>
        <height>41</height>
       </rect>
@@ -81,8 +81,8 @@
     <widget class="QToolButton" name="toolButton_6">
      <property name="geometry">
       <rect>
-       <x>980</x>
-       <y>190</y>
+       <x>1080</x>
+       <y>200</y>
        <width>221</width>
        <height>91</height>
       </rect>
@@ -94,8 +94,8 @@
     <widget class="QToolButton" name="toolButton_5">
      <property name="geometry">
       <rect>
-       <x>980</x>
-       <y>90</y>
+       <x>1080</x>
+       <y>100</y>
        <width>221</width>
        <height>91</height>
       </rect>
@@ -124,8 +124,8 @@ p, li { white-space: pre-wrap; }
     <widget class="QToolButton" name="toolButton_7">
      <property name="geometry">
       <rect>
-       <x>770</x>
-       <y>190</y>
+       <x>870</x>
+       <y>250</y>
        <width>101</width>
        <height>41</height>
       </rect>
@@ -137,8 +137,8 @@ p, li { white-space: pre-wrap; }
     <widget class="QToolButton" name="toolButton_3">
      <property name="geometry">
       <rect>
-       <x>670</x>
-       <y>140</y>
+       <x>770</x>
+       <y>200</y>
        <width>141</width>
        <height>41</height>
       </rect>
@@ -150,8 +150,8 @@ p, li { white-space: pre-wrap; }
     <widget class="QToolButton" name="toolButton_4">
      <property name="geometry">
       <rect>
-       <x>820</x>
-       <y>140</y>
+       <x>920</x>
+       <y>200</y>
        <width>141</width>
        <height>41</height>
       </rect>
@@ -163,8 +163,8 @@ p, li { white-space: pre-wrap; }
     <widget class="QToolButton" name="toolButton_1">
      <property name="geometry">
       <rect>
-       <x>670</x>
-       <y>90</y>
+       <x>770</x>
+       <y>150</y>
        <width>141</width>
        <height>41</height>
       </rect>
@@ -176,8 +176,8 @@ p, li { white-space: pre-wrap; }
     <widget class="QTextEdit" name="textEdit_2">
      <property name="geometry">
       <rect>
-       <x>830</x>
-       <y>40</y>
+       <x>930</x>
+       <y>50</y>
        <width>231</width>
        <height>31</height>
       </rect>
@@ -210,10 +210,10 @@ p, li { white-space: pre-wrap; }
     <widget class="PlotWidget" name="flowrate_PlotWidget_1">
      <property name="geometry">
       <rect>
-       <x>350</x>
+       <x>330</x>
        <y>70</y>
-       <width>191</width>
-       <height>191</height>
+       <width>431</width>
+       <height>331</height>
       </rect>
      </property>
     </widget>
@@ -344,19 +344,19 @@ p, li { white-space: pre-wrap; }
       <rect>
        <x>30</x>
        <y>320</y>
-       <width>70</width>
+       <width>81</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 2</string>
+      <string>Valve 1 out</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_F">
      <property name="geometry">
       <rect>
-       <x>310</x>
-       <y>320</y>
+       <x>110</x>
+       <y>380</y>
        <width>70</width>
        <height>17</height>
       </rect>
@@ -366,10 +366,13 @@ p, li { white-space: pre-wrap; }
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_M">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="geometry">
       <rect>
-       <x>310</x>
-       <y>290</y>
+       <x>110</x>
+       <y>350</y>
        <width>81</width>
        <height>17</height>
       </rect>
@@ -378,387 +381,104 @@ p, li { white-space: pre-wrap; }
       <string>Mixing valve</string>
      </property>
      <property name="checked">
-      <bool>true</bool>
+      <bool>false</bool>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_3">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>100</x>
+       <x>110</x>
        <y>290</y>
        <width>70</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 3</string>
+      <string>Valve 2 in</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_5">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>170</x>
+       <x>190</x>
        <y>290</y>
        <width>70</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 5</string>
+      <string>Valve 3 in</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_4">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>100</x>
+       <x>110</x>
        <y>320</y>
-       <width>70</width>
+       <width>81</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 4</string>
+      <string>Valve 2 out</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_8">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>240</x>
-       <y>320</y>
-       <width>70</width>
+       <x>30</x>
+       <y>380</y>
+       <width>81</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 8</string>
+      <string>Valve 4 out</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_7">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>240</x>
-       <y>290</y>
+       <x>30</x>
+       <y>350</y>
        <width>70</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 7</string>
+      <string>Valve 4 in</string>
      </property>
     </widget>
     <widget class="QCheckBox" name="checkBox_6">
      <property name="enabled">
-      <bool>false</bool>
+      <bool>true</bool>
      </property>
      <property name="geometry">
       <rect>
-       <x>170</x>
+       <x>190</x>
        <y>320</y>
-       <width>70</width>
+       <width>81</width>
        <height>17</height>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 6</string>
+      <string>Valve 3 out</string>
      </property>
-    </widget>
-    <widget class="QFrame" name="frame">
-     <property name="geometry">
-      <rect>
-       <x>270</x>
-       <y>370</y>
-       <width>761</width>
-       <height>521</height>
-      </rect>
-     </property>
-     <property name="styleSheet">
-      <string notr="true">border-image: url(:/olfactometre/olfactomettre.PNG);</string>
-     </property>
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
-     <property name="lineWidth">
-      <number>1</number>
-     </property>
-     <widget class="QLabel" name="label_5">
-      <property name="geometry">
-       <rect>
-        <x>210</x>
-        <y>60</y>
-        <width>41</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string>MFC 1</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_6">
-      <property name="geometry">
-       <rect>
-        <x>210</x>
-        <y>280</y>
-        <width>47</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string>MFC 2</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_7">
-      <property name="geometry">
-       <rect>
-        <x>200</x>
-        <y>380</y>
-        <width>47</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string>MFC 2</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_8">
-      <property name="geometry">
-       <rect>
-        <x>320</x>
-        <y>130</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V1</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_9">
-      <property name="geometry">
-       <rect>
-        <x>360</x>
-        <y>130</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V2</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_10">
-      <property name="geometry">
-       <rect>
-        <x>400</x>
-        <y>130</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V3</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_11">
-      <property name="geometry">
-       <rect>
-        <x>440</x>
-        <y>130</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V4</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_12">
-      <property name="geometry">
-       <rect>
-        <x>300</x>
-        <y>310</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V4</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_13">
-      <property name="geometry">
-       <rect>
-        <x>340</x>
-        <y>310</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V4</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_14">
-      <property name="geometry">
-       <rect>
-        <x>380</x>
-        <y>310</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V4</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_15">
-      <property name="geometry">
-       <rect>
-        <x>440</x>
-        <y>310</y>
-        <width>20</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="text">
-       <string> V4</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_16">
-      <property name="geometry">
-       <rect>
-        <x>500</x>
-        <y>240</y>
-        <width>31</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">border-color: rgb(255, 0, 0);
-border-top-color: rgb(255, 0, 0);</string>
-      </property>
-      <property name="text">
-       <string>   M</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_17">
-      <property name="geometry">
-       <rect>
-        <x>520</x>
-        <y>250</y>
-        <width>31</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">border-color: rgb(255, 0, 0);
-border-top-color: rgb(255, 0, 0);</string>
-      </property>
-      <property name="text">
-       <string>   M</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_18">
-      <property name="geometry">
-       <rect>
-        <x>660</x>
-        <y>80</y>
-        <width>51</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">border-color: rgb(255, 0, 0);</string>
-      </property>
-      <property name="text">
-       <string>  Arena</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_19">
-      <property name="geometry">
-       <rect>
-        <x>540</x>
-        <y>280</y>
-        <width>51</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="autoFillBackground">
-       <bool>false</bool>
-      </property>
-      <property name="styleSheet">
-       <string notr="true">border-color: rgb(255, 0, 0);
-border-top-color: rgb(255, 0, 0);</string>
-      </property>
-      <property name="frameShape">
-       <enum>QFrame::NoFrame</enum>
-      </property>
-      <property name="frameShadow">
-       <enum>QFrame::Sunken</enum>
-      </property>
-      <property name="text">
-       <string>     AIR</string>
-      </property>
-     </widget>
     </widget>
     <widget class="QCheckBox" name="checkBox">
      <property name="geometry">
@@ -770,7 +490,7 @@ border-top-color: rgb(255, 0, 0);</string>
       </rect>
      </property>
      <property name="text">
-      <string>Valve 1</string>
+      <string>Valve 1 in</string>
      </property>
     </widget>
     <widget class="QLabel" name="label_4">
@@ -786,6 +506,241 @@ border-top-color: rgb(255, 0, 0);</string>
       <string>sL/min</string>
      </property>
     </widget>
+    <widget class="QLabel" name="label_5">
+     <property name="geometry">
+      <rect>
+       <x>130</x>
+       <y>420</y>
+       <width>1231</width>
+       <height>611</height>
+      </rect>
+     </property>
+     <property name="autoFillBackground">
+      <bool>false</bool>
+     </property>
+     <property name="styleSheet">
+      <string notr="true">image: url(:/Odor off/Schema fluidic odors on.PNG);
+</string>
+     </property>
+     <property name="frameShape">
+      <enum>QFrame::Panel</enum>
+     </property>
+     <property name="text">
+      <string/>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_MFCpurge">
+     <property name="geometry">
+      <rect>
+       <x>1080</x>
+       <y>500</y>
+       <width>47</width>
+       <height>13</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Off</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_MFC1">
+     <property name="geometry">
+      <rect>
+       <x>1080</x>
+       <y>680</y>
+       <width>47</width>
+       <height>13</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Off</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_MFC2">
+     <property name="geometry">
+      <rect>
+       <x>1090</x>
+       <y>820</y>
+       <width>47</width>
+       <height>13</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Off</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4in">
+     <property name="geometry">
+      <rect>
+       <x>680</x>
+       <y>590</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_1in">
+     <property name="geometry">
+      <rect>
+       <x>860</x>
+       <y>590</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_2in">
+     <property name="geometry">
+      <rect>
+       <x>800</x>
+       <y>590</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_3in">
+     <property name="geometry">
+      <rect>
+       <x>740</x>
+       <y>590</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_2out">
+     <property name="geometry">
+      <rect>
+       <x>800</x>
+       <y>810</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_3out">
+     <property name="geometry">
+      <rect>
+       <x>740</x>
+       <y>810</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_1out">
+     <property name="geometry">
+      <rect>
+       <x>860</x>
+       <y>810</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4out">
+     <property name="geometry">
+      <rect>
+       <x>680</x>
+       <y>810</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_M">
+     <property name="geometry">
+      <rect>
+       <x>600</x>
+       <y>660</y>
+       <width>31</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
+    <widget class="QToolButton" name="Activate">
+     <property name="geometry">
+      <rect>
+       <x>770</x>
+       <y>100</y>
+       <width>291</width>
+       <height>31</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Activate</string>
+     </property>
+    </widget>
+    <zorder>label_5</zorder>
+    <zorder>toolButton_2</zorder>
+    <zorder>toolButton_6</zorder>
+    <zorder>toolButton_5</zorder>
+    <zorder>textEdit_3</zorder>
+    <zorder>toolButton_7</zorder>
+    <zorder>toolButton_3</zorder>
+    <zorder>toolButton_4</zorder>
+    <zorder>toolButton_1</zorder>
+    <zorder>textEdit_2</zorder>
+    <zorder>textEdit</zorder>
+    <zorder>flowrate_PlotWidget_1</zorder>
+    <zorder>doubleSpinBox</zorder>
+    <zorder>doubleSpinBox_2</zorder>
+    <zorder>doubleSpinBox_3</zorder>
+    <zorder>label</zorder>
+    <zorder>label_2</zorder>
+    <zorder>label_3</zorder>
+    <zorder>textEdit_4</zorder>
+    <zorder>checkBox_2</zorder>
+    <zorder>checkBox_F</zorder>
+    <zorder>checkBox_M</zorder>
+    <zorder>checkBox_3</zorder>
+    <zorder>checkBox_5</zorder>
+    <zorder>checkBox_4</zorder>
+    <zorder>checkBox_8</zorder>
+    <zorder>checkBox_7</zorder>
+    <zorder>checkBox_6</zorder>
+    <zorder>checkBox</zorder>
+    <zorder>label_4</zorder>
+    <zorder>label_MFCpurge</zorder>
+    <zorder>label_MFC1</zorder>
+    <zorder>label_MFC2</zorder>
+    <zorder>label_4in</zorder>
+    <zorder>label_1in</zorder>
+    <zorder>label_2in</zorder>
+    <zorder>label_3in</zorder>
+    <zorder>label_2out</zorder>
+    <zorder>label_3out</zorder>
+    <zorder>label_1out</zorder>
+    <zorder>label_4out</zorder>
+    <zorder>label_M</zorder>
+    <zorder>Activate</zorder>
    </widget>
   </widget>
   <action name="start_flow_measurement_Action">
@@ -811,7 +766,7 @@ border-top-color: rgb(255, 0, 0);</string>
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="Image.qrc"/>
+  <include location="image/Image.qrc"/>
  </resources>
  <connections/>
 </ui>
