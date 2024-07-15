@@ -2,9 +2,7 @@ name: qudi
 channels:
   - defaults
 dependencies:
-  - _tflow_select=2.1.0=gpu
-  - absl-py=0.15.0=pyhd3eb1b0_0
-  - astor=0.8.1=py36haa95532_0
+  - astropy=3.0.4=py36hfa6e2cd_0
   - atomicwrites=1.4.0=py_0
   - attrs=21.2.0=pyhd3eb1b0_0
   - backcall=0.1.0=py36_0
@@ -14,19 +12,12 @@ dependencies:
   - certifi=2021.5.30=py36haa95532_0
   - cloudpickle=1.6.0=py_0
   - colorama=0.3.9=py36h029ae33_0
-  - cudatoolkit=9.0=1
-  - cudnn=7.6.5=cuda9.0_0
   - cycler=0.10.0=py36h009560c_0
   - cython=0.28.3=py36hfa6e2cd_0
   - dask-core=2021.3.0=pyhd3eb1b0_0
-  - dataclasses=0.8=pyh4f3eec9_6
   - decorator=4.3.0=py36_0
   - entrypoints=0.2.3=py36hfd66bb0_2
   - freetype=2.8=h51f8f2c_1
-  - gast=0.5.3=pyhd3eb1b0_0
-  - grpcio=1.12.1=py36h1a1b453_0
-  - h5py=2.8.0=py36h3bdd7fb_2
-  - hdf5=1.10.2=hac2f561_1
   - html5lib=1.0.1=py36h047fa9f_0
   - icc_rt=2017.0.4=h97af966_0
   - icu=58.2=ha66f8fd_1
@@ -47,13 +38,9 @@ dependencies:
   - jupyter_client=5.2.3=py36_0
   - jupyter_console=5.2.0=py36h6d89b47_1
   - jupyter_core=4.4.0=py36h56e9d50_0
-  - keras=2.6.0=pyhd3eb1b0_0
-  - keras-applications=1.0.8=py_1
-  - keras-preprocessing=1.1.2=pyhd3eb1b0_0
   - kiwisolver=1.0.1=py36h12c3424_0
   - libiconv=1.15=h1df5818_7
   - libpng=1.6.34=h79bbb47_0
-  - libprotobuf=3.6.0=h1a1b453_0
   - libsodium=1.0.16=h9d3ae62_0
   - libtiff=4.0.9=hb8ad9f9_1
   - libxml2=2.9.8=hadb2253_1
@@ -64,7 +51,6 @@ dependencies:
   - m2w64-gcc-libs-core=5.3.0=7
   - m2w64-gmp=6.1.0=2
   - m2w64-libwinpthread-git=5.0.0.4634.697f757=2
-  - markdown=3.3.4=py36haa95532_0
   - markupsafe=1.0=py36h0e26971_1
   - matplotlib=2.2.2=py36h153e9ff_1
   - mistune=0.8.3=py36hfa6e2cd_1
@@ -77,8 +63,9 @@ dependencies:
   - nbformat=4.4.0=py36h3a5bc1b_0
   - networkx=2.5.1=pyhd3eb1b0_0
   - notebook=5.5.0=py36_0
+  - numpy=1.14.5=py36h9fa60d3_0
+  - numpy-base=1.14.5=py36h5c71026_0
   - olefile=0.45.1=py36_0
-  - opencv=3.3.1=py36h20b85fd_1
   - openssl=1.0.2p=hfa6e2cd_0
   - packaging=20.9=pyhd3eb1b0_0
   - pandas=0.23.4=py36h830ac7b_0
@@ -87,16 +74,13 @@ dependencies:
   - parso=0.2.1=py36_0
   - pickleshare=0.7.4=py36h9de030f_0
   - pillow=5.1.0=py36h0738816_0
-  - pip=21.1.2=py36haa95532_0
   - pluggy=0.13.1=py36haa95532_0
   - prompt_toolkit=1.0.15=py36h60b8f86_0
-  - protobuf=3.6.0=py36he025d50_0
   - psutil=5.4.7=py36hfa6e2cd_0
   - py=1.10.0=pyhd3eb1b0_0
   - pygments=2.2.0=py36hb010967_0
   - pyparsing=2.2.0=py36h785a196_1
   - pyqt=5.9.2=py36h1aa27d4_0
-  - pyserial=3.4=py_2
   - pytest=6.2.3=py36haa95532_2
   - pytest-arraydiff=0.3=py36h39e3cac_0
   - pytest-astropy=0.6.0=py_0
@@ -114,7 +98,6 @@ dependencies:
   - qt=5.9.6=vc14h62aca36_0
   - qtconsole=4.3.1=py36h99a29a9_0
   - scikit-image=0.14.0=py36h6538335_1
-  - scikit-learn=0.20.0=py36heebcf9a_1
   - scipy=1.1.0=py36hc28095f_0
   - send2trash=1.5.0=py36_0
   - setuptools=39.2.0=py36_0
@@ -124,10 +107,6 @@ dependencies:
   - sqlite=3.24.0=h7602738_0
   - tbb=2018.0.5=he980bc4_0
   - tbb4py=2018.0.5=py36he980bc4_0
-  - tensorboard=1.12.0=py36he025d50_0
-  - tensorflow=1.12.0=gpu_py36ha5f9131_0
-  - tensorflow-base=1.12.0=gpu_py36h6e53903_0
-  - termcolor=1.1.0=py36haa95532_1
   - terminado=0.8.1=py36_1
   - testpath=0.3.1=py36h2698cfe_0
   - tk=8.6.7=hcb92d03_3
@@ -141,7 +120,6 @@ dependencies:
   - vs2015_runtime=14.0.25123=3
   - wcwidth=0.1.7=py36h3d5aa90_0
   - webencodings=0.5.1=py36h67c50ae_1
-  - werkzeug=2.0.3=pyhd3eb1b0_0
   - wheel=0.31.1=py36_0
   - widgetsnbextension=3.2.1=py36_0
   - wincertstore=0.2=py36h7fe50ca_0
@@ -152,22 +130,24 @@ dependencies:
   - zlib=1.2.11=h8395fce_2
   - pip:
       - asteval==0.9.12
-      - astropy==4.1
+      - fluigent-sdk==19.0.0
       - future==0.16.0
       - fysom==2.1.5
       - gitdb2==2.0.3
       - gitpython==2.1.10
+      - install==1.3.5
       - intelhex==2.3.0
       - iso8601==0.1.12
       - lmfit==0.9.10
       - nidaqmx==0.5.7
-      - numpy==1.19.5
-      - photutils==1.0.2
+      - nifpga==20.0.0
+      - pip==21.1.2
       - pipython==2.3.0.3
       - plumbum==1.6.6
       - pydaqmx==1.4.1
       - pyflowgraph-qo==0.0.3.1
       - pyqtgraph-qo==0.10.0.4
+      - pyserial==3.5
       - pyvisa==1.9.0
       - qtpy==1.4.2
       - rpyc==4.0.2
@@ -178,9 +158,8 @@ dependencies:
       - sensirion-shdlc-driver==0.1.5
       - sensirion-shdlc-sensorbridge==0.2.0
       - sensirion-uart-sfx6xxx==1.0.0
-      - serial==0.0.66
+      - simple-pid==1.0.1
       - smmap2==2.0.3
-      - tifffile==2020.9.3
       - typing==3.6.4
       - uncertainties==3.0.2
 prefix: C:\Users\CBS\anaconda3\envs\qudi
