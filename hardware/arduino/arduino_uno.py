@@ -34,6 +34,10 @@ import serial
 
 from core.configoption import ConfigOption
 from core.module import Base
+import logging
+
+logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class ArduinoUno(Base):
@@ -44,8 +48,7 @@ class ArduinoUno(Base):
         try:
             self.arduino = serial.Serial(self._arduino_port, 9600, timeout=1)
         except Exception as err:
-            print('if could not open port : Verify that the arduino is connected on COM3')
-            print('if access refused: close every arduino user software')
+            logger.error('if could not open port : Verify that the arduino is connected on COM3, if access refused: close every arduino user software')
             self.arduino.close()
 
     def on_activate(self):

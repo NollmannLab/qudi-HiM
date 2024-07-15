@@ -41,11 +41,16 @@ from qtpy.QtCore import Signal
 from core.configoption import ConfigOption
 from gui.guibase import GUIBase
 from core.connector import Connector
+import logging
+
+logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(QtWidgets.QMainWindow):
     """ Class defined for the main window for odor control.
     """
+
     def __init__(self, close_function):
         super().__init__()
         this_dir = os.path.dirname(__file__)
@@ -53,10 +58,6 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi(ui_file, self)
         self.close_function = close_function
         self.show()
-
-
-
-
 
     def closeEvent(self, event):
         self.close_function()
@@ -79,6 +80,9 @@ class OdorCircuitGUI(GUIBase):
     _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
     _mixing_valve = ConfigOption('mixing_valve', 9)
     _final_valve = ConfigOption('final_valve', 8)
+    _path_MFC1 = ConfigOption('path_MFC1', None)
+    _path_MFC2 = ConfigOption('path_MFC2', None)
+    _path_MFCPurge = ConfigOption('path_MFCPurge', None)
     valve_odor_1_in = 0
     valve_odor_2_in = 0
     valve_odor_3_in = 0
@@ -89,7 +93,7 @@ class OdorCircuitGUI(GUIBase):
     valve_odor_4_out = 0
     mixing_valve = 0
     final_valve = 0
-    MFC_status=False
+    MFC_status = False
 
     sigStartFlowMeasure = QtCore.Signal()
     sigStopFlowMeasure = QtCore.Signal()
@@ -106,9 +110,10 @@ class OdorCircuitGUI(GUIBase):
     sigButton7Clicked = Signal()
     sigMFC_ON = Signal()
     sigMFC_OFF = Signal()
-    sigActivateClicked= Signal()
+    sigActivateClicked = Signal()
     pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
     pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
+
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self._odor_circuit_arduino_logic = None
@@ -139,18 +144,10 @@ class OdorCircuitGUI(GUIBase):
         self.pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
         self.pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
 
-        # Check and set pixmap for label_5 in _mw or _dw
-        if isinstance(self._mw, MainWindow):
-            self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
-        else:
-            print("Error: _mw is not an instance of MainWindow")
-
-        if isinstance(self._dw, QtWidgets.QDockWidget):
-            self.label_5 = QLabel()
-            self._dw.setWidget(self.label_5)  # Set label_5 within _dw
-            self.label_5.setPixmap(self.pixmap2)  # Set initial pixmap for label_5 in _dw
-        else:
-            print("Error: _dw is not initialized correctly or is None")
+        self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
+        self.label_5 = QLabel()
+        self._dw.setWidget(self.label_5)  # Set label_5 within _dw
+        self.label_5.setPixmap(self.pixmap2)  # Set initial pixmap for label_5 in _dw
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
@@ -193,8 +190,6 @@ class OdorCircuitGUI(GUIBase):
         self.sigButton7Clicked.connect(lambda: self.on_deactivate())
         self.sigActivateClicked.connect(lambda: self.ActivateClicked)
 
-
-
     def on_deactivate(self):
         """ Steps of deactivation required.
         """
@@ -236,9 +231,12 @@ class OdorCircuitGUI(GUIBase):
         self._mw.flowrate_PlotWidget_1.addLegend()
 
         # Initial plot setup
-        self._flowrate1_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate1_data, pen=(255, 0, 0), name='MFC1')
-        self._flowrate2_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate2_data, pen=(0, 255, 0), name='MFC2')
-        self._flowrate3_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate3_data, pen=(0, 0, 255), name='MFC_purge')
+        self._flowrate1_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate1_data,
+                                                                        pen=(255, 0, 0), name='MFC1')
+        self._flowrate2_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate2_data,
+                                                                        pen=(0, 255, 0), name='MFC2')
+        self._flowrate3_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate3_data,
+                                                                        pen=(0, 0, 255), name='MFC_purge')
 
         # toolbar actions: internal signals
         self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
@@ -266,27 +264,27 @@ class OdorCircuitGUI(GUIBase):
                 count_on_associations += 1
                 active_associations.append(odor)
             elif valves_status[in_valve] == '1' and valves_status[out_valve] == '0':
-                print(f"You need to open {out_valve}")
+                logger.error(f"You need to open {out_valve}")
                 return 0
             elif valves_status[out_valve] == '1' and valves_status[in_valve] == '0':
-                print(f"You need to open {in_valve}")
+                logger.error(f"You need to open {in_valve}")
                 return 0
 
         # Determine action based on mixing valve status and count of active associations
         if count_on_associations > 1:
-            print('You need to close all but one pair of valves')
+            logger.error('You need to close all but one pair of valves')
             return 0
         elif count_on_associations == 1 and valves_status['mixing_valve'] == '1':
-            print(f'MFC2 cannot operate because {active_associations[0]} and the mixing valve are both on.')
+            logger.error(f'MFC2 cannot operate because {active_associations[0]} and the mixing valve are both on.')
             return 0
         elif count_on_associations == 1 and valves_status['mixing_valve'] == '0':
-            print(f'MFC2 can operate for {active_associations[0]}')
+            logger.info(f'MFC2 operates for {active_associations[0]}')
             return 1
         elif count_on_associations == 0 and valves_status['mixing_valve'] == '1':
-            print('MFC2 can operate.')
+            logger.info('MFC2 operates with mixing valve.')
             return 1
         elif count_on_associations == 0 and valves_status['mixing_valve'] == '0':
-            print('You need to open the Mixing Valve first')
+            logger.error('You need to open the Mixing Valve first')
             return 0
 
     def ActivateClicked(self):
@@ -307,7 +305,7 @@ class OdorCircuitGUI(GUIBase):
     def on_button1_clicked(self):
         """ Open valves for odor 1 in and out
         """
-        print("Odor 1 chosen")
+        logger.info("Odor 1 chosen")
         self.sigButton1Clicked.emit()
         self.disable_odor_buttons()
         self.valves_status['valve_odor_1_in'] = '1'
@@ -326,46 +324,42 @@ class OdorCircuitGUI(GUIBase):
     def on_button2_clicked(self):
         """ Open valves for odor 2 in and out
         """
-        print("Odor 2 chosen")
+        logger.info("Odor 2 chosen")
         self.sigButton2Clicked.emit()
         self.disable_odor_buttons()
         self.valves_status['valve_odor_2_in'] = '1'
         self.valves_status['valve_odor_2_out'] = '1'
 
-
     def on_button3_clicked(self):
         """ Open valves for odor 3 in and out
         """
-        print("Odor 3 chosen")
+        logger.info("Odor 3 chosen")
         self.sigButton3Clicked.emit()
         self.disable_odor_buttons()
         self.valves_status['valve_odor_3_in'] = '1'
         self.valves_status['valve_odor_3_out'] = '1'
 
-
     def on_button4_clicked(self):
         """ Open valves for odor 4 in and out
         """
-        print("Odor 4 chosen")
+        logger.info("Odor 4 chosen")
         self.sigButton4Clicked.emit()
         self.disable_odor_buttons()
         self.valves_status['valve_odor_4_in'] = '1'
         self.valves_status['valve_odor_4_out'] = '1'
 
-
     def on_button5_clicked(self):
         """ Open the final valve to send odor
         """
-        print("Sending odor...")
+        logger.info("Sending odor...")
         self.sigButton5Clicked.emit()
         self._mw.toolButton_5.setDisabled(True)
         self.valves_status['final_valve'] = '1'
 
-
     def on_button6_clicked(self):
         """ Wipe the odor from the fly arena
         """
-        print("Cleaning system in progress...")
+        logger.info("Cleaning system in progress...")
         self.sigButton6Clicked.emit()
         self.enable_odor_buttons()
         self._mw.toolButton_5.setDisabled(False)
@@ -432,6 +426,7 @@ class OdorCircuitGUI(GUIBase):
         else:
 
             self._mw.label_5.setPixmap(self.pixmap2)
+
     def check_box_changed(self, state):
         '''Check the state of the valves box and turn on or off the devise
         if check, turn on; if unchecked, turn off.'''
@@ -522,7 +517,7 @@ class OdorCircuitGUI(GUIBase):
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
                 self.valves_status['mixing_valve'] = '1'
-                self.update_valve_label(self._mw.label_M,1)
+                self.update_valve_label(self._mw.label_M, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
                 self.valves_status['mixing_valve'] = '0'
@@ -540,19 +535,17 @@ class OdorCircuitGUI(GUIBase):
         Permission = self.check_valves(self.valves_status)
         if not self.MFC_status:
             if Permission == 1:
-                print("Opening air...")
+                logger.info("Opening air...")
                 self.sigMFC_ON.emit()
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
-                self.MFC_status=True
+                self.MFC_status = True
             else:
-                print()
+                logger.info("")
         else:
-            print("Closing air...")
+            logger.info("Closing air...")
             self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
             self.sigMFC_OFF.emit()
             self.MFC_status = False
-
-
 
     def disable_odor_buttons(self):
         """ Disables buttons, to not mix all odors.
@@ -582,9 +575,9 @@ class OdorCircuitGUI(GUIBase):
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
-            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC1', self.flowrate1_data)
-            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC2', self.flowrate2_data)
-            np.savetxt(r'C:\Users\CBS\Documents\flow\MFC3', self.flowrate3_data)
+            np.savetxt(self._path_MFC1, self.flowrate1_data)
+            np.savetxt(self._path_MFC2, self.flowrate2_data)
+            np.savetxt(self._path_MFCPurge, self.flowrate3_data)
         else:
             self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
             self.t_data = []

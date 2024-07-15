@@ -34,6 +34,10 @@ from qtpy import QtCore
 import time
 import numpy as np
 from core.configoption import ConfigOption
+import logging
+
+logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 
 # ======================================================================================================================
@@ -154,7 +158,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
             self.valve(self._valve_odor_4_out, 1)
             self.valve(self._mixing_valve, 0)
         else:
-            print('4 odor only')
+            logger.warning('4 odor only')
 
     def flush_odor(self):
         """ Close all the valves that need to be closed
