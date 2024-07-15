@@ -111,6 +111,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.close_function = close_function
         self.show()
         self._iw = ImageWindow()
+
     def closeEvent(self, event):
         self.close_function()
         event.accept()
@@ -168,8 +169,8 @@ class OdorCircuitGUI(GUIBase):
     sigMFC_ON = Signal()
     sigMFC_OFF = Signal()
     sigActivateClicked = Signal()
-    pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
-    pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
+    pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
+    pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -198,10 +199,20 @@ class OdorCircuitGUI(GUIBase):
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
         self._iw = ImageWindow()
         self._dw = QtWidgets.QDockWidget()  # Initialize QDockWidget
+        if isinstance(self._mw, MainWindow):
+            self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
+        else:
+            print("Error: _mw is not an instance of MainWindow")
 
+        if isinstance(self._dw, QtWidgets.QDockWidget):
+            self.label_5 = QLabel()
+            self._dw.setWidget(self.label_5)  # Set label_5 within _dw
+            self.label_5.setPixmap(self.pixmap1)  # Set initial pixmap for label_5 in _dw
+        else:
+            print("Error: _dw is not initialized correctly or is None")
         # Assuming self.pixmap1 and self.pixmap2 are already defined
-        self.pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
-        self.pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
+        self.pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
+        self.pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
 
         self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
         self.label_5 = QLabel()
