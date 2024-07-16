@@ -36,7 +36,7 @@ import numpy as np
 from core.configoption import ConfigOption
 import logging
 
-logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
+logging.basicConfig(filename='Fly Arena/logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
