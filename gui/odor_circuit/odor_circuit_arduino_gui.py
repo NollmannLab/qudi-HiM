@@ -361,6 +361,7 @@ class OdorCircuitGUI(GUIBase):
     def ActivateClicked(self):
 
         self.sigActivateClicked.emit()
+        self._mw.checkBox_M.setChecked(True)
         self._mw.checkBox.setDisabled(True)
         self._mw.checkBox_2.setDisabled(True)
         self._mw.checkBox_3.setDisabled(True)
@@ -381,16 +382,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_1_in'] = '1'
         self.valves_status['valve_odor_1_out'] = '1'
-        self._mw.checkBox.setDisabled(True)
-        self._mw.checkBox_2.setDisabled(True)
-        self._mw.checkBox_3.setDisabled(True)
-        self._mw.checkBox_4.setDisabled(True)
-        self._mw.checkBox_5.setDisabled(True)
-        self._mw.checkBox_6.setDisabled(True)
-        self._mw.checkBox_7.setDisabled(True)
-        self._mw.checkBox_8.setDisabled(True)
-        self._mw.checkBox_M.setDisabled(True)
-        self._mw.checkBox_F.setDisabled(True)
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 1)
+        self.update_valve_label(self._mw.label_1out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button2_clicked(self):
         """ Open valves for odor 2 in and out
@@ -400,6 +395,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_2_in'] = '1'
         self.valves_status['valve_odor_2_out'] = '1'
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_2in, 1)
+        self.update_valve_label(self._mw.label_2out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button3_clicked(self):
         """ Open valves for odor 3 in and out
@@ -409,6 +408,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_3_in'] = '1'
         self.valves_status['valve_odor_3_out'] = '1'
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_3in, 1)
+        self.update_valve_label(self._mw.label_3out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button4_clicked(self):
         """ Open valves for odor 4 in and out
@@ -418,7 +421,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_4_in'] = '1'
         self.valves_status['valve_odor_4_out'] = '1'
-
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_4in, 1)
+        self.update_valve_label(self._mw.label_4out, 1)
+        self._mw.checkBox_M.setChecked(False)
     def on_button5_clicked(self):
         """ Open the final valve to send odor
         """
@@ -426,6 +432,8 @@ class OdorCircuitGUI(GUIBase):
         self.sigButton5Clicked.emit()
         self._mw.toolButton_5.setDisabled(True)
         self.valves_status['final_valve'] = '1'
+        self.update_final_valve_label(1)
+
 
     def on_button6_clicked(self):
         """ Wipe the odor from the fly arena
@@ -444,7 +452,15 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['valve_odor_4_in'] = '0'
         self.valves_status['valve_odor_4_out'] = '0'
         self.valves_status['mixing_valve'] = '0'
-        self.valves_status['final_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 0)
+        self.update_valve_label(self._mw.label_1out, 0)
+        self.update_valve_label(self._mw.label_2in, 0)
+        self.update_valve_label(self._mw.label_2out, 0)
+        self.update_valve_label(self._mw.label_3in, 0)
+        self.update_valve_label(self._mw.label_3out, 0)
+        self.update_valve_label(self._mw.label_4in, 0)
+        self.update_valve_label(self._mw.label_4out, 0)
+        self.update_final_valve_label(0)
         self._mw.checkBox.setDisabled(False)
         self._mw.checkBox_2.setDisabled(False)
         self._mw.checkBox_3.setDisabled(False)
@@ -455,6 +471,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.checkBox_8.setDisabled(False)
         self._mw.checkBox_M.setDisabled(False)
         self._mw.checkBox_F.setDisabled(False)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button7_clicked(self):
         """ Shutdown properly the system
@@ -471,6 +488,16 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['valve_odor_4_out'] = '0'
         self.valves_status['mixing_valve'] = '0'
         self.valves_status['final_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 0)
+        self.update_valve_label(self._mw.label_1out, 0)
+        self.update_valve_label(self._mw.label_2in, 0)
+        self.update_valve_label(self._mw.label_2out, 0)
+        self.update_valve_label(self._mw.label_3in, 0)
+        self.update_valve_label(self._mw.label_3out, 0)
+        self.update_valve_label(self._mw.label_4in, 0)
+        self.update_valve_label(self._mw.label_4out, 0)
+        self.update_valve_label(self._mw.label_M, 1)
+        self.update_final_valve_label(0)
         self._mw.checkBox.setDisabled(False)
         self._mw.checkBox_2.setDisabled(False)
         self._mw.checkBox_3.setDisabled(False)
@@ -608,13 +635,19 @@ class OdorCircuitGUI(GUIBase):
                 self.sigMFC_ON.emit()
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
                 self.MFC_status = True
+                self.update_valve_label(self._mw.label_MFCpurge, 1)
+                self.update_valve_label(self._mw.label_MFC1, 1)
+                self.update_valve_label(self._mw.label_MFC2, 1)
             else:
-                logger.info("")
+                logger.info("Permission denied")
         else:
             logger.info("Closing air...")
             self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
             self.sigMFC_OFF.emit()
             self.MFC_status = False
+            self.update_valve_label(self._mw.label_MFCpurge, 0)
+            self.update_valve_label(self._mw.label_MFC1, 0)
+            self.update_valve_label(self._mw.label_MFC2, 0)
 
     def disable_odor_buttons(self):
         """ Disables buttons, to not mix all odors.
