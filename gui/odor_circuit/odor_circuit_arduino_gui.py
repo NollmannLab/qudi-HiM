@@ -37,7 +37,10 @@ from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import QLabel, QVBoxLayout, QWidget
 from qtpy import QtWidgets, uic, QtCore
 from qtpy.QtCore import Signal
-
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt
 from core.configoption import ConfigOption
 from gui.guibase import GUIBase
 from core.connector import Connector
@@ -45,6 +48,55 @@ import logging
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+class ImageWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowState(Qt.WindowFullScreen)  # Afficher en plein écran
+
+        # Récupérer tous les écrans disponibles
+        screens = QApplication.screens()
+
+        # Vérifier s'il y a au moins deux écrans
+        if len(screens) < 2:
+            print("Erreur : Il n'y a pas assez d'écrans disponibles.")
+            sys.exit(1)
+
+        # Récupérer le deuxième écran
+        second_screen = screens[1]
+
+        # Obtenir la géométrie du deuxième écran
+        screen_geometry = second_screen.geometry()
+
+        # Charger l'image depuis un fichier PNG (ajuster le chemin selon votre fichier)
+        image_path = r'C:\Users\sCMOS-1\qudi-cbs\gui\odor_circuit\image\Arenatestprojo.png'
+        pixmap = QPixmap(image_path)
+
+        # Redimensionner l'image pour remplir l'écran
+        scaled_pixmap = pixmap.scaled(screen_geometry.width(), screen_geometry.height(), Qt.KeepAspectRatio)
+
+        # Créer un QLabel pour afficher l'image
+        self.label = QLabel(self)
+        self.label.setPixmap(scaled_pixmap)
+        self.label.setAlignment(Qt.AlignCenter)
+        self.setCentralWidget(self.label)
+
+        # Déplacer la fenêtre sur le deuxième écran
+        self.setGeometry(screen_geometry)
+
+        # Ajouter un attribut pour vérifier l'état de la fenêtre
+        self.is_visible = True
+
+    def toggle_visibility(self):
+        if self.is_visible:
+            self.hide()
+            self.is_visible = False
+        else:
+            self.showFullScreen()
+            self.is_visible = True
+
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -58,11 +110,17 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi(ui_file, self)
         self.close_function = close_function
         self.show()
+        self._iw = ImageWindow()
 
     def closeEvent(self, event):
         self.close_function()
         event.accept()
 
+    def toggle_image_window(self, state):
+        if state == Qt.Checked:
+            self._iw.showFullScreen()
+        else:
+            self._iw.hide()
 
 class OdorCircuitGUI(GUIBase):
     """ Main GUI class to handle interactions with MFCs and Valves.
@@ -111,14 +169,15 @@ class OdorCircuitGUI(GUIBase):
     sigMFC_ON = Signal()
     sigMFC_OFF = Signal()
     sigActivateClicked = Signal()
-    pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
-    pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
+    pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
+    pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self._odor_circuit_arduino_logic = None
         self._mw = None
         self._dw = None
+        self._iw = None
         self.valves_status = {
             'valve_odor_1_in': '0',
             'valve_odor_2_in': '0',
@@ -138,11 +197,22 @@ class OdorCircuitGUI(GUIBase):
             'odor_4': ['valve_odor_4_in', 'valve_odor_4_out']
         }
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
+        self._iw = ImageWindow()
         self._dw = QtWidgets.QDockWidget()  # Initialize QDockWidget
+        if isinstance(self._mw, MainWindow):
+            self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
+        else:
+            print("Error: _mw is not an instance of MainWindow")
 
+        if isinstance(self._dw, QtWidgets.QDockWidget):
+            self.label_5 = QLabel()
+            self._dw.setWidget(self.label_5)  # Set label_5 within _dw
+            self.label_5.setPixmap(self.pixmap1)  # Set initial pixmap for label_5 in _dw
+        else:
+            print("Error: _dw is not initialized correctly or is None")
         # Assuming self.pixmap1 and self.pixmap2 are already defined
-        self.pixmap1 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors on.png')
-        self.pixmap2 = QPixmap('C:/Users/CBS/qudi-HiM/gui/odor_circuit/image/Schema fluidic odors off.png')
+        self.pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
+        self.pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
 
         self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
         self.label_5 = QLabel()
@@ -179,6 +249,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.checkBox_6.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_7.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_8.stateChanged.connect(self.check_box_changed)
+        self._mw.Projo.stateChanged.connect(self._mw.toggle_image_window)
         self.disable_odor_buttons()
         # Connect custom signals to functions.
         self.sigButton1Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(1))
@@ -290,6 +361,7 @@ class OdorCircuitGUI(GUIBase):
     def ActivateClicked(self):
 
         self.sigActivateClicked.emit()
+        self._mw.checkBox_M.setChecked(True)
         self._mw.checkBox.setDisabled(True)
         self._mw.checkBox_2.setDisabled(True)
         self._mw.checkBox_3.setDisabled(True)
@@ -310,16 +382,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_1_in'] = '1'
         self.valves_status['valve_odor_1_out'] = '1'
-        self._mw.checkBox.setDisabled(True)
-        self._mw.checkBox_2.setDisabled(True)
-        self._mw.checkBox_3.setDisabled(True)
-        self._mw.checkBox_4.setDisabled(True)
-        self._mw.checkBox_5.setDisabled(True)
-        self._mw.checkBox_6.setDisabled(True)
-        self._mw.checkBox_7.setDisabled(True)
-        self._mw.checkBox_8.setDisabled(True)
-        self._mw.checkBox_M.setDisabled(True)
-        self._mw.checkBox_F.setDisabled(True)
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 1)
+        self.update_valve_label(self._mw.label_1out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button2_clicked(self):
         """ Open valves for odor 2 in and out
@@ -329,6 +395,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_2_in'] = '1'
         self.valves_status['valve_odor_2_out'] = '1'
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_2in, 1)
+        self.update_valve_label(self._mw.label_2out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button3_clicked(self):
         """ Open valves for odor 3 in and out
@@ -338,6 +408,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_3_in'] = '1'
         self.valves_status['valve_odor_3_out'] = '1'
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_3in, 1)
+        self.update_valve_label(self._mw.label_3out, 1)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button4_clicked(self):
         """ Open valves for odor 4 in and out
@@ -347,7 +421,10 @@ class OdorCircuitGUI(GUIBase):
         self.disable_odor_buttons()
         self.valves_status['valve_odor_4_in'] = '1'
         self.valves_status['valve_odor_4_out'] = '1'
-
+        self.valves_status['mixing_valve'] = '0'
+        self.update_valve_label(self._mw.label_4in, 1)
+        self.update_valve_label(self._mw.label_4out, 1)
+        self._mw.checkBox_M.setChecked(False)
     def on_button5_clicked(self):
         """ Open the final valve to send odor
         """
@@ -355,6 +432,8 @@ class OdorCircuitGUI(GUIBase):
         self.sigButton5Clicked.emit()
         self._mw.toolButton_5.setDisabled(True)
         self.valves_status['final_valve'] = '1'
+        self.update_final_valve_label(1)
+
 
     def on_button6_clicked(self):
         """ Wipe the odor from the fly arena
@@ -373,7 +452,15 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['valve_odor_4_in'] = '0'
         self.valves_status['valve_odor_4_out'] = '0'
         self.valves_status['mixing_valve'] = '0'
-        self.valves_status['final_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 0)
+        self.update_valve_label(self._mw.label_1out, 0)
+        self.update_valve_label(self._mw.label_2in, 0)
+        self.update_valve_label(self._mw.label_2out, 0)
+        self.update_valve_label(self._mw.label_3in, 0)
+        self.update_valve_label(self._mw.label_3out, 0)
+        self.update_valve_label(self._mw.label_4in, 0)
+        self.update_valve_label(self._mw.label_4out, 0)
+        self.update_final_valve_label(0)
         self._mw.checkBox.setDisabled(False)
         self._mw.checkBox_2.setDisabled(False)
         self._mw.checkBox_3.setDisabled(False)
@@ -384,6 +471,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.checkBox_8.setDisabled(False)
         self._mw.checkBox_M.setDisabled(False)
         self._mw.checkBox_F.setDisabled(False)
+        self._mw.checkBox_M.setChecked(False)
 
     def on_button7_clicked(self):
         """ Shutdown properly the system
@@ -400,6 +488,16 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['valve_odor_4_out'] = '0'
         self.valves_status['mixing_valve'] = '0'
         self.valves_status['final_valve'] = '0'
+        self.update_valve_label(self._mw.label_1in, 0)
+        self.update_valve_label(self._mw.label_1out, 0)
+        self.update_valve_label(self._mw.label_2in, 0)
+        self.update_valve_label(self._mw.label_2out, 0)
+        self.update_valve_label(self._mw.label_3in, 0)
+        self.update_valve_label(self._mw.label_3out, 0)
+        self.update_valve_label(self._mw.label_4in, 0)
+        self.update_valve_label(self._mw.label_4out, 0)
+        self.update_valve_label(self._mw.label_M, 1)
+        self.update_final_valve_label(0)
         self._mw.checkBox.setDisabled(False)
         self._mw.checkBox_2.setDisabled(False)
         self._mw.checkBox_3.setDisabled(False)
@@ -421,10 +519,8 @@ class OdorCircuitGUI(GUIBase):
     def update_final_valve_label(self, state):
         """ Update the final valve label to change background image. """
         if state == 1:
-
             self._mw.label_5.setPixmap(self.pixmap1)
         else:
-
             self._mw.label_5.setPixmap(self.pixmap2)
 
     def check_box_changed(self, state):
@@ -539,13 +635,19 @@ class OdorCircuitGUI(GUIBase):
                 self.sigMFC_ON.emit()
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
                 self.MFC_status = True
+                self.update_valve_label(self._mw.label_MFCpurge, 1)
+                self.update_valve_label(self._mw.label_MFC1, 1)
+                self.update_valve_label(self._mw.label_MFC2, 1)
             else:
-                logger.info("")
+                logger.info("Permission denied")
         else:
             logger.info("Closing air...")
             self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
             self.sigMFC_OFF.emit()
             self.MFC_status = False
+            self.update_valve_label(self._mw.label_MFCpurge, 0)
+            self.update_valve_label(self._mw.label_MFC1, 0)
+            self.update_valve_label(self._mw.label_MFC2, 0)
 
     def disable_odor_buttons(self):
         """ Disables buttons, to not mix all odors.

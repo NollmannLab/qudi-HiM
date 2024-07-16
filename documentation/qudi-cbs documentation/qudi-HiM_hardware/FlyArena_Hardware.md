@@ -9,12 +9,13 @@
 
 ## Arduino uno: 
 
-| **Model and SN**     | Arduino uno rev3 SMD                                         |
-| -------------------- | ------------------------------------------------------------ |
-| **Drivers location** | [Sensirion SFX6XXX SHDLC Python Driver — sensirion_uart_sfx6xxx 1.0.0 documentation](https://sensirion.github.io/python-uart-sfx6xxx/) |
-| **Software**         | Arduino IDE (https://www.arduino.cc/en/software)             |
-| **Python**           | Implemented on qudi-HiM                                      |
-| **Resources**        | Device manual papersheet<br />Get started : https://docs.arduino.cc/hardware/uno-rev3/ |
+| **Model and SN**              | Arduino uno rev3 SMD                                         |
+| ----------------------------- | ------------------------------------------------------------ |
+| **Drivers location**          | https://docs.arduino.cc/tutorials/generic/DriverInstallation/ |
+| **Software**                  | Arduino IDE (https://www.arduino.cc/en/software)             |
+| **Python**                    | Implemented on qudi-HiM                                      |
+| **Resources**                 | Device manual papersheet<br />Get started : https://docs.arduino.cc/hardware/uno-rev3/ |
+| **Supplementary information** | The pin 0 and 1 is not usable and the pin 13                 |
 
 ## Mass Flow Controller: 
 
@@ -36,7 +37,7 @@
 | **Ressources**   | Datasheet : https://www.nresearch.com/Images/Valves/PDF/NRCatalogPage07.pdf |
 | **Python**       | All Implemented on qudi-HiM                                  |
 
-## Optocouleur: 
+## Optocoupleurs: 
 
 | **Model and SN** | Power Optocoupleur 4-channel OK4-2 (x3)           |
 | ---------------- | ------------------------------------------------- |

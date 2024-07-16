@@ -31,6 +31,7 @@
    <addaction name="start_flow_measurement_Action"/>
    <addaction name="separator"/>
    <addaction name="actionMFC_ON_OFF"/>
+   <addaction name="separator"/>
   </widget>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
@@ -41,18 +42,6 @@
      <height>21</height>
     </rect>
    </property>
-   <widget class="QMenu" name="menuMenu">
-    <property name="title">
-     <string>Menu</string>
-    </property>
-   </widget>
-   <widget class="QMenu" name="menuView">
-    <property name="title">
-     <string>View</string>
-    </property>
-   </widget>
-   <addaction name="menuMenu"/>
-   <addaction name="menuView"/>
   </widget>
   <widget class="QDockWidget" name="pump_dockWidget">
    <property name="minimumSize">
@@ -357,7 +346,7 @@ p, li { white-space: pre-wrap; }
       <rect>
        <x>110</x>
        <y>380</y>
-       <width>70</width>
+       <width>81</width>
        <height>17</height>
       </rect>
      </property>
@@ -534,12 +523,12 @@ p, li { white-space: pre-wrap; }
       <rect>
        <x>1080</x>
        <y>500</y>
-       <width>21</width>
+       <width>31</width>
        <height>16</height>
       </rect>
      </property>
      <property name="text">
-      <string>Off</string>
+      <string>Close</string>
      </property>
     </widget>
     <widget class="QLabel" name="label_MFC1">
@@ -547,12 +536,12 @@ p, li { white-space: pre-wrap; }
       <rect>
        <x>1080</x>
        <y>680</y>
-       <width>21</width>
+       <width>31</width>
        <height>16</height>
       </rect>
      </property>
      <property name="text">
-      <string>Off</string>
+      <string>Close</string>
      </property>
     </widget>
     <widget class="QLabel" name="label_MFC2">
@@ -560,12 +549,12 @@ p, li { white-space: pre-wrap; }
       <rect>
        <x>1080</x>
        <y>820</y>
-       <width>21</width>
+       <width>31</width>
        <height>16</height>
       </rect>
      </property>
      <property name="text">
-      <string>Off</string>
+      <string>Close</string>
      </property>
     </widget>
     <widget class="QLabel" name="label_4in">
@@ -698,6 +687,19 @@ p, li { white-space: pre-wrap; }
       <string>Activate</string>
      </property>
     </widget>
+    <widget class="QCheckBox" name="Projo">
+     <property name="geometry">
+      <rect>
+       <x>1000</x>
+       <y>350</y>
+       <width>161</width>
+       <height>17</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Projector : OFF</string>
+     </property>
+    </widget>
     <zorder>label_5</zorder>
     <zorder>toolButton_2</zorder>
     <zorder>toolButton_6</zorder>
@@ -741,6 +743,7 @@ p, li { white-space: pre-wrap; }
     <zorder>label_4out</zorder>
     <zorder>label_M</zorder>
     <zorder>Activate</zorder>
+    <zorder>Projo</zorder>
    </widget>
   </widget>
   <action name="start_flow_measurement_Action">
