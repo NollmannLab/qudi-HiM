@@ -12,6 +12,7 @@ An extension to Qudi.
 
 Created on Tue Jun 30 2020.
 Modified by JB Fiche the 15-01-2024 to add new channels controlling the IR laser shutter for the RAMM setup.
+Modified by D Guerin the 24-05-2024 to add valve confi for the Fly Arena
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -85,7 +86,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
     # config options
     _rw_timeout = ConfigOption('read_write_timeout', default=10)  # in s
     _ao_voltage_range = ConfigOption('ao_voltage_range', default=(0, 10))
-    _lasercontrol = ConfigOption('lasercontrol', missing='error')
+    _lasercontrol = ConfigOption('lasercontrol', default=None)
 
     # config options used for PALM setup
     _wavelengths = ConfigOption('wavelengths', None)
@@ -102,10 +103,20 @@ class NIDAQMSeries(Base, LasercontrolInterface):
     _shutter_write_do_channel = ConfigOption('shutter_write_channel', None)
     _shutter_read_di_channel = ConfigOption('shutter_read_channel', None)
 
+    # config options used for the Fly Arena
+    _valve_inlet_1 = ConfigOption('valve_inlet_1', None)
+    _valve_outlet_1 = ConfigOption('valve_outlet_1', None)
+    _valve_final = ConfigOption('valve_final', None)
+    _mixing_valve = ConfigOption('mixing_valve', None)
+
     # add here eventually other used channels following the naming convention used above
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.valve_inlet_1_taskhandle = None
+        self.valve_outlet_1_taskhandle = None
+        self.valve_final_taskhandle = None
+        self.mixing_valve_taskhandle = None
         self.laser_ao_taskhandles = {}  # or None
         self.trigger_read_taskhandle = None
         self.trigger_write_taskhandle = None
@@ -218,6 +229,43 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print(f"Unexpected {err}, {type(err)}")
                 print(f'Failed to create di channel for shutter : {err}')
 
+        if self._valve_inlet_1:
+            try:
+                self.valve_inlet_1_taskhandle = self.create_taskhandle()
+                self.set_up_do_channel(self.valve_inlet_1_taskhandle, self._valve_inlet_1, name="valve_in_1")
+                print('valve 1 inlet digital in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create di channel for valve 1 inlet : {err}')
+
+        if self._valve_outlet_1:
+            try:
+                self.valve_outlet_1_taskhandle = self.create_taskhandle()
+                self.set_up_do_channel(self.valve_outlet_1_taskhandle, self._valve_outlet_1, name="valve_out_1")
+                print('valve 1 oulet digital in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create di channel for valve 1 outlet: {err}')
+
+        if self._valve_final:
+            try:
+                self.valve_final_taskhandle = self.create_taskhandle()
+                self.set_up_do_channel(self.valve_final_taskhandle, self._valve_final, name="valve_final")
+                print('valve final in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create di channel for final valve : {err}')
+
+        if self._mixing_valve:
+            try:
+                self.mixing_valve_taskhandle = self.create_taskhandle()
+                self.set_up_do_channel(self.mixing_valve_taskhandle, self._mixing_valve, name="mixing_valve")
+                print('mixing valve digital in channel created')
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print(f'Failed to create di channel for mixing valve : {err}')
+
+
     def on_deactivate(self):
         """ Required deactivation when module is closed. Close all tasks and reset taskhandles to null pointers.
         """
@@ -291,6 +339,34 @@ class NIDAQMSeries(Base, LasercontrolInterface):
             except Exception as err:
                 print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close di channel for shutter')
+
+        if self._valve_intlet_1:
+            try:
+                self.close_task(self.valve_intlet_1_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close di channel for valve_intlet_1')
+
+        if self._valve_outlet_1:
+            try:
+                self.close_task(self.valve_outlet_1_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close di channel for valve_outlet_1')
+
+        if self._valve_final:
+            try:
+                self.close_task(self.valve_final_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close di channel for valve_final')
+
+        if self._mixing_valve:
+            try:
+                self.close_task(self.mixing_valve_taskhandle)
+            except Exception as err:
+                print(f"Unexpected {err}, {type(err)}")
+                print('Failed to close di channel for mixing_valve')
 
         # continue here closing tasks if additional channels are added in the config
 
