@@ -50,55 +50,6 @@ logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 
-class ImageWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-
-        self.setWindowState(Qt.WindowFullScreen)  # Afficher en plein écran
-
-        # Récupérer tous les écrans disponibles
-        screens = QApplication.screens()
-
-        # Vérifier s'il y a au moins deux écrans
-        if len(screens) < 2:
-            print("Erreur : Il n'y a pas assez d'écrans disponibles.")
-            sys.exit(1)
-
-        # Récupérer le deuxième écran
-        second_screen = screens[1]
-
-        # Obtenir la géométrie du deuxième écran
-        screen_geometry = second_screen.geometry()
-
-        # Charger l'image depuis un fichier PNG (ajuster le chemin selon votre fichier)
-        image_path = r'C:\Users\sCMOS-1\qudi-cbs\gui\odor_circuit\image\Arenatestprojo.png'
-        pixmap = QPixmap(image_path)
-
-        # Redimensionner l'image pour remplir l'écran
-        scaled_pixmap = pixmap.scaled(screen_geometry.width(), screen_geometry.height(), Qt.KeepAspectRatio)
-
-        # Créer un QLabel pour afficher l'image
-        self.label = QLabel(self)
-        self.label.setPixmap(scaled_pixmap)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.setCentralWidget(self.label)
-
-        # Déplacer la fenêtre sur le deuxième écran
-        self.setGeometry(screen_geometry)
-
-        # Ajouter un attribut pour vérifier l'état de la fenêtre
-        self.is_visible = True
-
-    def toggle_visibility(self):
-        if self.is_visible:
-            self.hide()
-            self.is_visible = False
-        else:
-            self.showFullScreen()
-            self.is_visible = True
-
-
-
 class MainWindow(QtWidgets.QMainWindow):
     """ Class defined for the main window for odor control.
     """
@@ -110,17 +61,11 @@ class MainWindow(QtWidgets.QMainWindow):
         uic.loadUi(ui_file, self)
         self.close_function = close_function
         self.show()
-        self._iw = ImageWindow()
 
     def closeEvent(self, event):
         self.close_function()
         event.accept()
 
-    def toggle_image_window(self, state):
-        if state == Qt.Checked:
-            self._iw.showFullScreen()
-        else:
-            self._iw.hide()
 
 class OdorCircuitGUI(GUIBase):
     """ Main GUI class to handle interactions with MFCs and Valves.
@@ -169,15 +114,14 @@ class OdorCircuitGUI(GUIBase):
     sigMFC_ON = Signal()
     sigMFC_OFF = Signal()
     sigActivateClicked = Signal()
-    pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
-    pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
+    pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors off.PNG')
+    pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors on.PNG')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self._odor_circuit_arduino_logic = None
         self._mw = None
         self._dw = None
-        self._iw = None
         self.valves_status = {
             'valve_odor_1_in': '0',
             'valve_odor_2_in': '0',
@@ -197,8 +141,8 @@ class OdorCircuitGUI(GUIBase):
             'odor_4': ['valve_odor_4_in', 'valve_odor_4_out']
         }
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
-        self._iw = ImageWindow()
         self._dw = QtWidgets.QDockWidget()  # Initialize QDockWidget
+
         if isinstance(self._mw, MainWindow):
             self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
         else:
@@ -210,9 +154,9 @@ class OdorCircuitGUI(GUIBase):
             self.label_5.setPixmap(self.pixmap1)  # Set initial pixmap for label_5 in _dw
         else:
             print("Error: _dw is not initialized correctly or is None")
-        # Assuming self.pixmap1 and self.pixmap2 are already defined
-        self.pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors on.png')
-        self.pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/odor_circuit/image/Schema fluidic odors off.png')
+
+        self.pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors on.PNG')
+        self.pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors off.PNG')
 
         self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
         self.label_5 = QLabel()
@@ -249,7 +193,6 @@ class OdorCircuitGUI(GUIBase):
         self._mw.checkBox_6.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_7.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_8.stateChanged.connect(self.check_box_changed)
-        self._mw.Projo.stateChanged.connect(self._mw.toggle_image_window)
         self.disable_odor_buttons()
         # Connect custom signals to functions.
         self.sigButton1Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(1))
@@ -677,9 +620,9 @@ class OdorCircuitGUI(GUIBase):
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
-            np.savetxt(self._path_MFC1, self.flowrate1_data)
-            np.savetxt(self._path_MFC2, self.flowrate2_data)
-            np.savetxt(self._path_MFCPurge, self.flowrate3_data)
+            #np.savetxt(self._path_MFC1, self.flowrate1_data)
+            #np.savetxt(self._path_MFC2, self.flowrate2_data)
+            #np.savetxt(self._path_MFCPurge, self.flowrate3_data)
         else:
             self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
             self.t_data = []
