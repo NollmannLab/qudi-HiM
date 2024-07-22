@@ -203,7 +203,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         A2 = self._MFC.average_measure(self._MFC_1, 20)
         A3 = self._MFC.average_measure(self._MFC_2, 20)
 
-        return A1, A2, A3
+        return A2, A3, A1
 
     def get_flowrate(self):
         """

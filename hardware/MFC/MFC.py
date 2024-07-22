@@ -115,7 +115,7 @@ class MFC(Base):
             else:
                 print('There is only 3 MFC')
 
-    def average_measure(self,mfc,NBmeasure):
+    def average_measure(self, mfc, NBmeasure):
         """Get the average measurement of the MFC valve
                 @param MFC : Number of the MFC
                 @param NBmeasure : Number of measurement to average
