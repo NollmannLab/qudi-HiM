@@ -161,7 +161,8 @@ class CameraLogic(GenericLogic):
     sigDisableFrameTransfer = QtCore.Signal()
 
     # attributes
-    enabled = False  # indicates if the camera is currently in live mode
+    cam_type = None  # indicated the type of camera used
+    live_enabled = False  # indicates if the camera is currently in live mode
     saving = False  # indicates if the camera is currently saving a movie
     restart_live = False
     frame_transfer = False  # indicates whether the frame transfer mode is activated
@@ -190,13 +191,16 @@ class CameraLogic(GenericLogic):
         self._hardware = self.hardware()
         self._security_shutter = self.shutter()
 
-        self.enabled = False
+        self.live_enabled = False
         self.saving = False
         self.restart_live = False
         self.has_temp = self._hardware.has_temp()
         if self.has_temp:
             self.temperature_setpoint = self._hardware._default_temperature
         self.has_shutter = self._hardware.has_shutter()
+
+        # indicate the type of camera used
+        self.cam_type = self._hardware.__class__.__name__
 
         # update the private variables _exposure, _gain, _temperature
         self.get_exposure()
@@ -236,9 +240,8 @@ class CameraLogic(GenericLogic):
     def set_exposure(self, time):
         """ Set the exposure time of the camera. Inform the GUI that a new value was set.
 
-        :param: float time: desired new exposure time in seconds
-
-        :return: None
+        @param: time (float): desired new exposure time in seconds
+        @return: None
         """
         self._hardware.set_exposure(time)
         exp = self.get_exposure()  # updates also the attribute self._exposure and self._fps
@@ -316,13 +319,13 @@ class CameraLogic(GenericLogic):
         if not self.has_temp:
             self.log.warn('Sensor temperature control not available')
         else:
-            if self.enabled:  # live mode on
+            if self.live_enabled:  # live mode on
                 self.interrupt_live()
                 
             temp = self._hardware.get_temperature()
             self._temperature = temp
             
-            if self.enabled:  # restart live mode
+            if self.live_enabled:  # restart live mode
                 self.resume_live()
             return temp
 
@@ -333,7 +336,7 @@ class CameraLogic(GenericLogic):
     def get_ready_state(self):
         """ Is the camera ready for an acquisition ?
 
-        :return: str: ready ? 'True', 'False'
+        @return: ready ? (str) 'True', 'False'
         """
         return str(self._hardware.get_ready_state())
 
@@ -393,7 +396,7 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             self.interrupt_live()  # interrupt live to allow access to camera settings
 
         err = self._hardware.set_image(hbin, vbin, hstart, hend, vstart, vend)
@@ -402,7 +405,7 @@ class CameraLogic(GenericLogic):
         else:
             self.log.info('Sensor region set to {} x {}'.format(vend - vstart + 1, hend - hstart + 1))
 
-        if self.enabled:
+        if self.live_enabled:
             self.resume_live()  # restart live in case it was activated
 
     def reset_sensor_region(self):
@@ -410,7 +413,7 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             self.interrupt_live()
 
         width = self._hardware._full_width  # store the full_width in the hardware module because _width is
@@ -423,7 +426,7 @@ class CameraLogic(GenericLogic):
         else:
             self.log.info('Sensor region reset to default: {} x {}'.format(height, width))
 
-        if self.enabled:
+        if self.live_enabled:
             self.resume_live()
 
     @QtCore.Slot(bool)
@@ -436,10 +439,10 @@ class CameraLogic(GenericLogic):
         :return: None
         """
         if self.get_name() == 'iXon Ultra 897':
-            if self.enabled:  # if live mode is on, interrupt to be able to access frame transfer setting
+            if self.live_enabled:  # if live mode is on, interrupt to be able to access frame transfer setting
                 self.interrupt_live()
             self._hardware._set_frame_transfer(int(activate))
-            if self.enabled:  # if live mode was interrupted, restart it
+            if self.live_enabled:  # if live mode was interrupted, restart it
                 self.resume_live()
             self.log.info(f'Frametransfer mode activated: {activate}')
             self.frame_transfer = bool(activate)
@@ -460,22 +463,30 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Method invoked by snap button on GUI ---------------------------------------------------------------------------------
-    def start_single_acquistion(self):  # watch out for the typo !!
+    def start_single_acquisition(self):
         """ Take a single camera image.
         """
+        # For the RAMM microscope, a shutter is used to block the IR laser
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
-        self._hardware.start_single_acquisition()
-        self._last_image = self._hardware.get_acquired_data()
+
+        # Depending on the type of camera, image retrieval is different
+        if self.cam_type == "KinetixCam":
+            self._last_image = self._hardware.start_single_acquisition()
+        else:
+            self._hardware.start_single_acquisition()
+            self._last_image = self._hardware.get_acquired_data()
+
+        # Send signal to GUi for image display
         self.sigUpdateDisplay.emit()
         self._hardware.stop_acquisition()  # this in needed to reset the acquisition mode to default
         self.sigAcquisitionFinished.emit()
 
 # Methods invoked by live button on GUI --------------------------------------------------------------------------------
     def start_loop(self):
-        """ Start the live display loop.
+        """ Start the live display mode.
         """
-        self.enabled = True
+        self.live_enabled = True
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
 
@@ -491,7 +502,7 @@ class CameraLogic(GenericLogic):
     def loop(self):
         """ Execute one step in the live display loop.
         """
-        if self.enabled:
+        if self.live_enabled:
             self._last_image = self._hardware.get_acquired_data()
             self.sigUpdateDisplay.emit()
 
@@ -505,7 +516,7 @@ class CameraLogic(GenericLogic):
     def stop_loop(self):
         """ Stop the live display loop.
         """
-        self.enabled = False
+        self.live_enabled = False
         self._hardware.stop_acquisition()
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=False)
@@ -557,10 +568,10 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             # store the state of live mode in a helper variable
             self.restart_live = True
-            self.enabled = False  # live mode will stop then
+            self.live_enabled = False  # live mode will stop then
             self._hardware.stop_acquisition()
 
         self.saving = True
@@ -681,10 +692,10 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             # store the state of live mode in a helper variable
             self.restart_live = True
-            self.enabled = False  # live mode will stop then
+            self.live_enabled = False  # live mode will stop then
             self._hardware.stop_acquisition()
 
         self.saving = True
@@ -1078,7 +1089,7 @@ class CameraLogic(GenericLogic):
     def stop_live_mode(self):
         """ Allows to stop the live mode programmatically, for example in the preparation steps of a task
         where live mode would interfere with the new camera settings. """
-        if self.enabled:
+        if self.live_enabled:
             self.stop_loop()
             self.sigLiveStopped.emit()  # to inform the GUI that live mode has been stopped programmatically
 
