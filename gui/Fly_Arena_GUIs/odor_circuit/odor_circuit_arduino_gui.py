@@ -30,6 +30,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 
 import os
+import time
 from typing import Dict
 
 import numpy as np
@@ -40,7 +41,7 @@ from qtpy.QtCore import Signal
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from core.configoption import ConfigOption
 from gui.guibase import GUIBase
 from core.connector import Connector
@@ -57,7 +58,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, close_function):
         super().__init__()
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'odor_circuit_window.ui')
+        ui_file = os.path.join(this_dir, 'odor_circuit_window1.ui')
         uic.loadUi(ui_file, self)
         self.close_function = close_function
         self.show()
@@ -73,6 +74,8 @@ class OdorCircuitGUI(GUIBase):
     # connector
     odor_circuit_arduino_logic = Connector(interface='OdorCircuitArduinoLogic')
 
+    _Fluidics_off_path = ConfigOption('Fluidics_off_path', None)
+    _Fluidics_on_path = ConfigOption('Fluidics_on_path', None)
     _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
     _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
     _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
@@ -104,18 +107,9 @@ class OdorCircuitGUI(GUIBase):
     QtCore.QLocale.setDefault(QtCore.QLocale("English"))
 
     # Declaration of custom signals
-    sigButton1Clicked = Signal()
-    sigButton2Clicked = Signal()
-    sigButton3Clicked = Signal()
-    sigButton4Clicked = Signal()
-    sigButton5Clicked = Signal()
-    sigButton6Clicked = Signal()
-    sigButton7Clicked = Signal()
     sigMFC_ON = Signal()
     sigMFC_OFF = Signal()
-    sigActivateClicked = Signal()
-    pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors off.PNG')
-    pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors on.PNG')
+    sigLaunchClicked = Signal()
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -143,25 +137,8 @@ class OdorCircuitGUI(GUIBase):
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
         self._dw = QtWidgets.QDockWidget()  # Initialize QDockWidget
 
-        if isinstance(self._mw, MainWindow):
-            self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
-        else:
-            print("Error: _mw is not an instance of MainWindow")
-
-        if isinstance(self._dw, QtWidgets.QDockWidget):
-            self.label_5 = QLabel()
-            self._dw.setWidget(self.label_5)  # Set label_5 within _dw
-            self.label_5.setPixmap(self.pixmap1)  # Set initial pixmap for label_5 in _dw
-        else:
-            print("Error: _dw is not initialized correctly or is None")
-
-        self.pixmap1 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors on.PNG')
-        self.pixmap2 = QPixmap('C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/odor_circuit/image/Schema fluidic odors off.PNG')
-
-        self._mw.label_5.setPixmap(self.pixmap1)  # Set pixmap for label_5 in MainWindow
-        self.label_5 = QLabel()
-        self._dw.setWidget(self.label_5)  # Set label_5 within _dw
-        self.label_5.setPixmap(self.pixmap2)  # Set initial pixmap for label_5 in _dw
+        self.pixmap1 = QPixmap(self._Fluidics_on_path)
+        self.pixmap2 = QPixmap(self._Fluidics_off_path)
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
@@ -170,53 +147,41 @@ class OdorCircuitGUI(GUIBase):
 
         # Window
         self._mw = MainWindow(self.close_function)
-        self._mw.centralwidget.hide()  # everything is in dockwidgets
+        self._mw.centralwidget.show()  # everything is in dockwidgets
 
         self.init_flowcontrol()
-        self._mw.label_5.setPixmap(self.pixmap2)
+        self._mw.label_8.setPixmap(self.pixmap2)
+
         # Connecting signals of the buttons to the methods.
-        self._mw.toolButton_1.clicked.connect(self.on_button1_clicked)
-        self._mw.toolButton_2.clicked.connect(self.on_button2_clicked)
-        self._mw.toolButton_3.clicked.connect(self.on_button3_clicked)
-        self._mw.toolButton_4.clicked.connect(self.on_button4_clicked)
-        self._mw.toolButton_5.clicked.connect(self.on_button5_clicked)
-        self._mw.toolButton_6.clicked.connect(self.on_button6_clicked)
-        self._mw.toolButton_7.clicked.connect(self.on_button7_clicked)
-        self._mw.Activate.clicked.connect(self.ActivateClicked)
-        self._mw.checkBox.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_2.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_M.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_F.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_3.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_4.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_5.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_6.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_7.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_8.stateChanged.connect(self.check_box_changed)
-        self.disable_odor_buttons()
+
+        self._mw.odor1.stateChanged.connect(self.odor_changed)
+        self._mw.odor2.stateChanged.connect(self.odor_changed)
+        self._mw.odor3.stateChanged.connect(self.odor_changed)
+        self._mw.odor4.stateChanged.connect(self.odor_changed)
+
+        self._mw.Launch.clicked.connect(self.LaunchClicked)
+        self._mw.in1.stateChanged.connect(self.check_box_changed)
+        self._mw.out1.stateChanged.connect(self.check_box_changed)
+        self._mw.in2.stateChanged.connect(self.check_box_changed)
+        self._mw.checkBox_F_2.stateChanged.connect(self.check_box_changed)
+        self._mw.out2.stateChanged.connect(self.check_box_changed)
+        self._mw.in3.stateChanged.connect(self.check_box_changed)
+        self._mw.out3.stateChanged.connect(self.check_box_changed)
+        self._mw.in4.stateChanged.connect(self.check_box_changed)
+        self._mw.out4.stateChanged.connect(self.check_box_changed)
+        self._mw.checkBox_M_2.stateChanged.connect(self.check_box_changed)
         # Connect custom signals to functions.
-        self.sigButton1Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(1))
-        self.sigButton2Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(2))
-        self.sigButton3Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(3))
-        self.sigButton4Clicked.connect(lambda: self._odor_circuit_arduino_logic.prepare_odor(4))
-        self.sigButton5Clicked.connect(lambda: self._odor_circuit_arduino_logic.valve(self._final_valve, 1))
-        self.sigButton6Clicked.connect(lambda: self._odor_circuit_arduino_logic.flush_odor())
-        self.sigButton7Clicked.connect(lambda: self.on_deactivate())
-        self.sigActivateClicked.connect(lambda: self.ActivateClicked)
+
+        self.hideDock()
 
     def on_deactivate(self):
         """ Steps of deactivation required.
         """
-
+        self._odor_circuit_arduino_logic.close_air()
         self._odor_circuit_arduino_logic.flush_odor()
-        self._mw.toolButton_1.clicked.disconnect()
-        self._mw.toolButton_2.clicked.disconnect()
-        self._mw.toolButton_3.clicked.disconnect()
-        self._mw.toolButton_4.clicked.disconnect()
-        self._mw.toolButton_5.clicked.disconnect()
-        self._mw.toolButton_6.clicked.disconnect()
-        self._mw.toolButton_7.clicked.disconnect()
-        self._mw.Activate.clicked.disconnect()
+        self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
+
+        self._mw.Launch.clicked.disconnect()
         self._mw.close()
 
     def show(self):
@@ -237,6 +202,9 @@ class OdorCircuitGUI(GUIBase):
         self.flowrate1_data = []
         self.flowrate2_data = []
         self.flowrate3_data = []
+        self.mesure1 = []
+        self.mesure2 = []
+        self.mesure3 = []
         # create a reference to the line object (this is returned when calling plot method of pg.PlotWidget)
         self._mw.flowrate_PlotWidget_1.setLabel('left', 'Flowrate', units='L/min')
         self._mw.flowrate_PlotWidget_1.setLabel('bottom', 'Time', units='s')
@@ -255,6 +223,7 @@ class OdorCircuitGUI(GUIBase):
         # toolbar actions: internal signals
         self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
         self._mw.actionMFC_ON_OFF.triggered.connect(self.mfc_on_off)
+        self._mw.actionShow_Configuration_Dock.triggered.connect(self.showDock)
         # signals to logic
         self.sigStartFlowMeasure.connect(self._odor_circuit_arduino_logic.start_flow_measurement)
         self.sigStopFlowMeasure.connect(self._odor_circuit_arduino_logic.stop_flow_measurement)
@@ -265,6 +234,107 @@ class OdorCircuitGUI(GUIBase):
         self._odor_circuit_arduino_logic.sigEnableFlowActions.connect(self.enable_flowcontrol_buttons)
         self.sigMFC_ON.connect(self.mfc_on)
         self.sigMFC_OFF.connect(self._odor_circuit_arduino_logic.close_air)
+
+    def showDock(self):
+        """"""
+        self._mw.dockWidget_3.show()
+
+    def hideDock(self):
+        """"""
+        self._mw.dockWidget_3.hide()
+
+    def clear(self):
+        self.valves_status['valve_odor_1_in'] = '0'
+        self.valves_status['valve_odor_1_out'] = '0'
+        self.valves_status['valve_odor_2_in'] = '0'
+        self.valves_status['valve_odor_2_out'] = '0'
+        self.valves_status['valve_odor_3_in'] = '0'
+        self.valves_status['valve_odor_3_out'] = '0'
+        self.valves_status['valve_odor_4_in'] = '0'
+        self.valves_status['valve_odor_4_out'] = '0'
+        self.update_valve_label(self._mw.label_1in_2, 0)
+        self.update_valve_label(self._mw.label_1out_2, 0)
+        self.update_valve_label(self._mw.label_2in_2, 0)
+        self.update_valve_label(self._mw.label_2out_2, 0)
+        self.update_valve_label(self._mw.label_3in_2, 0)
+        self.update_valve_label(self._mw.label_3out_2, 0)
+        self.update_valve_label(self._mw.label_4in_2, 0)
+        self.update_valve_label(self._mw.label_4out_2, 0)
+
+    a = 0
+
+    def odor_changed(self, state):
+        """"""
+
+        sender = self.sender()  # Get the QCheckBox that emitted the signal
+        self.clear()
+
+        if sender == self._mw.odor1:
+
+            if state == 2:  # Qt.Checked
+                self._mw.odor2.setChecked(False)
+                self._mw.odor3.setChecked(False)
+                self._mw.odor4.setChecked(False)
+                self.valves_status['valve_odor_1_in'] = '1'
+                self.update_valve_label(self._mw.label_1in_2, 1)
+                self.valves_status['valve_odor_1_out'] = '1'
+                self.update_valve_label(self._mw.label_1out_2, 1)
+                self.a = 1
+            else:
+                self.valves_status['valve_odor_1_in'] = '0'
+                self.update_valve_label(self._mw.label_1in_2, 0)
+                self.valves_status['valve_odor_1_out'] = '0'
+                self.update_valve_label(self._mw.label_1out_2, 0)
+
+        elif sender == self._mw.odor2:
+
+            if state == 2:  # Qt.Checked
+                self._mw.odor3.setChecked(False)
+                self._mw.odor4.setChecked(False)
+                self._mw.odor1.setChecked(False)
+                self.valves_status['valve_odor_2_in'] = '1'
+                self.update_valve_label(self._mw.label_2in_2, 1)
+                self.valves_status['valve_odor_2_out'] = '1'
+                self.update_valve_label(self._mw.label_2out_2, 1)
+                self.a = 2
+            else:
+                self.valves_status['valve_odor_2_in'] = '0'
+                self.update_valve_label(self._mw.label_2in_2, 0)
+                self.valves_status['valve_odor_2_out'] = '0'
+                self.update_valve_label(self._mw.label_2out_2, 0)
+        elif sender == self._mw.odor3:
+
+            if state == 2:  # Qt.Checked
+                self._mw.odor2.setChecked(False)
+                self._mw.odor4.setChecked(False)
+                self._mw.odor1.setChecked(False)
+                self.valves_status['valve_odor_3_in'] = '1'
+                self.update_valve_label(self._mw.label_3in_2, 1)
+                self.valves_status['valve_odor_3_out'] = '1'
+                self.update_valve_label(self._mw.label_3out_2, 1)
+                self.a = 3
+            else:
+                self.valves_status['valve_odor_3_in'] = '0'
+                self.update_valve_label(self._mw.label_3in_2, 0)
+                self.valves_status['valve_odor_3_out'] = '0'
+                self.update_valve_label(self._mw.label_3out_2, 0)
+
+        elif sender == self._mw.odor4:
+
+            if state == 2:  # Qt.Checked
+                self._mw.odor3.setChecked(False)
+                self._mw.odor2.setChecked(False)
+                self._mw.odor1.setChecked(False)
+                self.valves_status['valve_odor_4_in'] = '1'
+                self.update_valve_label(self._mw.label_4in_2, 1)
+                self.valves_status['valve_odor_4_out'] = '1'
+                self.update_valve_label(self._mw.label_4out_2, 1)
+                self.a = 4
+            else:
+                self.valves_status['valve_odor_4_in'] = '0'
+                self.update_valve_label(self._mw.label_4in_2, 0)
+                self.valves_status['valve_odor_4_out'] = '0'
+                self.update_valve_label(self._mw.label_4out_2, 0)
 
     def check_valves(self, valves_status):
         '''Check valves status to permit the MFC2 to turn on'''
@@ -289,8 +359,9 @@ class OdorCircuitGUI(GUIBase):
             logger.error('You need to close all but one pair of valves')
             return 0
         elif count_on_associations == 1 and valves_status['mixing_valve'] == '1':
-            logger.error(f'MFC2 cannot operate because {active_associations[0]} and the mixing valve are both on.')
-            return 0
+            logger.info('The Mixing valve has been automatically closed')
+            return 1
+
         elif count_on_associations == 1 and valves_status['mixing_valve'] == '0':
             logger.info(f'MFC2 operates for {active_associations[0]}')
             return 1
@@ -301,156 +372,49 @@ class OdorCircuitGUI(GUIBase):
             logger.error('You need to open the Mixing Valve first')
             return 0
 
-    def ActivateClicked(self):
+    def enable_valve_after_launch(self):
 
-        self.sigActivateClicked.emit()
-        self._mw.checkBox_M.setChecked(True)
-        self._mw.checkBox.setDisabled(True)
-        self._mw.checkBox_2.setDisabled(True)
-        self._mw.checkBox_3.setDisabled(True)
-        self._mw.checkBox_4.setDisabled(True)
-        self._mw.checkBox_5.setDisabled(True)
-        self._mw.checkBox_6.setDisabled(True)
-        self._mw.checkBox_7.setDisabled(True)
-        self._mw.checkBox_8.setDisabled(True)
-        self._mw.checkBox_M.setDisabled(True)
-        self._mw.checkBox_F.setDisabled(True)
-        self.enable_odor_buttons()
+        self._mw.checkBox_M_2.setChecked(False)
+        self._mw.in1.setDisabled(False)
+        self._mw.out1.setDisabled(False)
+        self._mw.in2.setDisabled(False)
+        self._mw.out2.setDisabled(False)
+        self._mw.in3.setDisabled(False)
+        self._mw.out3.setDisabled(False)
+        self._mw.in4.setDisabled(False)
+        self._mw.out4.setDisabled(False)
+        self._mw.checkBox_F_2.setDisabled(False)
+        self.valves_status['mixing_valve'] = '1'
+        self.update_valve_label(self._mw.label_M_2, 1)
+        self.valves_status['final_valve'] = '0'
+        self.update_final_valve_label(0)
+        self.clear()
 
-    def on_button1_clicked(self):
-        """ Open valves for odor 1 in and out
+    def sendit(self):
         """
-        logger.info("Odor 1 chosen")
-        self.sigButton1Clicked.emit()
-        self.disable_odor_buttons()
-        self.valves_status['valve_odor_1_in'] = '1'
-        self.valves_status['valve_odor_1_out'] = '1'
-        self.valves_status['mixing_valve'] = '0'
-        self.update_valve_label(self._mw.label_1in, 1)
-        self.update_valve_label(self._mw.label_1out, 1)
-        self._mw.checkBox_M.setChecked(False)
-
-    def on_button2_clicked(self):
-        """ Open valves for odor 2 in and out
         """
-        logger.info("Odor 2 chosen")
-        self.sigButton2Clicked.emit()
-        self.disable_odor_buttons()
-        self.valves_status['valve_odor_2_in'] = '1'
-        self.valves_status['valve_odor_2_out'] = '1'
-        self.valves_status['mixing_valve'] = '0'
-        self.update_valve_label(self._mw.label_2in, 1)
-        self.update_valve_label(self._mw.label_2out, 1)
-        self._mw.checkBox_M.setChecked(False)
-
-    def on_button3_clicked(self):
-        """ Open valves for odor 3 in and out
-        """
-        logger.info("Odor 3 chosen")
-        self.sigButton3Clicked.emit()
-        self.disable_odor_buttons()
-        self.valves_status['valve_odor_3_in'] = '1'
-        self.valves_status['valve_odor_3_out'] = '1'
-        self.valves_status['mixing_valve'] = '0'
-        self.update_valve_label(self._mw.label_3in, 1)
-        self.update_valve_label(self._mw.label_3out, 1)
-        self._mw.checkBox_M.setChecked(False)
-
-    def on_button4_clicked(self):
-        """ Open valves for odor 4 in and out
-        """
-        logger.info("Odor 4 chosen")
-        self.sigButton4Clicked.emit()
-        self.disable_odor_buttons()
-        self.valves_status['valve_odor_4_in'] = '1'
-        self.valves_status['valve_odor_4_out'] = '1'
-        self.valves_status['mixing_valve'] = '0'
-        self.update_valve_label(self._mw.label_4in, 1)
-        self.update_valve_label(self._mw.label_4out, 1)
-        self._mw.checkBox_M.setChecked(False)
-    def on_button5_clicked(self):
-        """ Open the final valve to send odor
-        """
-        logger.info("Sending odor...")
-        self.sigButton5Clicked.emit()
-        self._mw.toolButton_5.setDisabled(True)
         self.valves_status['final_valve'] = '1'
         self.update_final_valve_label(1)
+        self._odor_circuit_arduino_logic.valve(self._final_valve, 1)
 
-
-    def on_button6_clicked(self):
-        """ Wipe the odor from the fly arena
-        """
-        logger.info("Cleaning system in progress...")
-        self.sigButton6Clicked.emit()
-        self.enable_odor_buttons()
-        self._mw.toolButton_5.setDisabled(False)
+    def flush(self):
+        """"""
         self._odor_circuit_arduino_logic.flush_odor()
-        self.valves_status['valve_odor_1_in'] = '0'
-        self.valves_status['valve_odor_1_out'] = '0'
-        self.valves_status['valve_odor_2_in'] = '0'
-        self.valves_status['valve_odor_2_out'] = '0'
-        self.valves_status['valve_odor_3_in'] = '0'
-        self.valves_status['valve_odor_3_out'] = '0'
-        self.valves_status['valve_odor_4_in'] = '0'
-        self.valves_status['valve_odor_4_out'] = '0'
-        self.valves_status['mixing_valve'] = '0'
-        self.update_valve_label(self._mw.label_1in, 0)
-        self.update_valve_label(self._mw.label_1out, 0)
-        self.update_valve_label(self._mw.label_2in, 0)
-        self.update_valve_label(self._mw.label_2out, 0)
-        self.update_valve_label(self._mw.label_3in, 0)
-        self.update_valve_label(self._mw.label_3out, 0)
-        self.update_valve_label(self._mw.label_4in, 0)
-        self.update_valve_label(self._mw.label_4out, 0)
-        self.update_final_valve_label(0)
-        self._mw.checkBox.setDisabled(False)
-        self._mw.checkBox_2.setDisabled(False)
-        self._mw.checkBox_3.setDisabled(False)
-        self._mw.checkBox_4.setDisabled(False)
-        self._mw.checkBox_5.setDisabled(False)
-        self._mw.checkBox_6.setDisabled(False)
-        self._mw.checkBox_7.setDisabled(False)
-        self._mw.checkBox_8.setDisabled(False)
-        self._mw.checkBox_M.setDisabled(False)
-        self._mw.checkBox_F.setDisabled(False)
-        self._mw.checkBox_M.setChecked(False)
+        self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
+        self.valves_status['Mixing_valve'] = '1'
 
-    def on_button7_clicked(self):
-        """ Shutdown properly the system
+    def LaunchClicked(self):
         """
-        self.sigButton7Clicked.emit()
-        self._odor_circuit_arduino_logic.flush_odor()
-        self.valves_status['valve_odor_1_in'] = '0'
-        self.valves_status['valve_odor_1_out'] = '0'
-        self.valves_status['valve_odor_2_in'] = '0'
-        self.valves_status['valve_odor_2_out'] = '0'
-        self.valves_status['valve_odor_3_in'] = '0'
-        self.valves_status['valve_odor_3_out'] = '0'
-        self.valves_status['valve_odor_4_in'] = '0'
-        self.valves_status['valve_odor_4_out'] = '0'
-        self.valves_status['mixing_valve'] = '0'
-        self.valves_status['final_valve'] = '0'
-        self.update_valve_label(self._mw.label_1in, 0)
-        self.update_valve_label(self._mw.label_1out, 0)
-        self.update_valve_label(self._mw.label_2in, 0)
-        self.update_valve_label(self._mw.label_2out, 0)
-        self.update_valve_label(self._mw.label_3in, 0)
-        self.update_valve_label(self._mw.label_3out, 0)
-        self.update_valve_label(self._mw.label_4in, 0)
-        self.update_valve_label(self._mw.label_4out, 0)
-        self.update_valve_label(self._mw.label_M, 1)
-        self.update_final_valve_label(0)
-        self._mw.checkBox.setDisabled(False)
-        self._mw.checkBox_2.setDisabled(False)
-        self._mw.checkBox_3.setDisabled(False)
-        self._mw.checkBox_4.setDisabled(False)
-        self._mw.checkBox_5.setDisabled(False)
-        self._mw.checkBox_6.setDisabled(False)
-        self._mw.checkBox_7.setDisabled(False)
-        self._mw.checkBox_8.setDisabled(False)
-        self._mw.checkBox_M.setDisabled(False)
-        self._mw.checkBox_F.setDisabled(False)
+        """
+        Bodor = self._mw.Bodor.value() * 60
+        Aodor = self._mw.Aodor.value() * 60
+        self._odor_circuit_arduino_logic.prepare_odor(self.a)
+        self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
+        self.valves_status['Mixing_valve'] = '0'
+
+        QTimer.singleShot(Bodor * 1000, self.sendit)
+        QTimer.singleShot((Aodor * 1000) + (Bodor * 1000), self.flush)
+        QTimer.singleShot((Aodor * 1000) + (Bodor * 1000), self.enable_valve_after_launch)
 
     def update_valve_label(self, label, state):
         """ Update the valve label to show 'opened' or 'closed'. """
@@ -462,88 +426,88 @@ class OdorCircuitGUI(GUIBase):
     def update_final_valve_label(self, state):
         """ Update the final valve label to change background image. """
         if state == 1:
-            self._mw.label_5.setPixmap(self.pixmap1)
+            self._mw.label_8.setPixmap(self.pixmap1)
         else:
-            self._mw.label_5.setPixmap(self.pixmap2)
+            self._mw.label_8.setPixmap(self.pixmap2)
 
     def check_box_changed(self, state):
         '''Check the state of the valves box and turn on or off the devise
         if check, turn on; if unchecked, turn off.'''
         sender = self.sender()  # Get the QCheckBox that emitted the signal
 
-        if sender == self._mw.checkBox:
+        if sender == self._mw.in1:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_in, 1)
                 self.valves_status['valve_odor_1_in'] = '1'
-                self.update_valve_label(self._mw.label_1in, 1)
+                self.update_valve_label(self._mw.label_1in_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_in, 0)
                 self.valves_status['valve_odor_1_in'] = '0'
-                self.update_valve_label(self._mw.label_1in, 0)
-        elif sender == self._mw.checkBox_2:
+                self.update_valve_label(self._mw.label_1in_2, 0)
+        elif sender == self._mw.out2:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_out, 1)
                 self.valves_status['valve_odor_1_out'] = '1'
-                self.update_valve_label(self._mw.label_1out, 1)
+                self.update_valve_label(self._mw.label_1out_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_out, 0)
                 self.valves_status['valve_odor_1_out'] = '0'
-                self.update_valve_label(self._mw.label_1out, 0)
-        elif sender == self._mw.checkBox_3:
+                self.update_valve_label(self._mw.label_1out_2, 0)
+        elif sender == self._mw.in2:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_2_in, 1)
                 self.valves_status['valve_odor_2_in'] = '1'
-                self.update_valve_label(self._mw.label_2in, 1)
+                self.update_valve_label(self._mw.label_2in_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_2_in, 0)
                 self.valves_status['valve_odor_2_in'] = '0'
-                self.update_valve_label(self._mw.label_2in, 0)
-        elif sender == self._mw.checkBox_4:
+                self.update_valve_label(self._mw.label_2in_2, 0)
+        elif sender == self._mw.out2:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_2_out, 1)
                 self.valves_status['valve_odor_2_out'] = '1'
-                self.update_valve_label(self._mw.label_2out, 1)
+                self.update_valve_label(self._mw.label_2out_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_2_out, 0)
                 self.valves_status['valve_odor_2_out'] = '0'
-                self.update_valve_label(self._mw.label_2out, 0)
-        elif sender == self._mw.checkBox_5:
+                self.update_valve_label(self._mw.label_2out_2, 0)
+        elif sender == self._mw.in3:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_3_in, 1)
                 self.valves_status['valve_odor_3_in'] = '1'
-                self.update_valve_label(self._mw.label_3in, 1)
+                self.update_valve_label(self._mw.label_3in_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_3_in, 0)
                 self.valves_status['valve_odor_3_in'] = '0'
-                self.update_valve_label(self._mw.label_3in, 0)
-        elif sender == self._mw.checkBox_6:
+                self.update_valve_label(self._mw.label_3in_2, 0)
+        elif sender == self._mw.out3:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_3_out, 1)
                 self.valves_status['valve_odor_3_out'] = '1'
-                self.update_valve_label(self._mw.label_3out, 1)
+                self.update_valve_label(self._mw.label_3out_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_3_out, 0)
                 self.valves_status['valve_odor_3_out'] = '0'
-                self.update_valve_label(self._mw.label_3out, 0)
-        elif sender == self._mw.checkBox_7:
+                self.update_valve_label(self._mw.label_3out_2, 0)
+        elif sender == self._mw.in4:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_4_in, 1)
                 self.valves_status['valve_odor_4_in'] = '1'
-                self.update_valve_label(self._mw.label_4in, 1)
+                self.update_valve_label(self._mw.label_4in_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_4_in, 0)
                 self.valves_status['valve_odor_4_in'] = '0'
-                self.update_valve_label(self._mw.label_4in, 0)
-        elif sender == self._mw.checkBox_8:
+                self.update_valve_label(self._mw.label_4in_2, 0)
+        elif sender == self._mw.out4:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_4_out, 1)
                 self.valves_status['valve_odor_4_out'] = '1'
-                self.update_valve_label(self._mw.label_4out, 1)
+                self.update_valve_label(self._mw.label_4out_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_4_out, 0)
                 self.valves_status['valve_odor_4_out'] = '0'
-                self.update_valve_label(self._mw.label_4out, 0)
-        elif sender == self._mw.checkBox_F:
+                self.update_valve_label(self._mw.label_4out_2, 0)
+        elif sender == self._mw.checkBox_F_2:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._final_valve, 1)
                 self.valves_status['final_valve_valve'] = '1'
@@ -552,35 +516,42 @@ class OdorCircuitGUI(GUIBase):
                 self._odor_circuit_arduino_logic.valve(self._final_valve, 0)
                 self.valves_status['final_valve_valve'] = '0'
                 self.update_final_valve_label(0)
-        elif sender == self._mw.checkBox_M:
+        elif sender == self._mw.checkBox_M_2:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
                 self.valves_status['mixing_valve'] = '1'
-                self.update_valve_label(self._mw.label_M, 1)
+                self.update_valve_label(self._mw.label_M_2, 1)
             else:
                 self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
                 self.valves_status['mixing_valve'] = '0'
-                self.update_valve_label(self._mw.label_M, 0)
+                self.update_valve_label(self._mw.label_M_2, 0)
 
     def mfc_on(self):
-        value1 = self._mw.doubleSpinBox.value()
-        value2 = self._mw.doubleSpinBox_2.value()
-        value3 = self._mw.doubleSpinBox_3.value()
+        value1 = self._mw.doubleSpinBox_5.value()
+        value2 = self._mw.doubleSpinBox_6.value()
+        value3 = self._mw.doubleSpinBox_4.value()
         self._odor_circuit_arduino_logic.open_air(value1, value2, value3)
 
     def mfc_on_off(self):
         """ Turn the MFCs on or off switching the MFC status
         """
-        Permission = self.check_valves(self.valves_status)
+
         if not self.MFC_status:
+            self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
+            self.valves_status['mixing_valve'] = '1'
+            self.update_valve_label(self._mw.label_M_2, 1)
+            Permission = self.check_valves(self.valves_status)
             if Permission == 1:
                 logger.info("Opening air...")
                 self.sigMFC_ON.emit()
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
                 self.MFC_status = True
-                self.update_valve_label(self._mw.label_MFCpurge, 1)
-                self.update_valve_label(self._mw.label_MFC1, 1)
-                self.update_valve_label(self._mw.label_MFC2, 1)
+                self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
+                self.valves_status['mixing_valve'] = '1'
+                self.update_valve_label(self._mw.label_M_2, 1)
+                self.update_valve_label(self._mw.label_MFCpurge_2, 1)
+                self.update_valve_label(self._mw.label_MFC1_2, 1)
+                self.update_valve_label(self._mw.label_MFC2_2, 1)
             else:
                 logger.info("Permission denied")
         else:
@@ -588,25 +559,12 @@ class OdorCircuitGUI(GUIBase):
             self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
             self.sigMFC_OFF.emit()
             self.MFC_status = False
-            self.update_valve_label(self._mw.label_MFCpurge, 0)
-            self.update_valve_label(self._mw.label_MFC1, 0)
-            self.update_valve_label(self._mw.label_MFC2, 0)
-
-    def disable_odor_buttons(self):
-        """ Disables buttons, to not mix all odors.
-        """
-        self._mw.toolButton_1.setDisabled(True)
-        self._mw.toolButton_2.setDisabled(True)
-        self._mw.toolButton_3.setDisabled(True)
-        self._mw.toolButton_4.setDisabled(True)
-
-    def enable_odor_buttons(self):
-        """ Enables buttons, to inject a new odor.
-        """
-        self._mw.toolButton_1.setDisabled(False)
-        self._mw.toolButton_2.setDisabled(False)
-        self._mw.toolButton_3.setDisabled(False)
-        self._mw.toolButton_4.setDisabled(False)
+            self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
+            self.valves_status['Mixing_valve'] = '0'
+            self.update_valve_label(self._mw.label_M_2, 0)
+            self.update_valve_label(self._mw.label_MFCpurge_2, 0)
+            self.update_valve_label(self._mw.label_MFC1_2, 0)
+            self.update_valve_label(self._mw.label_MFC2_2, 0)
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Slots related to the flowcontrol
@@ -617,12 +575,13 @@ class OdorCircuitGUI(GUIBase):
         of flowrate .
         """
         if self._odor_circuit_arduino_logic.measuring_flowrate:  # measurement already running
+            np.savetxt('MFC1', self.mesure1)
+            np.savetxt('MFC2',self.mesure2)
+            np.savetxt('MFCPurge',self.mesure3)
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
-            #np.savetxt(self._path_MFC1, self.flowrate1_data)
-            #np.savetxt(self._path_MFC2, self.flowrate2_data)
-            #np.savetxt(self._path_MFCPurge, self.flowrate3_data)
+
         else:
             self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
             self.t_data = []
@@ -649,6 +608,9 @@ class OdorCircuitGUI(GUIBase):
             self.flowrate1_data.append(flowrate1)
             self.flowrate2_data.append(flowrate2)
             self.flowrate3_data.append(flowrate3)
+            self.mesure1.append(flowrate1)
+            self.mesure2.append(flowrate2)
+            self.mesure3.append(flowrate3)
 
         else:
             self.t_data[:-1] = self.t_data[1:]
@@ -660,6 +622,9 @@ class OdorCircuitGUI(GUIBase):
             self.flowrate2_data[-1] = flowrate2
             self.flowrate3_data[:-1] = self.flowrate3_data[1:]  # shift data one position to the left
             self.flowrate3_data[-1] = flowrate3
+            self.mesure1.append(flowrate1)
+            self.mesure2.append(flowrate2)
+            self.mesure3.append(flowrate3)
 
         self._flowrate1_timetrace.setData(self.t_data, self.flowrate1_data)  # t axis running with time
         self._flowrate2_timetrace.setData(self.t_data, self.flowrate2_data)

@@ -123,6 +123,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def on_deactivate(self):
         """ Perform required deactivation. """
+        pass
 
     def valve(self, pin, state):
         """ Open only 1 valve 
@@ -144,25 +145,23 @@ class OdorCircuitArduinoLogic(GenericLogic):
         if odor_number == 1:
             self.valve(self._valve_odor_1_in,1)
             self.valve(self._valve_odor_1_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 2:
             self.valve(self._valve_odor_2_in, 1)
             self.valve(self._valve_odor_2_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 3:
             self.valve(self._valve_odor_3_in, 1)
             self.valve(self._valve_odor_3_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 4:
             self.valve(self._valve_odor_4_in, 1)
             self.valve(self._valve_odor_4_out, 1)
-            self.valve(self._mixing_valve, 0)
         else:
             logger.warning('4 odor only')
 
     def flush_odor(self):
         """ Close all the valves that need to be closed
         """
+        self.valve(self._mixing_valve, 1)
+        self.valve(self._final_valve, 0)
         self.valve(self._valve_odor_1_in, 0)
         self.valve(self._valve_odor_1_out, 0)
         self.valve(self._valve_odor_2_in, 0)
@@ -170,8 +169,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.valve(self._valve_odor_3_in, 0)
         self.valve(self._valve_odor_3_out, 0)
         self.valve(self._valve_odor_4_in, 0)
-        self.valve(self._mixing_valve, 0)
-        self.valve(self._final_valve, 0)
+
+
         print('Odor circuit off')
 
     def open_air(self, flow1, flow2, flow3):

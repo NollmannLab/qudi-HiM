@@ -8,7 +8,7 @@ An extension to Qudi.
 
 @author: D. Guerin, JB. Fiche
 
-Created on Wen july 16, 2024
+Created on Fry july 18, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -28,30 +28,40 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-from PyQt5.QtCore import Qt
 
-from logic.generic_logic import GenericLogic
+import serial
+import time
+from core.module import Base
 
 
-class OptogeneticLogic(GenericLogic):
+class MotorControl(Base):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-
+        ser = serial.Serial(, 9600)
+        time.sleep(2)
 
     def on_activate(self):
         pass
-
     def on_deactivate(self):
-        """ Perform required deactivation. """
-        pass
+        self.ser.close()
 
+    def send_command(self, command):
+        self.ser.write((command + '\n').encode())
+        print(f"Command sent: {command}")
 
-    def image_display (self, image, window):
-        """"""
+    """Envoyer des commandes
+        send_command("forward")
+        time.sleep(2)
 
-        window.label.setPixmap(image)
-        window.label.setAlignment(Qt.AlignCenter)
+        send_command("backward")
+        time.sleep(2)
+
+        send_command("speed10")
+        time.sleep(2)
+
+        send_command("speed20")
+        time.sleep(2)"""
 
 
 

@@ -15,11 +15,11 @@
 | **Software**                  | Arduino IDE (https://www.arduino.cc/en/software)             |
 | **Python**                    | Implemented on qudi-HiM                                      |
 | **Resources**                 | Device manual papersheet<br />Get started : https://docs.arduino.cc/hardware/uno-rev3/ |
-| **Supplementary information** | The pin 0 and 1 is not usable and the pin 13                 |
+| **Supplementary information** | The pin 0 and 1 are not usable and the pin 13 activate itself 4 times at the start of the arduino |
 
 ## Mass Flow Controller: 
 
-| **Model and SN**     | SFC6000D-5slm (SN#000000000DFEC391, SN#000000000DFEC3A6)     |
+| **Model and SN**     | SFC6000D-5slm (SN#234000017, SN#234000030, SN#242200200)     |
 | -------------------- | ------------------------------------------------------------ |
 | **Drivers location** | pip install sensirion_uart_sfx6xxx                           |
 | **Software**         | ControlCenter (available on their site : https://sensirion.com/products/sensor-evaluation/control-center/ ) |
