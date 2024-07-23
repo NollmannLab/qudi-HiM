@@ -320,6 +320,19 @@ p, li { white-space: pre-wrap; }
        <string>MFC purge</string>
       </property>
      </widget>
+     <widget class="QToolButton" name="stoplaunch">
+      <property name="geometry">
+       <rect>
+        <x>780</x>
+        <y>290</y>
+        <width>61</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>Stop</string>
+      </property>
+     </widget>
     </widget>
    </widget>
    <widget class="QDockWidget" name="dockWidget_4">

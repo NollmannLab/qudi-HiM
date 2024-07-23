@@ -8,7 +8,7 @@ An extension to Qudi.
 
 @author: D. Guerin, JB. Fiche
 
-Created on Fry may 24, 2024
+Created on Fry May 24, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -29,23 +29,18 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 
+import logging
 import os
-import time
-from typing import Dict
 
 import numpy as np
+from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QLabel, QVBoxLayout, QWidget
 from qtpy import QtWidgets, uic, QtCore
 from qtpy.QtCore import Signal
-import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QTimer
+
 from core.configoption import ConfigOption
-from gui.guibase import GUIBase
 from core.connector import Connector
-import logging
+from gui.guibase import GUIBase
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -113,6 +108,18 @@ class OdorCircuitGUI(GUIBase):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.timer1 = None
+        self.timer2 = None
+        self.mesure2 = None
+        self._flowrate3_timetrace = None
+        self._flowrate2_timetrace = None
+        self._flowrate1_timetrace = None
+        self.mesure3 = None
+        self.mesure1 = None
+        self.flowrate3_data = None
+        self.flowrate2_data = None
+        self.flowrate1_data = None
+        self.t_data = None
         self._odor_circuit_arduino_logic = None
         self._mw = None
         self._dw = None
@@ -148,7 +155,7 @@ class OdorCircuitGUI(GUIBase):
         # Window
         self._mw = MainWindow(self.close_function)
         self._mw.centralwidget.show()  # everything is in dockwidgets
-
+        self._mw.stoplaunch.setDisabled(True)
         self.init_flowcontrol()
         self._mw.label_8.setPixmap(self.pixmap2)
 
@@ -159,6 +166,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.odor3.stateChanged.connect(self.odor_changed)
         self._mw.odor4.stateChanged.connect(self.odor_changed)
 
+        self._mw.stoplaunch.clicked.connect(self.stop_Launch)
         self._mw.Launch.clicked.connect(self.LaunchClicked)
         self._mw.in1.stateChanged.connect(self.check_box_changed)
         self._mw.out1.stateChanged.connect(self.check_box_changed)
@@ -234,6 +242,9 @@ class OdorCircuitGUI(GUIBase):
         self._odor_circuit_arduino_logic.sigEnableFlowActions.connect(self.enable_flowcontrol_buttons)
         self.sigMFC_ON.connect(self.mfc_on)
         self.sigMFC_OFF.connect(self._odor_circuit_arduino_logic.close_air)
+
+        self.timer1 = QTimer()
+        self.timer2 = QTimer()
 
     def showDock(self):
         """Show the dock widget"""
@@ -394,6 +405,7 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['final_valve'] = '0'
         self.update_final_valve_label(0)
         self.clear()
+        self.timer2.stop()
 
     def sendit(self):
         """Activate the final valve and update its label.
@@ -401,6 +413,7 @@ class OdorCircuitGUI(GUIBase):
         self.valves_status['final_valve'] = '1'
         self.update_final_valve_label(1)
         self._odor_circuit_arduino_logic.valve(self._final_valve, 1)
+        self.timer1.stop()
 
     def flush(self):
         """Flush the odor circuit and activate the mixing valve."""
@@ -408,20 +421,43 @@ class OdorCircuitGUI(GUIBase):
         self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
         self.valves_status['Mixing_valve'] = '1'
 
+
     def LaunchClicked(self):
         """Handle the click event to launch the odor preparation process.
         """
+        self._mw.Launch.setDisabled(True)
         Bodor = self._mw.Bodor.value() * 60
         Aodor = self._mw.Aodor.value() * 60
         self._odor_circuit_arduino_logic.prepare_odor(self.a)
         self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
         self.valves_status['Mixing_valve'] = '0'
+        self.timer1.timeout.connect(self.sendit)
+        self.timer1.start(Bodor * 1000)
+        self.timer2.timeout.connect(self.flush)
+        self.timer2.timeout.connect(self.enable_valve_after_launch)
+        self.timer2.start((Aodor * 1000) + Bodor * 1000)
+        self._mw.stoplaunch.setDisabled(False)
 
-        QTimer.singleShot(Bodor * 1000, self.sendit)
-        QTimer.singleShot((Aodor * 1000) + (Bodor * 1000), self.flush)
-        QTimer.singleShot((Aodor * 1000) + (Bodor * 1000), self.enable_valve_after_launch)
+    def stop_Launch(self):
+        """
+        Stops the QTimers if it is active.
+        """
+        self.flush()
+        self.enable_valve_after_launch()
 
-    def update_valve_label(self, label, state):
+        if self.timer1.isActive():
+            self.timer1.stop()
+            logger.info("Timer1 stopped.")
+        if self.timer2.isActive():
+            self.timer2.stop()
+            logger.info("Timer2 stopped.")
+        self._mw.Launch.setDisabled(False)
+        self._mw.stoplaunch.setDisabled(True)
+
+
+
+    @staticmethod
+    def update_valve_label(label, state):
         """ Update the valve label to show 'opened' or 'closed'.
         """
         if state == 1:
@@ -585,8 +621,8 @@ class OdorCircuitGUI(GUIBase):
         """
         if self._odor_circuit_arduino_logic.measuring_flowrate:  # measurement already running
             np.savetxt('MFC1', self.mesure1)
-            np.savetxt('MFC2',self.mesure2)
-            np.savetxt('MFCPurge',self.mesure3)
+            np.savetxt('MFC2', self.mesure2)
+            np.savetxt('MFCPurge', self.mesure3)
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
@@ -603,13 +639,18 @@ class OdorCircuitGUI(GUIBase):
     @QtCore.Slot(list, list, list)
     def update_flowrate(self, flowrate1, flowrate2, flowrate3):
         """ Callback of a signal emitted from logic informing the GUI about the new flowrate values.
-        :param float flowrate1: current flowrate retrieved from hardware
+
+        @param float flowrate1: current flowrate retrieved from hardware MFC1
+        @param float flowrate2: current flowrate retrieved from hardware MFC2
+        @param float flowrate3: current flowrate retrieved from hardware MFCPurge
         """
         self.update_flowrate_timetrace(flowrate1[0], flowrate2[0], flowrate3[0])
 
     def update_flowrate_timetrace(self, flowrate1, flowrate2, flowrate3):
         """ Add a new data point to the  flowrate timetraces.
-        :param float flowrate1: current flowrate retrieved from hardware
+        @param float flowrate1: current flowrate retrieved from hardware MFC1
+        @param float flowrate2: current flowrate retrieved from hardware MFC2
+        @param float flowrate3: current flowrate retrieved from hardware MFCPurge
         """
 
         if len(self.flowrate1_data) < 100:

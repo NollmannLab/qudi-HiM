@@ -38,7 +38,6 @@ class OptogeneticLogic(GenericLogic):
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
 
-
     def on_activate(self):
         pass
 
@@ -46,8 +45,8 @@ class OptogeneticLogic(GenericLogic):
         """ Perform required deactivation. """
         pass
 
-
-    def image_display (self, image, window):
+    @staticmethod
+    def image_display(image, window):
         """Display the given image in the specified window.
 
             @param image: The QPixmap image to be displayed.
@@ -56,6 +55,3 @@ class OptogeneticLogic(GenericLogic):
 
         window.label.setPixmap(image)
         window.label.setAlignment(Qt.AlignCenter)
-
-
-

@@ -28,13 +28,13 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import logging
 import os
 import sys
-import time
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget
-from PyQt5.QtGui import QPixmap, QScreen
 from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt5.uic.properties import QtWidgets
 from qtpy import uic
 from qtpy.QtCore import Signal
@@ -42,7 +42,6 @@ from qtpy.QtCore import Signal
 from core.configoption import ConfigOption
 from core.connector import Connector
 from gui.guibase import GUIBase
-import logging
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
