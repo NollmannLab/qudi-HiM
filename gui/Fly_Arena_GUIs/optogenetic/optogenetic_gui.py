@@ -49,7 +49,11 @@ logger = logging.getLogger(__name__)
 
 
 class ImageWindow(QMainWindow):
-    """"""
+    """A window class for displaying images on the secondary screen.
+
+    This class inherits from QMainWindow and sets up a full-screen window
+    on the second available screen. It includes a QLabel centered in the
+    window to display images."""
 
     def __init__(self):
         super().__init__()
@@ -66,7 +70,6 @@ class ImageWindow(QMainWindow):
 
         screen_geometry = second_screen.geometry()
 
-
         self.label = QLabel(self)
         self.label.setAlignment(Qt.AlignCenter)
         self.setCentralWidget(self.label)
@@ -77,6 +80,7 @@ class ImageWindow(QMainWindow):
 class OptoWindow(QtWidgets.QMainWindow):
     """ Class defined for the optogenetic window for odor control.
         """
+
     def __init__(self):
         super().__init__()
         this_dir = os.path.dirname(__file__)
@@ -106,8 +110,6 @@ class OptogeneticGUI(GUIBase):
 
     screen_geometry = second_screen.geometry()
 
-
-
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self._optogenetic_logic = None
@@ -119,13 +121,14 @@ class OptogeneticGUI(GUIBase):
         self.quart2map = QPixmap(self._quart2_path)
         self._ow = OptoWindow()
         self._iw = ImageWindow()
-        self.noirmapscaled = self.noirmap.scaled(self.screen_geometry.width(), self.screen_geometry.height(), Qt.KeepAspectRatio)
-        self.quart1mapscaled = self.quart1map.scaled(self.screen_geometry.width(), self.screen_geometry.height(), Qt.KeepAspectRatio)
-        self.quart2mapscaled = self.quart2map.scaled(self.screen_geometry.width(), self.screen_geometry.height(), Qt.KeepAspectRatio)
+        self.noirmapscaled = self.noirmap.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+                                                 Qt.KeepAspectRatio)
+        self.quart1mapscaled = self.quart1map.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+                                                     Qt.KeepAspectRatio)
+        self.quart2mapscaled = self.quart2map.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+                                                     Qt.KeepAspectRatio)
         self._iw.label.setPixmap(self.noirmapscaled)
         self._ow.retour_2.setPixmap(self.noirmapscaled)
-
-
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
@@ -146,14 +149,17 @@ class OptogeneticGUI(GUIBase):
         self._iw.close()
 
     def noirdisplay(self):
-        """"""
+        """
+        Display the 'noir' image and update the optogenetic logic.
+        """
         im = self.noirmap.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
         self._optogenetic_logic.image_display(self.noirmapscaled, self._iw)
 
-
     def quart1display(self):
-        """"""
+        """
+        Display the 'quart1' image and update the optogenetic logic.
+        """
         im = self.quart1map.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
         if self._ow.doubleSpinBox.value() == 0:
@@ -163,9 +169,10 @@ class OptogeneticGUI(GUIBase):
             self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
             QTimer.singleShot(self._ow.doubleSpinBox.value() * 60 * 1000, self.noirdisplay)
 
-
     def quart2display(self):
-        """"""
+        """
+        Display the 'quart2' image and update the optogenetic logic.
+        """
         im = self.quart2map.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
         if self._ow.doubleSpinBox.value() == 0:

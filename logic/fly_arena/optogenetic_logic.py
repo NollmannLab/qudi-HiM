@@ -48,7 +48,11 @@ class OptogeneticLogic(GenericLogic):
 
 
     def image_display (self, image, window):
-        """"""
+        """Display the given image in the specified window.
+
+            @param image: The QPixmap image to be displayed.
+            @param window: The window object that contains the label where the image will be displayed.
+        """
 
         window.label.setPixmap(image)
         window.label.setAlignment(Qt.AlignCenter)

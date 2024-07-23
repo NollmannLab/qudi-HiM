@@ -207,6 +207,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def get_flowrate(self):
         """
+        The flowrate turns to matrix
         """
         M1, M2, M3 = self.read_all_average_measure
         M1, M2, M3 = [M1], [M2], [M3]

@@ -236,14 +236,17 @@ class OdorCircuitGUI(GUIBase):
         self.sigMFC_OFF.connect(self._odor_circuit_arduino_logic.close_air)
 
     def showDock(self):
-        """"""
+        """Show the dock widget"""
         self._mw.dockWidget_3.show()
 
     def hideDock(self):
-        """"""
+        """Hide the dock widget"""
         self._mw.dockWidget_3.hide()
 
     def clear(self):
+        """
+         Reset the valve statuses and update the labels.
+        """
         self.valves_status['valve_odor_1_in'] = '0'
         self.valves_status['valve_odor_1_out'] = '0'
         self.valves_status['valve_odor_2_in'] = '0'
@@ -264,7 +267,7 @@ class OdorCircuitGUI(GUIBase):
     a = 0
 
     def odor_changed(self, state):
-        """"""
+        """Handle the change in the state of the odor selection checkboxes."""
 
         sender = self.sender()  # Get the QCheckBox that emitted the signal
         self.clear()
@@ -337,7 +340,9 @@ class OdorCircuitGUI(GUIBase):
                 self.update_valve_label(self._mw.label_4out_2, 0)
 
     def check_valves(self, valves_status):
-        '''Check valves status to permit the MFC2 to turn on'''
+        """
+        Check valves status to permit the MFC2 to turn on
+        """
 
         count_on_associations = 0
         active_associations = []
@@ -373,7 +378,7 @@ class OdorCircuitGUI(GUIBase):
             return 0
 
     def enable_valve_after_launch(self):
-
+        """Enable the valves and update the labels after the launch process."""
         self._mw.checkBox_M_2.setChecked(False)
         self._mw.in1.setDisabled(False)
         self._mw.out1.setDisabled(False)
@@ -391,20 +396,20 @@ class OdorCircuitGUI(GUIBase):
         self.clear()
 
     def sendit(self):
-        """
+        """Activate the final valve and update its label.
         """
         self.valves_status['final_valve'] = '1'
         self.update_final_valve_label(1)
         self._odor_circuit_arduino_logic.valve(self._final_valve, 1)
 
     def flush(self):
-        """"""
+        """Flush the odor circuit and activate the mixing valve."""
         self._odor_circuit_arduino_logic.flush_odor()
         self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
         self.valves_status['Mixing_valve'] = '1'
 
     def LaunchClicked(self):
-        """
+        """Handle the click event to launch the odor preparation process.
         """
         Bodor = self._mw.Bodor.value() * 60
         Aodor = self._mw.Aodor.value() * 60
@@ -417,22 +422,26 @@ class OdorCircuitGUI(GUIBase):
         QTimer.singleShot((Aodor * 1000) + (Bodor * 1000), self.enable_valve_after_launch)
 
     def update_valve_label(self, label, state):
-        """ Update the valve label to show 'opened' or 'closed'. """
+        """ Update the valve label to show 'opened' or 'closed'.
+        """
         if state == 1:
             label.setText("Open")
         else:
             label.setText("Close")
 
     def update_final_valve_label(self, state):
-        """ Update the final valve label to change background image. """
+        """ Update the final valve label to change background image.
+        """
         if state == 1:
             self._mw.label_8.setPixmap(self.pixmap1)
         else:
             self._mw.label_8.setPixmap(self.pixmap2)
 
     def check_box_changed(self, state):
-        '''Check the state of the valves box and turn on or off the devise
-        if check, turn on; if unchecked, turn off.'''
+        """
+        Check the state of the valves box and turn on or off the devise
+        if check, turn on; if unchecked, turn off.
+        """
         sender = self.sender()  # Get the QCheckBox that emitted the signal
 
         if sender == self._mw.in1:
