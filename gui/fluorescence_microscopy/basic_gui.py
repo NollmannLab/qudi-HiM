@@ -893,7 +893,7 @@ class BasicGUI(GUIBase):
         """ This slot is called when the user has selected an area of the camera image using the rubberband tool.
         Allows to reduce the used area of the camera sensor.
 
-        :param: QRectF rect: Qt object defining the corners of a rectangle selected in an image item.
+        @param: (QRectF) rect: Qt object defining the corners of a rectangle selected in an image item.
         """
         self.log.debug('selected an area')
         self.log.debug(rect.getCoords())
@@ -1009,9 +1009,8 @@ class BasicGUI(GUIBase):
         self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
     def enable_camera_toolbuttons(self):
-        """ Enables all toolbuttons of the camera toolbar.
-
-        Serves also as callback of SigVideoFinished.
+        """
+        Enables all toolbuttons of the camera toolbar. Serves also as callback of SigVideoFinished.
         """
         if not self._camera_logic.live_enabled:  # do not reset to active state if live mode is on
             self._mw.take_image_Action.setDisabled(False)
