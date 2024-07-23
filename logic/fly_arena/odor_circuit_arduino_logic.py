@@ -28,13 +28,14 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
+import logging
+import time
+
+from qtpy import QtCore
+
+from core.configoption import ConfigOption
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
-from qtpy import QtCore
-import time
-import numpy as np
-from core.configoption import ConfigOption
-import logging
 
 logging.basicConfig(filename='Fly Arena/logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -77,7 +78,6 @@ class MeasurementWorker(QtCore.QRunnable):
 # Logic class
 # ======================================================================================================================
 class OdorCircuitArduinoLogic(GenericLogic):
-    #connectors
     arduino_uno = Connector(interface='Base')  # no specific arduino interface required
     MFC = Connector(interface='Base')  # no specific MFC interface required
 
@@ -123,12 +123,13 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def on_deactivate(self):
         """ Perform required deactivation. """
+        pass
 
     def valve(self, pin, state):
         """ Open only 1 valve 
+        @param pin: Number of the pin to activate (2 to 12)
         @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
         input example: ' 'state' '
-        @param NbValve : The pin link to the valve
         """
         if state == 1:
             self._ard.pin_on(pin)
@@ -137,32 +138,30 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def prepare_odor(self, odor_number):
         """
+        Prepare the specified odor by activating the corresponding valves.
         @param odor_number: number of the odor you want to inject (not use yet)
         input example: ' 'odor_number' '
         """
-
         if odor_number == 1:
-            self.valve(self._valve_odor_1_in,1)
+            self.valve(self._valve_odor_1_in, 1)
             self.valve(self._valve_odor_1_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 2:
             self.valve(self._valve_odor_2_in, 1)
             self.valve(self._valve_odor_2_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 3:
             self.valve(self._valve_odor_3_in, 1)
             self.valve(self._valve_odor_3_out, 1)
-            self.valve(self._mixing_valve, 0)
         elif odor_number == 4:
             self.valve(self._valve_odor_4_in, 1)
             self.valve(self._valve_odor_4_out, 1)
-            self.valve(self._mixing_valve, 0)
         else:
             logger.warning('4 odor only')
 
     def flush_odor(self):
         """ Close all the valves that need to be closed
         """
+        self.valve(self._mixing_valve, 1)
+        self.valve(self._final_valve, 0)
         self.valve(self._valve_odor_1_in, 0)
         self.valve(self._valve_odor_1_out, 0)
         self.valve(self._valve_odor_2_in, 0)
@@ -170,8 +169,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.valve(self._valve_odor_3_in, 0)
         self.valve(self._valve_odor_3_out, 0)
         self.valve(self._valve_odor_4_in, 0)
-        self.valve(self._mixing_valve, 0)
-        self.valve(self._final_valve, 0)
+
         print('Odor circuit off')
 
     def open_air(self, flow1, flow2, flow3):
@@ -204,20 +202,21 @@ class OdorCircuitArduinoLogic(GenericLogic):
         A2 = self._MFC.average_measure(self._MFC_1, 20)
         A3 = self._MFC.average_measure(self._MFC_2, 20)
 
-        return A1, A2, A3
+        return A2, A3, A1
 
     def get_flowrate(self):
         """
+        The flowrate turns to matrix
         """
         M1, M2, M3 = self.read_all_average_measure
         M1, M2, M3 = [M1], [M2], [M3]
         return M1, M2, M3
 
-    # ----------------------------------------------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------------------------------------------
     # Methods for continuous processes (flowrate measurement loop)
-    # ----------------------------------------------------------------------------------------------------------------------
+    # -----------------------------------------------------------------------------------------------------------------
 
-    # Flowrate measument loop ----------------------------------------------------------------------------------------------
+    # Flowrate measurement loop ---------------------------------------------------------------------------------------
 
     def start_flow_measurement(self):
         """ Start a continuous measurement of the flowrate.
@@ -231,14 +230,14 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.threadpool.start(worker)
 
     def flow_measurement_loop(self):
-        """ Continous measuring of the flowrate at a defined sampling rate using a worker thread.
+        """ Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
         :param: None
         :return: None
         """
         flowrate1, flowrate2, flowrate3 = self.get_flowrate()
         self.sigUpdateFlowMeasurement.emit(flowrate1, flowrate2, flowrate3)
         if self.measuring_flowrate:
-            # enter in a loop until measuring mode is switched off
+            # enter a loop until measuring mode is switched off
             worker = MeasurementWorker()
             worker.signals.sigFinished.connect(self.flow_measurement_loop)
             self.threadpool.start(worker)

@@ -1,55 +1,57 @@
-import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget
-from PyQt5.QtGui import QPixmap, QScreen
+# -*- coding: utf-8 -*-
+"""
+Qudi-CBS
+
+This module contains a GUI for the odor circuit on the Fly Arena.
+
+An extension to Qudi.
+
+@author: D. Guerin, JB. Fiche
+
+Created on Wen july 16, 2024
+-----------------------------------------------------------------------------------
+
+Qudi is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+Qudi is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with Qudi. If not, see <http://www.gnu.org/licenses/>.
+
+Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
+top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
+"""
 from PyQt5.QtCore import Qt
 
 from logic.generic_logic import GenericLogic
 
 
-class ImageWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
+class OptogeneticLogic(GenericLogic):
 
-        self.setWindowState(Qt.WindowFullScreen)  # Display in full screen
-
-        screens = QApplication.screens()
-
-        if len(screens) < 2:
-            print("Error: There are not enough screens available.")
-            sys.exit(1)
-
-        second_screen = screens[1]
-
-        screen_geometry = second_screen.geometry()
-
-        image_path = 'C:/Users/sCMOS-1/qudi-cbs/gui/Fly_Arena_GUIs/optogenetic/Image/Black.PNG'
-        pixmap = QPixmap(image_path)
-
-        scaled_pixmap = pixmap.scaled(screen_geometry.width(), screen_geometry.height(), Qt.KeepAspectRatio)
-
-        self.label = QLabel(self)
-        self.label.setPixmap(scaled_pixmap)
-        self.label.setAlignment(Qt.AlignCenter)
-        self.setCentralWidget(self.label)
-
-        self.setGeometry(screen_geometry)
-
-
-class OptogeneticLogic (GenericLogic):
-
-    def __init__(self):
-        self._iw = None
+    def __init__(self, config, **kwargs):
+        super().__init__(config=config, **kwargs)
 
     def on_activate(self):
-        self._iw = ImageWindow()
+        pass
 
     def on_deactivate(self):
-        self._iw.close()
+        """ Perform required deactivation. """
+        pass
 
-    def activate_window(self):
-        """Activates and shows the window."""
-        self.show()
+    @staticmethod
+    def image_display(image, window):
+        """Display the given image in the specified window.
 
-    def deactivate_window(self):
-        """Deactivates and hides the window."""
-        self.hide()
+            @param image: The QPixmap image to be displayed.
+            @param window: The window object that contains the label where the image will be displayed.
+        """
+
+        window.label.setPixmap(image)
+        window.label.setAlignment(Qt.AlignCenter)

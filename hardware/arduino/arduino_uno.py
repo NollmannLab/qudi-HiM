@@ -61,6 +61,12 @@ class ArduinoUno(Base):
         pass
 
     def send_command(self, pin, state):
+        """Send a command to the Arduino to be decrypted and processed.
+        @param pin: The pin number on the Arduino to which the command is addressed.
+        This should be an integer or string representing the pin.(2 to 13)
+        @param state: (bool : on/off) The state to be set for the specified pin.
+        This should be an integer or string representing the desired state.
+        """
         # Create the command string
         command = f"{pin}{state}\n"
         # Send the command to the Arduino
@@ -74,7 +80,9 @@ class ArduinoUno(Base):
 
 
     def pin_on(self, pin):
+        """turn on a choosen pin"""
         self.send_command(pin, 1)
 
     def pin_off(self, pin):
+        """turn off a choosen pin"""
         self.send_command(pin, 0)
