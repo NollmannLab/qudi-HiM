@@ -35,10 +35,23 @@ from time import sleep
 from core.module import Base
 from core.configoption import ConfigOption
 from interface.camera_interface import CameraInterface
-from pyvcam import pvc
+from pyvcam import pvc, constants
 from pyvcam.camera import Camera
 
 
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    def new_function(*args, **kwargs):
+        print(f'*** DEBUGGING *** Executing in hardware {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
+
+
+# ======================================================================================================================
+# Class for controlling the Kinetix camera
+# ======================================================================================================================
 class KinetixCam(Base, CameraInterface):
     """ Hardware class for Kinetix teledyne-photometrics camera
 
@@ -76,16 +89,28 @@ class KinetixCam(Base, CameraInterface):
         elif n_cam > 1:
             self.log.error('More than one camera was detected - this program does not handle multiple camera')
         else:
-            self.camera = next(Camera.detect_camera())  # Use generator to find first camera.
-            self.camera.open()  # Open the camera.
+            try:
+                self.camera = next(Camera.detect_camera())  # Use generator to find first camera.
+                self.camera.open()  # Open the camera.
 
-            self.get_size()  # update the values _weight, _height
-            self._full_width = self._width
-            self._full_height = self._height
+                self.get_size()  # update the values _weight, _height
+                self._full_width = self._width
+                self._full_height = self._height
 
-            # set some default parameters value - for default display, the camera will be used in 12bit mode (port = 0).
-            self.set_exposure(self._exposure)
-            self.camera.readout_port = 0
+                # set some default parameters value - note the camera is already set to 'Dynamic Range' in order to get
+                # the same intensity values for the displayed and saved data
+                self.set_exposure(self._exposure)
+                self.camera.readout_port = 2  # Set the camera in 'Dynamic Range' mode by default (16 bit depth)
+                self.camera.exp_mode = 1792  # Set the camera in 'Internal Trigger' mode
+
+                # initialize the default acquisition parameters by launching a brief live acquisition - this step is
+                # required to have access to the "check_frame_status" method without throwing an error
+                self.camera.start_live(exp_time=int(self._exposure * 1000))
+                sleep(self._exposure * 2)
+                self.camera.finish()
+
+            except Exception as e:
+                self.log.error(e)
 
     def on_deactivate(self):
         """ Camera will be deactivated and stopped during execution of this module.
@@ -102,63 +127,83 @@ class KinetixCam(Base, CameraInterface):
 # ----------------------------------------------------------------------------------------------------------------------
 
     def get_name(self):
-        """ Retrieve an identifier of the camera that the GUI can print.
-
-        :return: string: name for the camera
+        """
+        Retrieve an identifier of the camera that the GUI can print.
+        @return: string: name for the camera
         """
         camera_name = pvc.get_cam_name(0)
         return camera_name
 
     def get_size(self):
-        """ Retrieve size of the image in pixel.
-
-        :return: tuple (int, int): Size (width, height)
+        """
+        Retrieve size of the image in pixel.
+        @return: tuple (int, int): Size (width, height)
         """
         sensor_size = self.camera.sensor_size
         self._width = sensor_size[0]
         self._height = sensor_size[1]
 
     def set_exposure(self, exposure):
-        """ Set the exposure time in ms.
-
+        """
+        Set the exposure time in ms.
         @param: exposure (float): desired new exposure time in s (but beware that default unit for Kinetix camera is ms)
         """
         self.camera.exp_time = exposure * 1000
         self._exposure = self.camera.exp_time / 1000
 
     def get_exposure(self):
-        """ Get the exposure time in seconds.
-
+        """
+        Get the exposure time in seconds.
         @return: exposure time (float)
         """
         self._exposure = self.camera.exp_time / 1000
         return self._exposure
 
-    def set_gain(self, gain):
-        """ Set the gain - gain is not available for the kinetix camera.
+    @staticmethod
+    def is_cooler_on():
+        """
+        Get the status of the camera cooler. For the Kinetix, it is always ON.
+        @return: (int) 0 = cooler is OFF - 1 = cooler is ON
+        """
+        return 1
 
+    def get_temperature(self):
+        """
+        Get the sensor temperature in degrees Celsius.
+        @return: temp (float) sensor temperature
+        """
+        temp = pvc.get_param(self.camera.handle, constants.PARAM_TEMP, constants.ATTR_CURRENT)
+        return temp
+
+    def set_gain(self, gain):
+        """
+        Set the gain - gain is not available for the kinetix camera.
         @param: gain: (int) desired new gain
         @return: (bool)
         """
         return False
 
     def get_gain(self):
-        """ Get the gain
-
+        """
+        Get the gain
         @return: gain: (int)
         """
         return self._gain
 
     def get_ready_state(self):
-        """ Is the camera ready for an acquisition ? For the Kinetix, there is no method handling the camera status. By
-        default, it will return True
-
+        """
+        Is the camera ready for an acquisition ?
         @return: ready ? (bool)
         """
-        return True
+        status = self.camera.check_frame_status()
+        if (status == "EXPOSURE_IN_PROGRESS") or (status == "READOUT_IN_PROGRESS") or (status == "READOUT_FAILED"):
+            return False
+        else:
+            return True
 
     def set_image(self, hbin, vbin, hstart, hend, vstart, vend):
-        """ Sets a ROI on the sensor surface.
+        """
+        Sets a ROI on the sensor surface.
 
         @param: hbin: (int) number of pixels to bin horizontally
         @param: vbin: (int) number of pixels to bin vertically.
@@ -169,29 +214,20 @@ class KinetixCam(Base, CameraInterface):
         @return: int error code: ok = 0
         """
         try:
-            # only multiples of 4 are allowed for hstart, hend, vsize, hsize. Use the lower nearest multiple of 4
-            hstart = int(hstart / 4) * 4
-            vstart = int(vstart / 4) * 4
-            vend = int(vend / 4) * 4
-            hend = int(hend / 4) * 4
-            vsize = vend - vstart
-            hsize = hend - hstart
-            self.camera.setPropertyValue('subarray_hpos', hstart)
-            self.camera.setPropertyValue('subarray_vpos', vstart)
-            self.camera.setPropertyValue('subarray_hsize', hsize)
-            self.camera.setPropertyValue('subarray_vsize', vsize)
-            self.camera.setSubArrayMode()
-            self.log.info(f'Set subarray: {vsize} x {hsize} pixels (rows x cols)')  # for tests
+            self._width = int(vend - vstart)
+            self._height = int(hend - hstart)
+            self.camera.set_roi(vstart, hstart, self._height, self._width)
+            self.log.info(f'Set subarray: {self._height} x {self._width} pixels (rows x cols)')
             return 0
-        except Exception:
+        except Exception as e:
+            self.log.error(e)
             return -1
 
     def get_progress(self):
-        """ Retrieves the total number of acquired images during a movie acquisition.
-
-        :return: int progress: total number of acquired images.
         """
-        return self.camera.check_frame_number()
+        For the Kinetix, progress is handled in the "get_most_recent_image" method.
+        """
+        pass
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to query the camera properties
@@ -200,23 +236,24 @@ class KinetixCam(Base, CameraInterface):
     def support_live_acquisition(self):
         """ Return whether the camera handle live acquisition.
 
-        :return: (bool) True if supported, False if not
+        @return: (bool) True if supported, False if not
         """
         return True
 
     def has_temp(self):
-        """ Does the camera support setting of the temperature?
-
-        :return: bool: has temperature ?
         """
-        return False
+        Does the camera support setting of the temperature?
+
+        @return: bool: has temperature ?
+        """
+        return True
 
     def has_shutter(self):
-        """ Is the camera equipped with a mechanical shutter?
-
+        """
+        Is the camera equipped with a mechanical shutter?
         If this function returns true, the attribute _shutter must also be defined in the hardware module
 
-        :return: bool: has shutter ?
+        @return: bool: has shutter ?
         """
         return False
 
@@ -226,71 +263,72 @@ class KinetixCam(Base, CameraInterface):
 
 # Methods for displaying images on the GUI -----------------------------------------------------------------------------
     def start_single_acquisition(self):
-        """ Start acquisition for a single frame (snap mode) and return the acquired frame - note Kinetix camera works
-        differently from Andor or Hamamatsu where an acquisition mode was required first.
-
+        """
+        Start acquisition for a single frame (snap mode) and return the acquired frame
         @return: frame (numpy array): acquired frame
         """
-        print(self._exposure * 1000)
         frame = self.camera.get_frame(exp_time=int(self._exposure * 1000))
         return frame
 
     def start_live_acquisition(self):
-        """ Start a continuous acquisition.
-
-        :return: Success ? (bool)
+        """
+        Start a continuous acquisition.
+        @return: Success ? (bool)
         """
         try:
             self.camera.start_live(exp_time=int(self._exposure * 1000))
             return True
         except Exception as e:
-            self.log.error(f"The following error was detected : {e}")
+            self.log.error(e)
             return False
 
     def stop_acquisition(self):
-        """ Stop/abort live or single acquisition
-
-        :return: bool: Success ?
+        """
+        Stop/abort live or single acquisition
+        @return: bool: Success ?
         """
         try:
             self.camera.finish()
             return True
         except Exception as e:
-            self.log.error(f"The following error was detected : {e}")
+            self.log.error(e)
             return False
 
 # Methods for saving image data ----------------------------------------------------------------------------------------
     def start_movie_acquisition(self, n_frames):
-        """ Set the conditions to save a movie and start the acquisition (fixed length mode).
+        """
+        Set the conditions to save a movie and start the acquisition (fixed length mode).
 
-        :param: int n_frames: number of frames
-
-        :return: bool: Success ?
+        @param: (int) n_frames: number of frames
+        @return: bool: Success ?
         """
         self.n_frames = n_frames  # needed to choose the correct case in get_acquired_data method
         try:
-            self.camera.setACQMode('fixed_length', n_frames)
-            self.camera.startAcquisition()
+            self.camera.start_seq(exp_time=int(self._exposure * 1000), num_frames=n_frames)
             return True
-        except Exception:
+        except Exception as e:
+            if "PL_ERR_TOO_MANY_FRAMES" in str(e):
+                self.log.error(f"{e} - The number of images is too large for the memory. Try using a smaller ROI")
+            else:
+                self.log.error(e)
             return False
 
     def finish_movie_acquisition(self):
-        """ Reset the conditions used to save a movie to default.
+        """
+        Reset the conditions used to save a movie to default.
 
-        :return: bool: Success ?
+        @return: bool: Success ?
         """
         try:
-            self.camera.stopAcquisition()
+            self.camera.finish()
             self.n_frames = 1  # reset to default
             return True
-        except Exception:
+        except Exception as e:
+            self.log.error(e)
             return False
 
     def wait_until_finished(self):
         """ Wait until an acquisition is finished.
-
-        :return: None
         """
         pass
 
@@ -336,78 +374,50 @@ class KinetixCam(Base, CameraInterface):
 # Methods for image data retrieval
 # ----------------------------------------------------------------------------------------------------------------------
 
-    def get_most_recent_image(self):
+    def get_most_recent_image(self, copy=True):
         """
-        Return an array of last acquired image. Used mainly for live display on gui during video saving.
+        Return the last acquired image and the total number of acquired images. Used mainly for live display on gui
+        during video saving. Note "copyData" is set to True when a copy of the data is required. When False, the image
+        won't be accessible after stopping the acquisition.
 
-        :return: numpy array: image data in format [[row],[row]...]
-
-        Each pixel might be a float, integer or sub pixels
+        @param: (bool) copy : indicate whether the frame should be copied
+        @return:
+        frame (numpy array): latest acquired frame
+        frame_count (int): number of acquired frames
         """
-        [frame, dim] = self.camera.getMostRecentFrame()  # frame is HCamData object, dim is a list [image_width, image_height]
-        image_array = np.zeros(dim[0] * dim[1])
-        data = frame.getData()
-        image_array = np.reshape(data, (dim[1], dim[0]))
-        return image_array
+        try:
+            frame, _, frame_count = self.camera.poll_frame(timeout_ms=1000, oldestFrame=False, copyData=copy)
+            return frame['pixel_data'], frame_count
+        except Exception as e:
+            self.log.error(e)
+            return [], 0
 
     def get_acquired_data(self):
         """
-        Return an array of the acquired data. Depending on the acquisition mode, this can be just one frame (single
-        scan, run_till_abort) or the entire data as a 3D stack (fixed length).
+        Return an array of the acquired data. This function is only used at the end of a sequence acquisition (not for
+        live mode). Therefore, it will return all the images acquired and available in the buffer. If the camera status
+        is not compatible with data retrieval (for example if the number of frame is too high the acquisition is
+        aborted), the function returns None.
 
-        @return: (numpy ndarray) image data in format [[row],[row]...]
+        @return: (numpy ndarray) im_seq : data in format [n_frames, im_width, im_height]
         """
-        if self.camera.check_frame_status() == "FRAME_AVAILABLE":
-            frame, fps, frame_count = self.camera.poll_frame()
-        elif self.camera.check_frame_status() == "EXPOSURE_IN_PROGRESS":
-            sleep(self._exposure + 0.01)
-            frame, fps, frame_count = self.camera.poll_frame()
-        else:
-            print(self.camera.check_frame_status())
-            frame = np.zeros((self._width, self._height, self._dtype))
+        status = self.camera.check_frame_status()
+        print(status)
 
-        return frame['pixel_data']
-        # # bug fixes are used here to wait until data is available. A more elegant solution would be to modify the hamamatsu_python_driver file
-        # # so that getFrames method blocks waiting until at least one frame is available. (which is supposed to be the case according to comments therein).
-        # # for fixed length and n = 1, the counter may go up to its maximum if the exposure time is long (such as 1 s)
-        # # if even longer exposure times are needed, the counter or the waiting time must be increased.
-        # acq_mode = self.get_acquisition_mode()
-        #
-        # image_array = []  # or should this be initialized as an np array ??
-        # [frames,
-        #  dim] = self.camera.getFrames()  # frames is a list of HCamData objects, dim is a list [image_width, image_height]
-        #
-        # if acq_mode == 'run_till_abort':
-        #     # bug fix trial
-        #     if not frames:  # check if list is empty
-        #         print('no frames available')
-        #         image_array = np.zeros((dim[1], dim[0]))
-        #     else:
-        #         data = frames[-1].getData()  # for run_till_abort acquisition: get the last (= most recent) frame
-        #         image_array = np.reshape(data, (dim[1], dim[
-        #             0]))  # reshape in row major shape (height, width) # to check if image is reconstituted correctly
-        # elif acq_mode == 'fixed_length' and self.n_frames == 1:  # equivalent to single_scan
-        #     # bug fix for snap functionality: data retrieval is sometimes invoked too fast and data is not yet ready
-        #     counter = 0
-        #     while not frames and counter < 10:  # check if frames list is empty; 10 tries to get the data
-        #         [frames, dim] = self.camera.getFrames()  # try again to get the data
-        #         counter += 1
-        #         sleep(0.005)
-        #     if not frames:  # as last option
-        #         data = np.zeros((dim[1], dim[0]))
-        #         print('no data available from camera')
-        #     else:  # else continue normally
-        #         data = frames[-1].getData()
-        #     print(counter)  # for debugging, comment out later
-        #     image_array = np.reshape(data, (dim[1], dim[0]))
-        #     # this case is covered separately to guarantee the correct display for snap
-        #     # code could be combined with case 1 above (conditions listed with 'or')
-        # elif acq_mode == 'fixed_length' and self.n_frames > 1:
-        #     frames_list = [np.reshape(frames[i].getData(), (dim[1], dim[0])) for i in range(len(frames))]  # retrieve the data, reshape it and create a list of the frames
-        #     image_array = np.stack(frames_list)
-        # else:
-        #     self.log.info('Your acquisition mode is not covered yet.')
-        # return image_array
+        if (status == "FRAME_AVAILABLE") or (status == "READOUT_COMPLETE"):
+            im_seq = np.zeros((self.n_frames, self._width, self._height))
+            for frame in range(self.n_frames):
+                im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=True)
+                im_seq[frame, :, :] = im['pixel_data']
+
+        elif (status == "READOUT_IN_PROGRESS") or (status == "EXPOSURE_IN_PROGRESS"):
+            self.log.error('Acquisition is still in process. Data are not accessible and cannot be saved.')
+            im_seq = None
+
+        else:
+            im_seq = None
+
+        return im_seq
 
 # ======================================================================================================================
 # Non-Interface functions
