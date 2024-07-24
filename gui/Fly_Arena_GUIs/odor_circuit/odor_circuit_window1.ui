@@ -752,6 +752,7 @@ p, li { white-space: pre-wrap; }
      <string>Menu</string>
     </property>
     <addaction name="actionShow_Configuration_Dock"/>
+    <addaction name="actionShow_MFC_stability_check"/>
    </widget>
    <addaction name="menuMenu"/>
   </widget>
@@ -786,6 +787,11 @@ p, li { white-space: pre-wrap; }
   <action name="actionShow_Configuration_Dock">
    <property name="text">
     <string>Show Configuration Dock</string>
+   </property>
+  </action>
+  <action name="actionShow_MFC_stability_check">
+   <property name="text">
+    <string>Show MFC calibration window</string>
    </property>
   </action>
  </widget>
