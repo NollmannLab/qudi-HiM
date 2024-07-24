@@ -32,11 +32,16 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 import logging
 import os
 
+import time
+
 import numpy as np
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QPixmap
+from matplotlib import pyplot as plt
 from qtpy import QtWidgets, uic, QtCore
 from qtpy.QtCore import Signal
+from scipy.stats import norm
+from datetime import datetime
 
 from core.configoption import ConfigOption
 from core.connector import Connector
@@ -44,6 +49,17 @@ from gui.guibase import GUIBase
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+class MFCcheckWindow(QtWidgets.QDialog):
+    """ Create the SettingsDialog window, based on the corresponding *.ui file.
+    This dialog allows to define the origin of the probe positining system, i.e. the position of the first probe. """
+
+    def __init__(self):
+        super().__init__()
+        this_dir = os.path.dirname(__file__)
+        ui_file = os.path.join(this_dir, 'MFCcheck.ui')
+        uic.loadUi(ui_file, self)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -122,7 +138,8 @@ class OdorCircuitGUI(GUIBase):
         self.t_data = None
         self._odor_circuit_arduino_logic = None
         self._mw = None
-        self._dw = None
+        self._MFCW = None
+
         self.valves_status = {
             'valve_odor_1_in': '0',
             'valve_odor_2_in': '0',
@@ -142,7 +159,7 @@ class OdorCircuitGUI(GUIBase):
             'odor_4': ['valve_odor_4_in', 'valve_odor_4_out']
         }
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
-        self._dw = QtWidgets.QDockWidget()  # Initialize QDockWidget
+        self._mfcw = MFCcheckWindow()
 
         self.pixmap1 = QPixmap(self._Fluidics_on_path)
         self.pixmap2 = QPixmap(self._Fluidics_off_path)
@@ -153,7 +170,6 @@ class OdorCircuitGUI(GUIBase):
         self._odor_circuit_arduino_logic = self.odor_circuit_arduino_logic()
 
         # Window
-        self._mw = MainWindow(self.close_function)
         self._mw.centralwidget.show()  # everything is in dockwidgets
         self._mw.stoplaunch.setDisabled(True)
         self.init_flowcontrol()
@@ -178,6 +194,8 @@ class OdorCircuitGUI(GUIBase):
         self._mw.in4.stateChanged.connect(self.check_box_changed)
         self._mw.out4.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_M_2.stateChanged.connect(self.check_box_changed)
+        self._mfcw.toolButton.clicked.connect(self.Start_measure)
+
         # Connect custom signals to functions.
 
         self.hideDock()
@@ -232,6 +250,9 @@ class OdorCircuitGUI(GUIBase):
         self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
         self._mw.actionMFC_ON_OFF.triggered.connect(self.mfc_on_off)
         self._mw.actionShow_Configuration_Dock.triggered.connect(self.showDock)
+        self._mw.actionShow_Configuration_Dock.triggered.connect(self.showDock)
+        self._mw.actionShow_MFC_stability_check.triggered.connect(self.show_plotwindow)
+
         # signals to logic
         self.sigStartFlowMeasure.connect(self._odor_circuit_arduino_logic.start_flow_measurement)
         self.sigStopFlowMeasure.connect(self._odor_circuit_arduino_logic.stop_flow_measurement)
@@ -421,7 +442,6 @@ class OdorCircuitGUI(GUIBase):
         self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
         self.valves_status['Mixing_valve'] = '1'
 
-
     def LaunchClicked(self):
         """Handle the click event to launch the odor preparation process.
         """
@@ -451,10 +471,9 @@ class OdorCircuitGUI(GUIBase):
         if self.timer2.isActive():
             self.timer2.stop()
             logger.info("Timer2 stopped.")
+
         self._mw.Launch.setDisabled(False)
         self._mw.stoplaunch.setDisabled(True)
-
-
 
     @staticmethod
     def update_valve_label(label, state):
@@ -489,7 +508,7 @@ class OdorCircuitGUI(GUIBase):
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_in, 0)
                 self.valves_status['valve_odor_1_in'] = '0'
                 self.update_valve_label(self._mw.label_1in_2, 0)
-        elif sender == self._mw.out2:
+        elif sender == self._mw.out1:
             if state == 2:  # Qt.Checked
                 self._odor_circuit_arduino_logic.valve(self._valve_odor_1_out, 1)
                 self.valves_status['valve_odor_1_out'] = '1'
@@ -592,6 +611,7 @@ class OdorCircuitGUI(GUIBase):
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
                 self.MFC_status = True
                 self._odor_circuit_arduino_logic.valve(self._mixing_valve, 1)
+                self._mw.checkBox_M_2.setChecked(True)
                 self.valves_status['mixing_valve'] = '1'
                 self.update_valve_label(self._mw.label_M_2, 1)
                 self.update_valve_label(self._mw.label_MFCpurge_2, 1)
@@ -605,6 +625,7 @@ class OdorCircuitGUI(GUIBase):
             self.sigMFC_OFF.emit()
             self.MFC_status = False
             self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
+            self._mw.checkBox_M_2.setChecked(False)
             self.valves_status['Mixing_valve'] = '0'
             self.update_valve_label(self._mw.label_M_2, 0)
             self.update_valve_label(self._mw.label_MFCpurge_2, 0)
@@ -614,15 +635,42 @@ class OdorCircuitGUI(GUIBase):
     # ----------------------------------------------------------------------------------------------------------------------
     # Slots related to the flowcontrol
     # ----------------------------------------------------------------------------------------------------------------------
+    def Start_measure(self):
+        """"""
+        time.sleep(1)
+        t = 0
+        while t < (self._mfcw.doubleSpinBox.value() * 60):
+            Z1, Z2, Z3 = self._odor_circuit_arduino_logic.get_flowrate()
+            self.mesure1.append(Z1)
+            self.mesure2.append(Z2)
+            self.mesure3.append(Z3)
+            t = t + 1
+            time.sleep(1)
+        self.mesure1 = self.flatten(self.mesure1)
+        self.mesure2 = self.flatten(self.mesure2)
+        self.mesure3 = self.flatten(self.mesure3)
+        date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFC1{date_str}', self.mesure1, fmt='%.6f')
+        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFC2{date_str}', self.mesure2, fmt='%.6f')
+        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFCPurge{date_str}', self.mesure3, fmt='%.6f')
+        self.show_plot()
+        plt.savefig(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MFCPlot{date_str}.png')
+
+    def flatten(self, data):
+        """ Aplatir une liste potentiellement imbriquée. """
+        flattened = []
+        for item in data:
+            if isinstance(item, list):
+                flattened.extend(self.flatten(item))  # Aplatir récursivement
+            else:
+                flattened.append(item)
+        return flattened
 
     def measure_flow_clicked(self):
         """ Callback of start flow measurement toolbutton. Handles the toolbutton state and initiates the start / stop
         of flowrate .
         """
         if self._odor_circuit_arduino_logic.measuring_flowrate:  # measurement already running
-            np.savetxt('MFC1', self.mesure1)
-            np.savetxt('MFC2', self.mesure2)
-            np.savetxt('MFCPurge', self.mesure3)
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
@@ -658,9 +706,6 @@ class OdorCircuitGUI(GUIBase):
             self.flowrate1_data.append(flowrate1)
             self.flowrate2_data.append(flowrate2)
             self.flowrate3_data.append(flowrate3)
-            self.mesure1.append(flowrate1)
-            self.mesure2.append(flowrate2)
-            self.mesure3.append(flowrate3)
 
         else:
             self.t_data[:-1] = self.t_data[1:]
@@ -672,13 +717,50 @@ class OdorCircuitGUI(GUIBase):
             self.flowrate2_data[-1] = flowrate2
             self.flowrate3_data[:-1] = self.flowrate3_data[1:]  # shift data one position to the left
             self.flowrate3_data[-1] = flowrate3
-            self.mesure1.append(flowrate1)
-            self.mesure2.append(flowrate2)
-            self.mesure3.append(flowrate3)
 
         self._flowrate1_timetrace.setData(self.t_data, self.flowrate1_data)  # t axis running with time
         self._flowrate2_timetrace.setData(self.t_data, self.flowrate2_data)
         self._flowrate3_timetrace.setData(self.t_data, self.flowrate3_data)
+
+    def plot_histogram_with_density(self, data, label, color, ax):
+        """"""
+        mean_value = np.mean(data)
+        std_deviation = np.std(data)
+
+        count, bins, ignored = ax.hist(data, bins='auto', alpha=0.5, rwidth=0.85, color=color,
+                                       edgecolor='black', density=True, label=f'{label} histogram')
+
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+        pdf = norm.pdf(bin_centers, mean_value, std_deviation)
+
+        ax.plot(bin_centers, pdf, linestyle='dashed', linewidth=2, color=color, label=f'{label} density')
+
+        ax.axvline(mean_value, color=color, linestyle='dashed', linewidth=1)
+        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.9,
+                f'{label} Mean: {mean_value:.6f}', color=color)
+        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.85,
+                f'{label} Std Dev: {std_deviation:.6f}', color=color)
+
+    def show_plot(self):
+        """"""
+        fig, axes = plt.subplots(3, 1, figsize=(10, 18))
+
+        self.plot_histogram_with_density(self.mesure1, 'MFC 1', 'b', axes[0])
+        self.plot_histogram_with_density(self.mesure2, 'MFC 2', 'g', axes[1])
+        self.plot_histogram_with_density(self.mesure3, 'MFC Purge', 'r', axes[2])
+
+        # Ajouter des titres et des labels
+        for i, ax in enumerate(axes):
+            ax.set_xlabel('Valeurs')
+            ax.set_ylabel('Densité')
+            ax.legend()
+
+        fig.suptitle('Histogrammes et courbes de densité pour trois matrices')
+
+        plt.show()
+
+    def show_plotwindow(self):
+        self._mfcw.show()
 
     @QtCore.Slot()
     def disable_flowcontrol_buttons(self):
