@@ -100,12 +100,12 @@ class KinetixCam(Base, CameraInterface):
                 # set some default parameters value - note the camera is already set to 'Dynamic Range' in order to get
                 # the same intensity values for the displayed and saved data
                 self.set_exposure(self._exposure)
-                self.camera.readout_port = 2  # Set the camera in 'Dynamic Range' mode by default (16 bit depth)
-                self.camera.exp_mode = 1792  # Set the camera in 'Internal Trigger' mode
+                self._set_acquisition_mode('Dynamic Range')  # Set the camera in 'Dynamic Range' mode (16 bit)
+                self._set_trigger_source('INTERNAL')  # Set the camera in 'Internal Trigger' mode
 
                 # initialize the default acquisition parameters by launching a brief live acquisition - this step is
                 # required to have access to the "check_frame_status" method without throwing an error
-                self.camera.start_live(exp_time=int(self._exposure * 1000))
+                self._start_acquisition(mode='Live')
                 sleep(self._exposure * 2)
                 self.camera.finish()
 
@@ -267,7 +267,7 @@ class KinetixCam(Base, CameraInterface):
         Start acquisition for a single frame (snap mode) and return the acquired frame
         @return: frame (numpy array): acquired frame
         """
-        frame = self.camera.get_frame(exp_time=int(self._exposure * 1000))
+        frame = self._start_acquisition(mode='Single image')
         return frame
 
     def start_live_acquisition(self):
@@ -276,7 +276,7 @@ class KinetixCam(Base, CameraInterface):
         @return: Success ? (bool)
         """
         try:
-            self.camera.start_live(exp_time=int(self._exposure * 1000))
+            self._start_acquisition(mode='Live')
             return True
         except Exception as e:
             self.log.error(e)
@@ -304,7 +304,7 @@ class KinetixCam(Base, CameraInterface):
         """
         self.n_frames = n_frames  # needed to choose the correct case in get_acquired_data method
         try:
-            self.camera.start_seq(exp_time=int(self._exposure * 1000), num_frames=n_frames)
+            self._start_acquisition(mode='Sequence')
             return True
         except Exception as e:
             if "PL_ERR_TOO_MANY_FRAMES" in str(e):
@@ -334,41 +334,32 @@ class KinetixCam(Base, CameraInterface):
 
 # Methods for acquiring image data using synchronization between lightsource and camera---------------------------------
     def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
-        """ Set the camera state for an experiment using synchronization between lightsources and the camera.
-        Using typically an external trigger.
+        """ Set the camera state for an experiment using synchronization between lightsources and the camera. Using
+        typically an external trigger.
 
-        :param: int frames: number of frames in a kinetic series / fixed length mode
-        :param: float exposure: exposure time in seconds
+        @param: int frames: number of frames in a kinetic series / fixed length mode
+        @param: float exposure: exposure time in seconds
 
         The following parameters are not needed for this camera. Only for compatibility with abstract function signature
-        :param: int gain: gain setting
-        :param: str save_path: complete path (without fileformat suffix) where the image data will be saved
-        :param: str file_format: selected fileformat such as 'tiff', 'fits', ..
-
-        :return: None
+        @param: int gain: gain setting
+        @param: str save_path: complete path (without fileformat suffix) where the image data will be saved
+        @param: str file_format: selected fileformat such as 'tiff', 'fits', ..
         """
         self.stop_acquisition()
         self.set_exposure(exposure)
-        self._set_acquisition_mode('fixed_length', frames)
-        self.n_frames = frames  # this ensures that the data retrieval format is correct
-        # external trigger mode, positive polarity
-        self._set_trigger_source('EXTERNAL')
-        self._set_trigger_polarity('POSITIVE')
-        # output trigger: trigger ready and global exposure
-        self._configure_output_trigger(1, 'TRIGGER READY', 'NEGATIVE')
-        self._configure_output_trigger(2, 'EXPOSURE', 'NEGATIVE')
-        # self._start_acquisition()
+        self.n_frames = frames
+        self._set_trigger_source('EDGE')  # set the camera to "Edge Trigger" mode
+        self._set_acquisition_mode('Dynamic Range')  # set the camera in Dynamic Range mode (to get 16-bit depth images)
 
     def reset_camera_after_multichannel_imaging(self):
-        """ Reset the camera to a default state after an experiment using synchronization between lightsources and
-         the camera.
-
-         :return: None
-         """
+        """
+        Reset the camera to a default state after an experiment using synchronization between lightsources and the
+        camera.
+        """
         self.stop_acquisition()
         self._set_trigger_source('INTERNAL')
         self.n_frames = 1  # reset to default
-        self._set_acquisition_mode('run_till_abort')
+        self._set_acquisition_mode('Dynamic Range')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for image data retrieval
@@ -395,16 +386,16 @@ class KinetixCam(Base, CameraInterface):
     def get_acquired_data(self):
         """
         Return an array of the acquired data. This function is only used at the end of a sequence acquisition (not for
-        live mode). Therefore, it will return all the images acquired and available in the buffer. If the camera status
-        is not compatible with data retrieval (for example if the number of frame is too high the acquisition is
-        aborted), the function returns None.
+        live mode) and for the tasks. Therefore, it will return all the images acquired and available in the buffer.
+        If the camera status is not compatible with data retrieval (for example if the number of frame is too high the
+        acquisition is aborted), the function returns None.
 
         @return: (numpy ndarray) im_seq : data in format [n_frames, im_width, im_height]
         """
         status = self.camera.check_frame_status()
-        print(status)
 
         if (status == "FRAME_AVAILABLE") or (status == "READOUT_COMPLETE"):
+            self.log.info(f'Loading {self.n_frames} frames ...')
             im_seq = np.zeros((self.n_frames, self._width, self._height))
             for frame in range(self.n_frames):
                 im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=True)
@@ -426,63 +417,100 @@ class KinetixCam(Base, CameraInterface):
 # ----------------------------------------------------------------------------------------------------------------------
 # Non-interface functions to handle acquisitions
 # ----------------------------------------------------------------------------------------------------------------------
-
     def get_acquisition_mode(self):
-        acq_mode = self.camera.acquisition_mode
+        """
+        Indicate the exposure mode currently used by the camera ('Sensitivity', 'Speed', 'Dynamic Range',
+        'Sub-electron')
+        @return: acq_mode (int): return a number according to the mode currently in use
+        """
+        acq_mode = self.camera.readout_port
         return acq_mode
 
-    def _set_acquisition_mode(self, mode, n_frames=None):
-        self.camera.setACQMode(mode, n_frames)
-        # add error handling etc.
+    def _set_acquisition_mode(self, mode):
+        """
+        Set the acquisition readout mode (particularly important for the image format)
+        @param mode (str): keyword for acquisition mode
+        @return: (bool): indicate if the mode was correctly set
+        """
+        # translate mode codename into port-value
+        if mode == 'Sensitivity':
+            port_value = 0
+        elif mode == 'Speed':
+            port_value = 1
+        elif mode == 'Dynamic Range':
+            port_value = 2
+        elif mode == 'Sub-Electron':
+            port_value = 3
+        else:
+            self.log.warn('The readout mode selected does not exist - The camera is set to "Dynamic Range" as default')
+            port_value = 2
 
-    def _start_acquisition(self):
-        self.camera.startAcquisition()
+        # set the mode
+        try:
+            self.camera.readout_port = port_value
+        except Exception as e:
+            self.log.error(e)
+        else:
+            sleep(0.1)
+            check_mode = self.get_acquisition_mode()
+            if check_mode == mode:
+                return 0
+            else:
+                return -1
+
+    def _start_acquisition(self, mode='Live'):
+        """
+        Launch an acquisition according to the indicated mode.
+
+        @param mode: (str) indicate the mode to use for acquiring the image
+        @return: frame (numpy array): latest acquired frame - only for the 'Single image' mode
+        """
+        if mode == 'Live':
+            self.camera.start_live(exp_time=int(self._exposure * 1000))
+        elif mode == 'Sequence':
+            print(self.n_frames)
+            self.camera.start_seq(exp_time=int(self._exposure * 1000), num_frames=self.n_frames)
+        elif mode == 'Single image':
+            frame = self.camera.get_frame(exp_time=int(self._exposure * 1000))
+            return frame
+        else:
+            self.log.warning("The mode requested does not exist - Acquisition will not start")
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Trigger
 # ----------------------------------------------------------------------------------------------------------------------
-
     def _set_trigger_source(self, source):
         """
-        Set the trigger source.
-        @param string source: string corresponding to certain TriggerMode 'INTERNAL', 'EXTERNAL', 'SOFTWARE', 'MASTER PULSE'
+        Set the trigger source. For the kinetix the available trigger modes can be accessed using the "exp_modes"
+        method.
+        @param string source: string corresponding to certain TriggerMode 'INTERNAL', 'EDGE', 'SOFTWARE', ...
         @return int check_val: ok: 0, not ok: -1
         """
-        # the supported trigger sources can be found as follows:
-        # self.camera.getPropertyText('trigger_source') returns {'INTERNAL': 1, 'EXTERNAL': 2, 'SOFTWARE': 3, 'MASTER PULSE': 4}
-        check_val = self.camera.setPropertyValue('trigger_source', source)
-        if isinstance(check_val, float):
+        # set the exposure mode for the camera
+        if source == 'INTERNAL':
+            exposure_mode = 1792
+        elif source == 'EDGE':
+            exposure_mode = 2304
+        elif source == 'SOFTWARE':
+            exposure_mode = 3072
+        else:
+            self.log.warning('Unknown trigger source')
+            return -1
+
+        self.camera.exp_mode = exposure_mode
+
+        # wait 100ms and check the mode was properly changed
+        sleep(0.1)
+        check_trigger_mode = self._get_trigger_source()
+        if check_trigger_mode == exposure_mode:
             return 0
         else:
             return -1
 
     def _get_trigger_source(self):
-        trigger_source = self.camera.getPropertyValue('trigger_source')  # returns a list [value, type] such as [1, 'MODE']
-        return trigger_source[0]  # would be a good idea to map the number to the description
-
-    def _set_trigger_polarity(self, polarity):
-        """ Set the trigger polarity (default is negative)
-        @param: str polarity: 'NEGATIVE', 'POSITIVE'
-        @return int check_val: ok: 0, not ok: -1
         """
-        check_val = self.camera.setPropertyValue('trigger_polarity', polarity)  # returns a float corresponding to the polarity (1.0: negative, 2.0: positive) or bool False if not set
-        if isinstance(check_val, float):
-            return 0
-        else:
-            return -1
-
-    def _get_trigger_polarity(self):
-        trigger_polarity = self.camera_getPropertyValue('trigger_polarity')
-        return trigger_polarity[0]
-
-    def _configure_output_trigger(self, channel, output_trigger_kind, output_trigger_polarity):
+        Return the trigger source currently used for the camera
+        @return: trigger_source (str): indicates the type of trigger mode
         """
-        Configure the output trigger for the specified output channel
-        @param: int channel: index ranging up to the number of output trigger connectors - 1
-        @param: str output_trigger_kind: supported values 'LOW', 'EXPOSURE', 'PROGRAMABLE', 'TRIGGER READY', 'HIGH'
-        @param: str output_trigger_polarity: supported values 'NEGATIVE', 'POSITIVE'
-        """
-        trigger_kind = self.camera.setPropertyValue(f'output_trigger_kind[{channel}]', output_trigger_kind)
-        print(trigger_kind)
-        trigger_polarity = self.camera.setPropertyValue(f'output_trigger_polarity[{channel}]', output_trigger_polarity)
-        print(trigger_polarity)
+        trigger_source = self.camera.exp_mode
+        return trigger_source
