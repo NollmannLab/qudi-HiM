@@ -30,16 +30,21 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 from PyQt5.QtCore import Qt
 
+from core.connector import Connector
 from logic.generic_logic import GenericLogic
 
 
 class OptogeneticLogic(GenericLogic):
 
+    motor_FlyArena = Connector(interface='Base')  # no specific MFC interface required
+
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self._motor_control = None
 
     def on_activate(self):
-        pass
+
+        self._motor_control = self.motor_FlyArena()
 
     def on_deactivate(self):
         """ Perform required deactivation. """
@@ -55,3 +60,12 @@ class OptogeneticLogic(GenericLogic):
 
         window.label.setPixmap(image)
         window.label.setAlignment(Qt.AlignCenter)
+
+    def forward(self):
+        """Turn the motor at 180° forward"""
+        self._motor_control.send_command("forward")
+
+    def backward(self):
+        """Turn the motor at 180° backward"""
+        self._motor_control.send_command("backward")
+

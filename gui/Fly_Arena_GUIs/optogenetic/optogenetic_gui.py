@@ -111,6 +111,7 @@ class OptogeneticGUI(GUIBase):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.p = False
         self._optogenetic_logic = None
 
         self._ow = None
@@ -137,15 +138,36 @@ class OptogeneticGUI(GUIBase):
         self._ow.noir.clicked.connect(self.noirdisplay)
         self._ow.quart1.clicked.connect(self.quart1display)
         self._ow.quart2.clicked.connect(self.quart2display)
+        self._ow.open.clicked.connect(self.forward)
+        self._ow.close.clicked.connect(self.backward)
         self.signoirClicked.connect(lambda: self.noirdisplay())
         self.sigquart1Clicked.connect(lambda: self.sigButton1Clicked.emit())
         self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
+        self._ow.close.setDisabled(True)
 
     def on_deactivate(self):
         """ Perform required deactivation.
      """
-        self._ow.close()
+        if not self.p:
+            pass
+        else:
+            self.backward()
         self._iw.close()
+
+
+    def forward(self):
+        """take a 180° step forward"""
+        self.p = True
+        self._optogenetic_logic.forward()
+        self._ow.open.setDisabled(True)
+        self._ow.close.setDisabled(False)
+
+    def backward(self):
+        """take a 180° step backward"""
+        self.p = False
+        self._optogenetic_logic.backward()
+        self._ow.open.setDisabled(False)
+        self._ow.close.setDisabled(True)
 
     def noirdisplay(self):
         """
