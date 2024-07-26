@@ -54,8 +54,7 @@ class ArduinoUno(Base):
     def on_activate(self):
         """initialize the arduino uno device
         """
-        arduino_port = 'COM3'
-        baud_rate = 9600
+        pass
 
     def on_deactivate(self):
         pass

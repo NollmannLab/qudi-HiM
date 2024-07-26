@@ -138,6 +138,32 @@
       <string/>
      </property>
     </widget>
+    <widget class="QToolButton" name="open">
+     <property name="geometry">
+      <rect>
+       <x>630</x>
+       <y>390</y>
+       <width>71</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Open</string>
+     </property>
+    </widget>
+    <widget class="QToolButton" name="close">
+     <property name="geometry">
+      <rect>
+       <x>630</x>
+       <y>460</y>
+       <width>71</width>
+       <height>41</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Close</string>
+     </property>
+    </widget>
    </widget>
   </widget>
  </widget>

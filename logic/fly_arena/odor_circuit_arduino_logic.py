@@ -249,9 +249,6 @@ class OdorCircuitArduinoLogic(GenericLogic):
         :return: None
         """
         self.measuring_flowrate = False
-        # get once again the latest values
-        flowrate1, flowrate2, flowrate3 = self.get_flowrate()
-        self.sigUpdateFlowMeasurement.emit(flowrate1, flowrate2, flowrate3)
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Methods to handle the user interface state

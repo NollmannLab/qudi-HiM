@@ -30,15 +30,13 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 
 import time
-import serial
+
+from sensirion_driver_adapters.shdlc_adapter.shdlc_channel import ShdlcChannel
+from sensirion_shdlc_driver import ShdlcSerialPort
+from sensirion_uart_sfx6xxx.device import Sfx6xxxDevice
 
 from core.configoption import ConfigOption
 from core.module import Base
-from sensirion_shdlc_driver import ShdlcSerialPort
-from sensirion_shdlc_driver.errors import ShdlcDeviceError
-from sensirion_driver_adapters.shdlc_adapter.shdlc_channel import ShdlcChannel
-from sensirion_uart_sfx6xxx.device import Sfx6xxxDevice
-from sensirion_uart_sfx6xxx.commands import StatusCode
 
 
 class MFC(Base):
