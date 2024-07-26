@@ -27,7 +27,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import time
-
+import h5py
 import numpy as np
 from time import sleep  #, time
 import os
@@ -828,35 +828,41 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for Qudi tasks / experiments requiring synchronization between camera and lightsources
 # ----------------------------------------------------------------------------------------------------------------------
-
     def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
         """ Method used for camera in external trigger mode, used for tasks with synchonization between
         lightsources and camera. Prepares the camera setting the required parameters. Camera waits for trigger.
 
-        :param: int frames:
-        :param: float exposure:
-        :param: int gain:
-        :param: str save_path:
-        :param: str file_format:
-
-        :return: None
+        @param: int frames:
+        @param: float exposure:
+        @param: int gain:
+        @param: str save_path:
+        @param: str file_format:
         """
         self._hardware.prepare_camera_for_multichannel_imaging(frames, exposure, gain, save_path, file_format)
 
     def reset_camera_after_multichannel_imaging(self):
-        """ Reset the camera default state at the end of a synchronized acquisition mode.
-
-        :return: None
+        """
+        Reset the camera default state at the end of a synchronized acquisition mode.
         """
         self._hardware.reset_camera_after_multichannel_imaging()
 
     def get_acquired_data(self):   # used in Hi-M Task RAMM
         return self._hardware.get_acquired_data()
 
-    def start_acquisition(self):  # used in Hi-M Task RAMM
+    def start_acquisition(self):
+        """
+        This method is only used for the task, to launch an acquisition without connections to the GUI (no display and
+        no possible interactions with the user).
+        """
+        # close the shutter for IR laser (only for the RAMM setup)
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
-        self._hardware._start_acquisition()  # not on camera interface
+
+        # launch acquisition
+        if self.cam_type == "KinetixCam":
+            self._hardware._start_acquisition(mode='Sequence')
+        else:
+            self._hardware._start_acquisition()
 
     def stop_acquisition(self):  # used in Hi-M Task RAMM
         self._hardware.stop_acquisition()
@@ -1047,6 +1053,23 @@ class CameraLogic(GenericLogic):
         #
         # t1 = time()
         # print(f'Saving time : {t1-t0}s')
+
+    def save_to_hdf5(self, path, data, metadata):
+        """ Save the data in h5 format. This function was specifically created for the Kinetix camera. Considering the
+        size of the images, a gzip compression is applied (this method is a lossless method - the decompressed images
+        should be identical to the original). Note the metadata are also saved in the same file and the images are
+        separated according to acquisition channels.
+
+        @param path:
+        @param data:
+        @param metadata:
+        """
+        with h5py.File(path, 'w') as hf:
+            for channel in self.self.num_laserlines:
+                dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::self.self.num_laserlines],
+                                            compression='gzip', compression_opts=9)
+            for key, value in metadata.items():
+                dataset.attrs[key] = value
 
     @staticmethod
     def add_fits_header(path, dictionary):

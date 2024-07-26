@@ -10,7 +10,7 @@ This module contains a task to perform a multicolor scan on the RAMM setup equip
 
 @author: JB. Fiche (from F. Barho original code)
 
-Created on Tue January 9, 2024
+Created on Tue January 9, 2024 - last update Fri July 26, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -31,9 +31,9 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-from datetime import datetime
-import numpy as np
 import yaml
+import numpy as np
+from datetime import datetime
 from time import sleep, time
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
@@ -140,6 +140,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # download the bitfile for the task on the FPGA and start the FPGA session
         bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240112.lvbitx'
+        # bitfile = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+        #            'Qudimulticolourscan_KINETIX_20240724.lvbitx')
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('FPGA bitfile loaded for Multicolour task')
         self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
@@ -219,6 +221,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 metadata = self.get_metadata()
                 file_path = self.complete_path.replace('npy', 'yaml', 1)
                 self.save_metadata_file(metadata, file_path)
+            elif self.file_format == 'hdf5':
+                metadata = self.get_fits_metadata()
+                self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
             else:   # use tiff as default format
                 self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
                 metadata = self.get_metadata()
@@ -416,9 +421,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
+        """ Get a dictionary containing the metadata in a fits header compatible format. Note this format is also
+        compatible for the h5 format.
+        @return: dict metadata
         """
         metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
                     'Z_STEP': (self.z_step, 'scan step length (um)'),
