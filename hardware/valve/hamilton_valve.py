@@ -97,7 +97,7 @@ class HamiltonValve(Base, ValvePositionerInterface):
         except serial.SerialException:
             self.log.error(f'Hamilton MVP not connected. Check if device is switched on.')
             return
-        
+
         # initialization of the daisy chain
         cmd = "1a\r"
         self.write(cmd)

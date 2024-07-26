@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="Odor on">
+    <file>Schema fluidic odors off.PNG</file>
+  </qresource>
+  <qresource prefix="Odor off">
+    <file>Schema fluidic odors on.PNG</file>
+  </qresource>
+</RCC>

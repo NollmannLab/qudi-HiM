@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Qudi-CBS
+Qudi-HiM
 
 This file contains the hardware class representing a Hamamatsu Flash camera.
 It is based on a Python wrapper for the dll functions of the Hamamatsu Flash camera
