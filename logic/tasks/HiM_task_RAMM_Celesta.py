@@ -8,6 +8,8 @@ This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @todo: Save the injection data together with the log.
 @todo: Wash IB if experiment is aborted during acquisition
+@todo: In the parameter file - correct the imaging parameters (they are empty but an imaging sequence is indicated)
+@todo: In the parameter file - add the autofocus parameters
 
 @authors: JB.Fiche (based of F.Barho initial script)
 
@@ -1373,7 +1375,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # launch the worker to start the transfer
                 data_saved = False
-                self.log.info(f"uploading {path}")
+                self.log.info(f"uploading {network_dir}")
                 worker = UploadDataWorker(path, network_dir)
                 self.threadpool.start(worker)
 
