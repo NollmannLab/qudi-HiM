@@ -960,6 +960,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # pixel size
         return metadata
 
+    def get_hdf5_metadata(self):
+        """ Get a dictionary containing the metadata in a hdf5 header compatible format.
+        @return: dict metadata
+        """
+        metadata = {'sample_name': self.sample_name,
+                    'exposure_s': self.exposure,
+                    'z_step_µm': self.z_step,
+                    'z_total_length_µm': self.z_step * self.num_z_planes,
+                    'n_channels': self.num_laserlines,
+                    'roi_x_position': self.ref['roi'].stage_position[0],
+                    'roi_y_position': self.ref['roi'].stage_position[1],
+                    'autofocus_offset': self.ref['focus']._autofocus_logic._focus_offset,
+                    'autofocus_calibration_precision': np.round(self.ref['focus']._precision, 2),
+                    'autofocus_calibration_slope': np.round(self.ref['focus']._slope, 3),
+                    'autofocus_setpoint': np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+                    }
+        for i in range(self.num_laserlines):
+            metadata[f'laser_line_{i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'laser_intensity_{i + 1}'] = self.imaging_sequence[i][1]
+        return metadata
+
     def save_metadata_file(self, metadata, path):
         """ Save a txt file containing the metadata dictionary.
 
@@ -1254,6 +1275,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             file_path = cur_save_path.replace('npy', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
             self.log.info(f'Data saved as {file_path}')
+        elif self.file_format == 'hdf5':
+            metadata = self.get_hdf5_metadata()
+            self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
         else:  # use tiff as default format
             self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
             metadata = self.get_metadata()
