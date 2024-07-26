@@ -1055,12 +1055,21 @@ class CameraLogic(GenericLogic):
         # print(f'Saving time : {t1-t0}s')
 
     def save_to_hdf5(self, path, data, metadata):
+        """ Save the data in h5 format. This function was specifically created for the Kinetix camera. Considering the
+        size of the images, a gzip compression is applied (this method is a lossless method - the decompressed images
+        should be identical to the original). Note the metadata are also saved in the same file and the images are
+        separated according to acquisition channels.
+
+        @param path:
+        @param data:
+        @param metadata:
+        """
         with h5py.File(path, 'w') as hf:
-            hf.create_dataset('image', data=data, compression=gsip)
-
-            # TODO : ADD METADATA
-
-
+            for channel in self.self.num_laserlines:
+                dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::self.self.num_laserlines],
+                                            compression='gzip', compression_opts=9)
+            for key, value in metadata.items():
+                dataset.attrs[key] = value
 
     @staticmethod
     def add_fits_header(path, dictionary):

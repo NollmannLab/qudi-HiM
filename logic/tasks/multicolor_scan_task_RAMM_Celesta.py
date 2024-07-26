@@ -10,7 +10,7 @@ This module contains a task to perform a multicolor scan on the RAMM setup equip
 
 @author: JB. Fiche (from F. Barho original code)
 
-Created on Tue January 9, 2024
+Created on Tue January 9, 2024 - last update Fri July 26, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -222,7 +222,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 file_path = self.complete_path.replace('npy', 'yaml', 1)
                 self.save_metadata_file(metadata, file_path)
             elif self.file_format == 'hdf5':
-                metadata = self.get_hdf5_metadata() # TODO NEED TO WRITE THIS FUNCTION
+                metadata = self.get_fits_metadata()
                 self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
             else:   # use tiff as default format
                 self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
@@ -421,9 +421,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
+        """ Get a dictionary containing the metadata in a fits header compatible format. Note this format is also
+        compatible for the h5 format.
+        @return: dict metadata
         """
         metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
                     'Z_STEP': (self.z_step, 'scan step length (um)'),
