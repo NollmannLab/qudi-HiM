@@ -44,3 +44,32 @@
 | **Python**       | Implemented on qudi-HiM                           |
 | **Resources**    | Datasheet : https://www.leg-gmbh.de/en/OK4-en.pdf |
 
+## Motor: 
+
+| **Model and SN** | Quimat motor 17HD48002H-22B                                  |
+| ---------------- | ------------------------------------------------------------ |
+| **Python**       | Implemented on qudi-HiM                                      |
+| **Ressources**   | Datasheet : https://pdf1.alldatasheet.com/datasheet-pdf/download/1649034/ETC/17HD48002-22B.html |
+
+## Carte Elegoo: 
+
+| **Model and SN** | Elegoo Rev 3                                                 |
+| ---------------- | ------------------------------------------------------------ |
+| **Software**     | Arduino IDE (https://www.arduino.cc/en/software)             |
+| **Python**       | Implemented on qudi-HiM                                      |
+| **Ressources**   | Datasheet : https://epow0.org/~amki/car_kit/Datasheet/ELEGOO%20UNO%20R3%20Board.pdf |
+
+## Carte Driver Adafruit: 
+
+| **Model and SN | Adafruit Motor Shield V2                                     |
+| -------------- | ------------------------------------------------------------ |
+| **Python**     | Implemented on qudi-HiM controlled with elegoo               |
+| **Ressources** | Datasheet : https://cdn-learn.adafruit.com/downloads/pdf/adafruit-motor-shield-v2-for-arduino.pdf |
+
+## Projecteur:  
+
+| **Model and SN | Projecteur yezmek V7 (SN#GD20240104-3000) |
+| -------------- | ----------------------------------------- |
+| **Python**     | Implemented on qudi-HiM                   |
+| **Ressources** | Papersheet manual                         |
+
