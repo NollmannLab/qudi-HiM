@@ -396,7 +396,7 @@ class KinetixCam(Base, CameraInterface):
 
         if (status == "FRAME_AVAILABLE") or (status == "READOUT_COMPLETE"):
             self.log.info(f'Loading {self.n_frames} frames ...')
-            im_seq = np.zeros((self.n_frames, self._width, self._height))
+            im_seq = np.zeros((self.n_frames, self._width, self._height), dtype=np.uint16)
             for frame in range(self.n_frames):
                 im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=True)
                 im_seq[frame, :, :] = im['pixel_data']

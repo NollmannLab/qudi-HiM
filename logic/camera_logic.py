@@ -28,11 +28,11 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import time
 import h5py
+import hdf5plugin
 import numpy as np
-from time import sleep  #, time
+from time import sleep
 import os
 from tifffile import TiffWriter
-# from PIL import Image
 from astropy.io import fits
 import yaml
 
@@ -925,15 +925,11 @@ class CameraLogic(GenericLogic):
 
     def save_to_tiff(self, n_frames, path, data):
         """ Save the image data to a tiff file.
-        Creates the PIL.Image object and saves it to tiff.
 
-        :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
-        :param: str path: complete path where the object is saved to (including the suffix .tif)
-        :param: data: np.array
-
-        :return: None
+        @param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
+        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: data: (np.array) image stack
         """
-        # t0 = time()
         try:
             with TiffWriter(path) as tif:
                 tif.save(data.astype(np.uint16))
@@ -941,72 +937,24 @@ class CameraLogic(GenericLogic):
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
 
-        # t1 = time()
-        # print(f'Saving time : {t1-t0}s')
+    def save_to_tiff_separate(self, n_channels, path, data):
+        """ For each separate channel (laser line), save the image data to a tiff file.
 
-        # type conversion to uint16 - this is a good practice since the process can be significantly slower when working
-        # with float.
-        # data = data.astype(np.uint16)
-        #
-        # # 2D data case (no stack)
-        # if n_frames == 1:
-        #     try:
-        #         self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
-        #         self.log.info('Saved data to file {}'.format(path))
-        #     except Exception:
-        #         self.log.warning('Data not saved')
-        #     return None
-        #
-        # # 3D data case (note: z stack is the first dimension)
-        # else:
-        #     try:
-        #         size = (data.shape[2], data.shape[1])
-        #         self.save_u16_to_tiff_stack(n_frames, data, size, path)
-        #         self.log.info('Saved data to file {}'.format(path))
-        #     except Exception:
-        #         self.log.warning('Data not saved')
-        #     return None
+        @param: int n_channels: number of acquisition channels
+        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: data: (np.array) image stack
+        """
+        try:
+            for channel in range(n_channels):
+                new_path, filename = os.path.split(path)
+                filename, _ = os.path.splitext(filename)
+                new_path = os.path.join(new_path, f'{filename}_ch{channel}.tif')
 
-    # @staticmethod
-    # def save_u16_to_tiff(u16int, size, tiff_filename):
-    #     """ Helper function for saving as tiff.
-    #     Function found at https://blog.itsayellow.com/technical/saving-16-bit-tiff-images-with-pillow-in-python/#
-    #     'Since Pillow has poor support for 16-bit TIFF, we make our own save function to properly save a 16-bit TIFF.'
-    #
-    #     Modified version for numpy array only.
-    #
-    #     :param u16int: np.array with dtype int16 to be saved as tiff. Make sure that the data is in int16 format !
-    #                     otherwise the conversion to bytes will not give the right result
-    #     :param float tuple size: size of the data
-    #     :param str tiff_filename: including the suffix '.tif'
-    #
-    #     :return: None
-    #     """
-    #     # write 16-bit TIFF image
-    #     # PIL interprets mode 'I;16' as "uint16, little-endian"
-    #     img_out = Image.new('I;16', size)
-    #     outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
-    #     img_out.frombytes(outpil)
-    #     img_out.save(tiff_filename)
-    #
-    # @staticmethod
-    # def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
-    #     """ Helper function that handles saving of 3D image data to 16 bit tiff stacks.
-    #     :param int n_frames: number of frames to be saved (1st dimension of the image data)
-    #     :param u16int: 3D np.array with dtype int16 to be saved as tiff
-    #     :param int tuple size: size of an individual image in the stack (x pixel, y pixel)
-    #     :param str tiff_filename: complete path to the file, including the suffix .tif
-    #
-    #     :return: None
-    #     """
-    #     imlist = []  # this will be a list of pillow Image objects
-    #     for i in range(n_frames):
-    #         img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
-    #         outpil = u16int[i].astype(
-    #             u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
-    #         img_out.frombytes(outpil)  # create pillow object from bytes
-    #         imlist.append(img_out)  # create the list of pillow image objects
-    #     imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
+                with TiffWriter(new_path) as tif:
+                    tif.save(data[channel::n_channels].astype(np.uint16))
+                self.log.info('Saved data to file {}'.format(new_path))
+        except Exception as e:
+            self.log.warning(f'Data not saved: {e}')
 
     def save_metadata_txt_file(self, filenamestem, datatype, metadata):
         """"Save a txt file containing the metadata.
@@ -1014,8 +962,6 @@ class CameraLogic(GenericLogic):
         :param: str filenamestem (example /home/barho/images/2020-12-16/samplename)
         :param: str datatype: string identifier of the data shape: _Movie or _Image
         :param: dict metadata: dictionary containing the annotations
-
-        :return: None
         """
         complete_path = self.create_generic_filename(filenamestem, datatype, 'parameters', '.txt', addfile=True)
         with open(complete_path, 'w') as file:
@@ -1033,10 +979,8 @@ class CameraLogic(GenericLogic):
         :param: str path: complete path where the object is saved to, including the suffix .fits
         :param: data: np.array (2D or 3D)
         :param: dict metadata: dictionary containing the metadata that shall be saved with the image data
-
-        :return: None
         """
-        # t0 = time()
+
         data = data.astype(np.int16)  # data conversion because 16 bit image shall be saved
         hdu = fits.PrimaryHDU(data)  # PrimaryHDU object encapsulates the data
         hdul = fits.HDUList([hdu])
@@ -1060,14 +1004,22 @@ class CameraLogic(GenericLogic):
         should be identical to the original). Note the metadata are also saved in the same file and the images are
         separated according to acquisition channels.
 
-        @param path:
-        @param data:
-        @param metadata:
+        @param path: (str) complete path where to save the data
+        @param data: (numpy array) array containing the images to be saved
+        @param metadata: (dict) contains all the metadata regarding the acquisition parameters
         """
+        n_channels = int(metadata['n_channels'])
         with h5py.File(path, 'w') as hf:
-            for channel in self.self.num_laserlines:
-                dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::self.self.num_laserlines],
-                                            compression='gzip', compression_opts=9)
+            for channel in range(n_channels):
+                self.log.info(f"Saving images for channel {channel}")
+                dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                                            compression='gzip')
+                # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                #                             compression='lzf')
+                # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                #                             **hdf5plugin.Blosc())
+
+            self.log.info(f"Saving metadata.")
             for key, value in metadata.items():
                 dataset.attrs[key] = value
 
