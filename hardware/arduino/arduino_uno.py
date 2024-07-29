@@ -52,7 +52,8 @@ class ArduinoUno(Base):
             self.arduino.close()
 
     def on_activate(self):
-        """initialize the arduino uno device
+        """
+        Initialize the arduino uno device
         """
         pass
 
@@ -60,7 +61,8 @@ class ArduinoUno(Base):
         pass
 
     def send_command(self, pin, state):
-        """Send a command to the Arduino to be decrypted and processed.
+        """
+        Send a command to the Arduino to be decrypted and processed.
         @param pin: The pin number on the Arduino to which the command is addressed.
         This should be an integer or string representing the pin.(2 to 13)
         @param state: (bool : on/off) The state to be set for the specified pin.
@@ -77,11 +79,14 @@ class ArduinoUno(Base):
             response = self.arduino.readline().decode().strip()
             print("Arduino:", response)
 
-
     def pin_on(self, pin):
-        """turn on a choosen pin"""
+        """
+        Turn on a choosen pin
+        """
         self.send_command(pin, 1)
 
     def pin_off(self, pin):
-        """turn off a choosen pin"""
+        """
+        Turn off a choosen pin
+        """
         self.send_command(pin, 0)

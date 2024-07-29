@@ -84,7 +84,7 @@ class OdorCircuitGUI(GUIBase):
     """
     # connector
     odor_circuit_arduino_logic = Connector(interface='OdorCircuitArduinoLogic')
-
+    _Path_MFC = ConfigOption('Path_MFC', None)
     _Fluidics_off_path = ConfigOption('Fluidics_off_path', None)
     _Fluidics_on_path = ConfigOption('Fluidics_on_path', None)
     _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
@@ -208,11 +208,19 @@ class OdorCircuitGUI(GUIBase):
         """ Steps of deactivation required.
         """
         self._odor_circuit_arduino_logic.close_air()
-        self._odor_circuit_arduino_logic.flush_odor()
-        self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
 
+        self._odor_circuit_arduino_logic.valve(self._mixing_valve, 0)
+        self._odor_circuit_arduino_logic.valve(self._final_valve, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_1_in, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_1_out, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_2_in, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_2_out, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_3_in, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_3_out, 0)
+        self._odor_circuit_arduino_logic.valve(self._valve_odor_4_in, 0)
         self._mw.Launch.clicked.disconnect()
         self._mw.close()
+        print('Odor circuit off')
 
     def show(self):
         """ To make the window visible and bring it to the front.
@@ -260,7 +268,6 @@ class OdorCircuitGUI(GUIBase):
         # signals to logic
         self.sigStartFlowMeasure.connect(self._odor_circuit_arduino_logic.start_flow_measurement)
         self._mfcw.toolButton.clicked.connect(self.Start_measure)
-
         self.sigStopFlowMeasure.connect(self._odor_circuit_arduino_logic.stop_flow_measurement)
 
         # signals from logic
@@ -380,6 +387,7 @@ class OdorCircuitGUI(GUIBase):
     def check_valves(self, valves_status):
         """
         Check valves status to permit the MFC2 to turn on
+        @param valves_statues : is the dictionary of valves
         """
 
         count_on_associations = 0
@@ -491,6 +499,8 @@ class OdorCircuitGUI(GUIBase):
     @staticmethod
     def update_valve_label(label, state):
         """ Update the valve label to show 'opened' or 'closed'.
+        @param Label : the designated label related to the valves or MFCs
+        @param state :  (bool) ON or OFF (1 or 0)
         """
         if state == 1:
             label.setText("Open")
@@ -499,6 +509,7 @@ class OdorCircuitGUI(GUIBase):
 
     def update_final_valve_label(self, state):
         """ Update the final valve label to change background image.
+        @param state :  (bool) ON or OFF (1 or 0)
         """
         if state == 1:
             self._mw.label_8.setPixmap(self.pixmap1)
@@ -662,15 +673,26 @@ class OdorCircuitGUI(GUIBase):
         self._mfcw.toolButton.setDisabled(True)
 
     def plot_total(self):
-        """plot the all 3 calibration graphs of the mfc"""
-        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFC1{self.date_str}', self.mesure1, fmt='%.6f')
-        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFC2{self.date_str}', self.mesure2, fmt='%.6f')
-        np.savetxt(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MesureMFCPurge{self.date_str}', self.mesure3, fmt='%.6f')
+        """
+        Plot the all 3 calibration graphs of the mfc
+        """
+        path1 =f'MesureMFC1{self.date_str}'
+        path2 = f'MesureMFC2{self.date_str}'
+        path3 = f'MesureMFC3{self.date_str}'
+        path4 = f'MFCPlot{self.date_str}.png'
+        P1 = os.path.join(self._Path_MFC, path1)
+        P2 = os.path.join(self._Path_MFC, path2)
+        P3 = os.path.join(self._Path_MFC, path3)
+        P4 = os.path.join(self._Path_MFC, path4)
+        np.savetxt(P1, self.mesure1, fmt='%.6f')
+        np.savetxt(P2, self.mesure2, fmt='%.6f')
+        np.savetxt(P3, self.mesure3, fmt='%.6f')
         self.show_plot()
-        plt.savefig(f'C:/Users/sCMOS-1/qudi_files/Flow/Données_graph/MFCPlot{self.date_str}.png')
+        plt.savefig(P4)
 
     def measure_flow_clicked(self):
-        """ Callback of start flow measurement toolbutton. Handles the toolbutton state and initiates the start / stop
+        """
+        Callback of start flow measurement tool button. Handles the tool button state and initiates the start / stop
         of flowrate .
         """
         if self._odor_circuit_arduino_logic.measuring_flowrate:  # measurement already running
@@ -689,8 +711,8 @@ class OdorCircuitGUI(GUIBase):
 
     @QtCore.Slot(list, list, list)
     def update_flowrate(self, flowrate1, flowrate2, flowrate3):
-        """ Callback of a signal emitted from logic informing the GUI about the new flowrate values.
-
+        """
+        Callback of a signal emitted from logic informing the GUI about the new flowrate values.
         @param float flowrate1: current flowrate retrieved from hardware MFC1
         @param float flowrate2: current flowrate retrieved from hardware MFC2
         @param float flowrate3: current flowrate retrieved from hardware MFCPurge
@@ -698,7 +720,8 @@ class OdorCircuitGUI(GUIBase):
         self.update_flowrate_timetrace(flowrate1[0], flowrate2[0], flowrate3[0])
 
     def update_flowrate_timetrace(self, flowrate1, flowrate2, flowrate3):
-        """ Add a new data point to the  flowrate timetraces.
+        """
+        Add a new data point to the  flowrate timetraces.
         @param float flowrate1: current flowrate retrieved from hardware MFC1
         @param float flowrate2: current flowrate retrieved from hardware MFC2
         @param float flowrate3: current flowrate retrieved from hardware MFCPurge
@@ -727,6 +750,7 @@ class OdorCircuitGUI(GUIBase):
         self._flowrate1_timetrace.setData(self.t_data, self.flowrate1_data)  # t axis running with time
         self._flowrate2_timetrace.setData(self.t_data, self.flowrate2_data)
         self._flowrate3_timetrace.setData(self.t_data, self.flowrate3_data)
+
         if self.G == self.Caltime * 60:
 
             self._odor_circuit_arduino_logic.stop_flow_measurement()
@@ -736,8 +760,15 @@ class OdorCircuitGUI(GUIBase):
             self._mw.setDisabled(False)
             self._mfcw.toolButton.setDisabled(False)
 
-    def plot_histogram_with_density(self, data, label, color, ax):
-        """Plot a histogram """
+    @staticmethod
+    def plot_histogram_with_density(data, label, color, ax):
+        """
+        Plot a histogram
+        @param label : Name of the MFC
+        @param color : color of the plot
+        @param data : the mfc values
+        @param ax : the place of the graph on the print
+        """
         mean_value = np.mean(data)
         std_deviation = np.std(data)
 
@@ -756,7 +787,9 @@ class OdorCircuitGUI(GUIBase):
                 f'{label} Std Dev: {std_deviation:.6f}', color=color)
 
     def show_plot(self):
-        """Show the Plot """
+        """
+        Show the Plot
+        """
         fig, axes = plt.subplots(3, 1, figsize=(10, 18))
 
         self.plot_histogram_with_density(self.mesure1, 'MFC 1', 'b', axes[0])
@@ -773,23 +806,31 @@ class OdorCircuitGUI(GUIBase):
         plt.show()
 
     def show_plotwindow(self):
-        """Show the plot window"""
+        """
+        Show the plot window
+        """
         self._mfcw.show()
 
     @QtCore.Slot()
     def disable_flowcontrol_buttons(self):
-        """ Disables flowrate measurement  """
+        """
+        Disables flowrate measurement.
+        """
 
         self._mw.start_flow_measurement_Action.setDisabled(True)
 
     @QtCore.Slot()
     def enable_flowcontrol_buttons(self):
-        """ Enables flowcontrol toolbuttons. """
+        """
+        Enables flowcontrol tool buttons.
+        """
         self._mw.start_flow_measurement_Action.setDisabled(False)
 
     def close_function(self):
-        """ This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
-        when the main window is closed. """
+        """
+        This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
+        when the main window is closed.
+        """
         if self._odor_circuit_arduino_logic.measuring_flowrate:
             self.sigStopFlowMeasure.emit()
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')

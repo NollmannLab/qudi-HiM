@@ -78,6 +78,7 @@ class MeasurementWorker(QtCore.QRunnable):
 # Logic class
 # ======================================================================================================================
 class OdorCircuitArduinoLogic(GenericLogic):
+
     arduino_uno = Connector(interface='Base')  # no specific arduino interface required
     MFC = Connector(interface='Base')  # no specific MFC interface required
 
@@ -122,11 +123,14 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self._MFC = self.MFC()
 
     def on_deactivate(self):
-        """ Perform required deactivation. """
+        """
+        Perform required deactivation.
+        """
         pass
 
     def valve(self, pin, state):
-        """ Open only 1 valve 
+        """
+        Open only 1 valve
         @param pin: Number of the pin to activate (2 to 12)
         @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
         input example: ' 'state' '
@@ -140,7 +144,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         Prepare the specified odor by activating the corresponding valves.
         @param odor_number: number of the odor you want to inject (not use yet)
-        input example: ' 'odor_number' '
+        input example: 'odor_number'
         """
         if odor_number == 1:
             self.valve(self._valve_odor_1_in, 1)
@@ -158,7 +162,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
             logger.warning('4 odor only')
 
     def flush_odor(self):
-        """ Close all the valves that need to be closed
+        """
+        Close all the valves that need to be closed
         """
         self.valve(self._mixing_valve, 1)
         self.valve(self._final_valve, 0)
@@ -174,7 +179,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def open_air(self, flow1, flow2, flow3):
         """
-            Open the MFCs
+        Open the MFCs
+        @param flow1, flow2, flow3 : the flow you want to put in the MFCs
         """
         self._MFC.MFC_ON(self._MFC_1, flow1)
         time.sleep(0.3)
@@ -184,7 +190,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def close_air(self):
         """
-            Close the MFCs
+        Close the MFCs
         """
         self._MFC.MFC_OFF(self._MFC_1)
         time.sleep(0.3)
@@ -219,9 +225,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
     # Flowrate measurement loop ---------------------------------------------------------------------------------------
 
     def start_flow_measurement(self):
-        """ Start a continuous measurement of the flowrate.
-        :param: None
-        :return: None
+        """
+        Start a continuous measurement of the flowrate.
         """
         self.measuring_flowrate = True
         # monitor the flowrate, using a worker thread
@@ -230,9 +235,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.threadpool.start(worker)
 
     def flow_measurement_loop(self):
-        """ Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
-        :param: None
-        :return: None
+        """
+        Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
         """
         flowrate1, flowrate2, flowrate3 = self.get_flowrate()
         self.sigUpdateFlowMeasurement.emit(flowrate1, flowrate2, flowrate3)
@@ -243,10 +247,9 @@ class OdorCircuitArduinoLogic(GenericLogic):
             self.threadpool.start(worker)
 
     def stop_flow_measurement(self):
-        """ Stops the measurement of flowrate.
+        """
+        Stops the measurement of flowrate.
         Emits a signal to update the GUI with the most recent values.
-        :param: None
-        :return: None
         """
         self.measuring_flowrate = False
 
@@ -254,12 +257,16 @@ class OdorCircuitArduinoLogic(GenericLogic):
     # Methods to handle the user interface state
     # ----------------------------------------------------------------------------------------------------------------------
     def disable_flowcontrol_actions(self):
-        """ This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
+        """
+        This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
         button on GUI, for example during Tasks. By security, all thread actions (measuring flow-rate and volume are
-         stopped as well)."""
+        stopped as well).
+        """
         self.sigDisableFlowActions.emit()
         self.stop_flow_measurement()
 
     def enable_flowcontrol_actions(self):
-        """ This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks. """
+        """
+        This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks.
+        """
         self.sigEnableFlowActions.emit()

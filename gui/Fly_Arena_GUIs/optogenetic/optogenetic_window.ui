@@ -138,30 +138,17 @@
       <string/>
      </property>
     </widget>
-    <widget class="QToolButton" name="open">
+    <widget class="QPushButton" name="toggleButton">
      <property name="geometry">
       <rect>
-       <x>630</x>
-       <y>390</y>
-       <width>71</width>
-       <height>41</height>
+       <x>620</x>
+       <y>430</y>
+       <width>101</width>
+       <height>61</height>
       </rect>
      </property>
      <property name="text">
-      <string>Open</string>
-     </property>
-    </widget>
-    <widget class="QToolButton" name="close">
-     <property name="geometry">
-      <rect>
-       <x>630</x>
-       <y>460</y>
-       <width>71</width>
-       <height>41</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Close</string>
+      <string>Turn on</string>
      </property>
     </widget>
    </widget>
