@@ -498,8 +498,9 @@ class OdorCircuitGUI(GUIBase):
 
     @staticmethod
     def update_valve_label(label, state):
-        """ Update the valve label to show 'opened' or 'closed'.
-        @param Label : the designated label related to the valves or MFCs
+        """
+        Update the valve label to show 'opened' or 'closed'.
+        @param label : the designated label related to the valves or MFCs
         @param state :  (bool) ON or OFF (1 or 0)
         """
         if state == 1:
@@ -508,7 +509,8 @@ class OdorCircuitGUI(GUIBase):
             label.setText("Close")
 
     def update_final_valve_label(self, state):
-        """ Update the final valve label to change background image.
+        """
+        Update the final valve label to change background image.
         @param state :  (bool) ON or OFF (1 or 0)
         """
         if state == 1:
@@ -615,13 +617,17 @@ class OdorCircuitGUI(GUIBase):
                 self.update_valve_label(self._mw.label_M_2, 0)
 
     def mfc_on(self):
+        """
+        Open the MFCs at the value entered on the interface
+        """
         value1 = self._mw.doubleSpinBox_5.value()
         value2 = self._mw.doubleSpinBox_6.value()
         value3 = self._mw.doubleSpinBox_4.value()
         self._odor_circuit_arduino_logic.open_air(value1, value2, value3)
 
     def mfc_on_off(self):
-        """ Turn the MFCs on or off switching the MFC status
+        """
+        Turn the MFCs on or off switching the MFC status
         """
 
         if not self.MFC_status:
@@ -660,7 +666,9 @@ class OdorCircuitGUI(GUIBase):
     # Slots related to the flowcontrol
     # ----------------------------------------------------------------------------------------------------------------------
     def Start_measure(self):
-        """Start measurement"""
+        """
+        Start measurement
+        """
         self.G=1
         self._mfcw.cancel.setDisabled(False)
         self.Caltime = self._mfcw.doubleSpinBox.value()
