@@ -43,17 +43,6 @@ class Nifpga(Base, LasercontrolInterface):
         module.Class: 'fpga.ni_fpga.Nifpga'
         resource: 'RIO0'
         default_bitfile: 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\FPGAv0_FPGATarget_QUDIQPDPIDlaserc_kWY0ujWrcbM.lvbitx'
-        wavelengths:
-            - '405 nm'
-            - '488 nm'
-            - '561 nm'
-            - '640 nm'
-        registers_laser:
-            - '405'
-            - '488'
-            - '561'
-            - '640'
-            - 'Update lasers'
         registers_qpd:
             - 'X'
             - 'Y'
@@ -82,8 +71,8 @@ class Nifpga(Base, LasercontrolInterface):
     # config options
     resource = ConfigOption('resource', None, missing='error')
     default_bitfile = ConfigOption('default_bitfile', None, missing='error')
-    _wavelengths = ConfigOption('wavelengths', None, missing='warn')
-    _registers_laser = ConfigOption('registers_laser', None, missing='warn')
+    # _wavelengths = ConfigOption('wavelengths', None, missing='warn')
+    # _registers_laser = ConfigOption('registers_laser', None, missing='warn')
     _registers_qpd = ConfigOption('registers_qpd', None, missing='warn')
     _registers_autofocus = ConfigOption('registers_autofocus', None, missing='warn')
     _registers_general = ConfigOption('registers_general', None, missing='warn')
@@ -116,18 +105,18 @@ class Nifpga(Base, LasercontrolInterface):
         """ Required initialization steps when module is called.
         The bitfile registers are linked to class variables here. """
         self.session = Session(bitfile=self.default_bitfile, resource=self.resource)
+        self.session.reset()
 
-        # make the bitfile registers accessible from python module
-        if self._wavelengths is not None:
-
-            self.laser1_control = self.session.registers[self._registers_laser[0]]
-            self.laser2_control = self.session.registers[self._registers_laser[1]]
-            self.laser3_control = self.session.registers[self._registers_laser[2]]
-            self.laser4_control = self.session.registers[self._registers_laser[3]]
-            self.update = self.session.registers[self._registers_laser[4]]
-            self.session.reset()
-            for i in range(len(self._registers_laser)-1):
-                self.apply_voltage(0, self._registers_laser[i])  # set initial value to each channel
+        # # make the bitfile registers accessible from python module - was used before installing the Celesta laser
+        # if self._wavelengths is not None:
+        #     self.laser1_control = self.session.registers[self._registers_laser[0]]
+        #     self.laser2_control = self.session.registers[self._registers_laser[1]]
+        #     self.laser3_control = self.session.registers[self._registers_laser[2]]
+        #     self.laser4_control = self.session.registers[self._registers_laser[3]]
+        #     self.update = self.session.registers[self._registers_laser[4]]
+        #     self.session.reset()
+        #     for i in range(len(self._registers_laser)-1):
+        #         self.apply_voltage(0, self._registers_laser[i])  # set initial value to each channel
 
         if self._registers_qpd is not None:
 
@@ -150,13 +139,13 @@ class Nifpga(Base, LasercontrolInterface):
             self.output = self.session.registers[self._registers_autofocus[6]]
 
             self.stop.write(False)
-            self.integration_time_us.write(10)
+            self.integration_time_us.write(50)
         self.session.run()
 
     def on_deactivate(self):
         """ Required deactivation steps. Set the voltage for all laserlines to 0 and close the FPGA session. """
-        for i in range(len(self._registers_laser)-1):
-            self.apply_voltage(0, self._registers_laser[i])   # make sure to switch the lasers off before closing the session
+        # for i in range(len(self._registers_laser)-1):
+        #     self.apply_voltage(0, self._registers_laser[i])   # make sure to switch the lasers off before closing the session
 
         self.stop.write(True)
         self.session.close()
