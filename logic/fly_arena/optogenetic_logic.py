@@ -47,25 +47,31 @@ class OptogeneticLogic(GenericLogic):
         self._motor_control = self.motor_FlyArena()
 
     def on_deactivate(self):
-        """ Perform required deactivation. """
+        """
+        Perform required deactivation.
+        """
         pass
 
     @staticmethod
     def image_display(image, window):
-        """Display the given image in the specified window.
-
-            @param image: The QPixmap image to be displayed.
-            @param window: The window object that contains the label where the image will be displayed.
+        """
+        Display the given image in the specified window.
+        @param image: The QPixmap image to be displayed.
+        @param window: The window object that contains the label where the image will be displayed.
         """
 
         window.label.setPixmap(image)
         window.label.setAlignment(Qt.AlignCenter)
 
     def forward(self):
-        """Turn the motor at 180° forward"""
+        """
+        Turn the motor at 180° forward
+        """
         self._motor_control.send_command("forward")
 
     def backward(self):
-        """Turn the motor at 180° backward"""
+        """
+        Turn the motor at 180° backward
+        """
         self._motor_control.send_command("backward")
 
