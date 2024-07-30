@@ -59,26 +59,31 @@ class MotorControl(Base):
         """
         self.ser.close()
 
-    def send_command(self,command):
+    def command(self,command):
         """
         Send a command to the elegoo.
         typical command :
         send_command("forward")
         send_command("backward")
         """
-        self.ser.flushInput()  # Vider le tampon d'entrée pour éviter les anciennes données
+
+        self.ser.flushInput()
         self.ser.write((command + '\n').encode())
         print(f"Command sent: {command}")
 
-        # Lecture de la réponse du moteur
         response = self.ser.readline().decode().strip()
         if response:
             print(f"Response received: {response}")
         else:
             print("No response received")
 
-
-
+    def send_command(self, command):
+        try:
+            self.command(command)
+        except serial.SerialException as e:
+            self.ser = serial.Serial(self._port, 9600, timeout=5)
+            time.sleep(2)
+            self.command(command)
 
 
 

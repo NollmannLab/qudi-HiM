@@ -180,7 +180,9 @@ class OdorCircuitArduinoLogic(GenericLogic):
     def open_air(self, flow1, flow2, flow3):
         """
         Open the MFCs
-        @param flow1, flow2, flow3 : the flow you want to put in the MFCs
+        @param flow1 : the flow you want to put in the MFC1
+        @param  flow2 : the flow you want to put in the MFC2
+        @param  flow3 : the flow you want to put in the MFC Purge
         """
         self._MFC.MFC_ON(self._MFC_1, flow1)
         time.sleep(0.3)
