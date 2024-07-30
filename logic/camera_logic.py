@@ -1013,7 +1013,7 @@ class CameraLogic(GenericLogic):
             for channel in range(n_channels):
                 self.log.info(f"Saving images for channel {channel}")
                 dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
-                                            compression='gzip')
+                                            compression='gzip', compression_opts=1)
                 # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
                 #                             compression='lzf')
                 # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],

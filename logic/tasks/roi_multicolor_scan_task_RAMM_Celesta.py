@@ -174,7 +174,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                             np.array([0], dtype=np.uint8))
 
         # start the session on the fpga using the user parameters
-        bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        # bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        bitfile = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+                   'QudiROImulticolorscan_KINETIX_20240730.lvbitx')
         self.log.info('FPGA bitfile loaded for ROIMulticolour task')
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_celesta_roi_multicolor_imaging_task_session(self.num_z_planes,
@@ -310,19 +312,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata = self.get_fits_metadata()
             self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
         elif self.file_format == 'npy':
-            self.ref['cam'].save_to_npy(self.complete_path, image_data)
+            self.ref['cam'].save_to_npy(cur_save_path, image_data)
             metadata = self.get_metadata()
-            file_path = self.complete_path.replace('npy', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
+            metadata_file_path = cur_save_path.replace('npy', 'yaml', 1)
+            self.save_metadata_file(metadata, metadata_file_path)
         elif self.file_format == 'hdf5':
             metadata = self.get_hdf5_metadata()
-            self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
+            self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
         else:  # use tiff as default format
             self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
             # self.ref['cam'].save_to_tiff_separate(self.num_laserlines, self.complete_path, image_data)
             metadata = self.get_metadata()
-            file_path = cur_save_path.replace('tif', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
+            metadata_file_path = cur_save_path.replace('tif', 'yaml', 1)
+            self.save_metadata_file(metadata, metadata_file_path)
 
         # stop the camera
         self.ref['cam'].stop_acquisition()
