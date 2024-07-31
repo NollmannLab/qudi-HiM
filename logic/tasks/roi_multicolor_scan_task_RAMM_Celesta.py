@@ -174,9 +174,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                             np.array([0], dtype=np.uint8))
 
         # start the session on the fpga using the user parameters
-        # bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
-        bitfile = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
-                   'QudiROImulticolorscan_KINETIX_20240730.lvbitx')
+        bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        # bitfile = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+        #            'QudiROImulticolorscan_KINETIX_20240731.lvbitx')
         self.log.info('FPGA bitfile loaded for ROIMulticolour task')
         self.ref['laser'].start_task_session(bitfile)
         self.ref['laser'].run_celesta_roi_multicolor_imaging_task_session(self.num_z_planes,
