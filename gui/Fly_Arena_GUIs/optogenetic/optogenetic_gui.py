@@ -145,6 +145,7 @@ class OptogeneticGUI(GUIBase):
         self.signoirClicked.connect(lambda: self.noirdisplay())
         self.sigquart1Clicked.connect(lambda: self.sigButton1Clicked.emit())
         self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
+        self._ow.checkBox.stateChanged.connect(self.infinite_time)
         self._ow.toggleButton.setCheckable(True)
         self._ow.toggleButton.toggled.connect(self.on_toggle)
 
@@ -229,3 +230,11 @@ class OptogeneticGUI(GUIBase):
         Close the projector
         """
         self.backward()
+
+    def infinite_time(self, state):
+        """ """
+        if state == 2:  # Checked
+            self._ow.doubleSpinBox.setValue(0)
+            self._ow.doubleSpinBox.setDisabled(True)
+        else:  # Unchecked
+            self._ow.doubleSpinBox.setDisabled(False)

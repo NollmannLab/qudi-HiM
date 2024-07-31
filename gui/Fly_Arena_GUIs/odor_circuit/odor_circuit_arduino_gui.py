@@ -125,8 +125,8 @@ class OdorCircuitGUI(GUIBase):
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.date_str = None
-        self.Caltime = None
-        self.G = None
+        self.Caltime = 0
+        self.G = 0
         self.timer1 = None
         self.timer2 = None
         self.mesure2 = None
@@ -671,7 +671,7 @@ class OdorCircuitGUI(GUIBase):
         """
         Start measurement
         """
-        self.G=1
+        self.G = 1
         self._mfcw.cancel.setDisabled(False)
         self.Caltime = self._mfcw.doubleSpinBox.value()
         self.mesure1 = []
@@ -686,7 +686,7 @@ class OdorCircuitGUI(GUIBase):
         """
         Plot the all 3 calibration graphs of the mfc
         """
-        path1 =f'MesureMFC1{self.date_str}'
+        path1 = f'MesureMFC1{self.date_str}'
         path2 = f'MesureMFC2{self.date_str}'
         path3 = f'MesureMFC3{self.date_str}'
         path4 = f'MFCPlot{self.date_str}.png'
@@ -709,6 +709,7 @@ class OdorCircuitGUI(GUIBase):
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
+
 
         else:
             self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
@@ -736,13 +737,15 @@ class OdorCircuitGUI(GUIBase):
         @param float flowrate2: current flowrate retrieved from hardware MFC2
         @param float flowrate3: current flowrate retrieved from hardware MFCPurge
         """
-        self.G+=1
+        self.G += 1
         if len(self.flowrate1_data) < 100:
             self.t_data.append(len(self.t_data))
             self.flowrate1_data.append(flowrate1)
             self.flowrate2_data.append(flowrate2)
             self.flowrate3_data.append(flowrate3)
-
+            self._mw.MFC1.setText(f'{np.around(flowrate1, decimals=4)}')
+            self._mw.MFC2.setText(f'{np.around(flowrate2, decimals=4)}')
+            self._mw.MFCPurge.setText(f'{np.around(flowrate3, decimals=4)}')
         else:
             self.t_data[:-1] = self.t_data[1:]
             self.t_data[-1] += 1
@@ -762,9 +765,7 @@ class OdorCircuitGUI(GUIBase):
         self._flowrate3_timetrace.setData(self.t_data, self.flowrate3_data)
 
         if self.G == self.Caltime * 60:
-
             self._odor_circuit_arduino_logic.stop_flow_measurement()
-            time.sleep(1)
             self.plot_total()
             self._mfcw.cancel.setDisabled(True)
             self._mw.setDisabled(False)
