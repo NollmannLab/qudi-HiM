@@ -115,7 +115,7 @@
       <number>1</number>
      </property>
      <property name="minimum">
-      <double>0.100000000000000</double>
+      <double>0.000000000000000</double>
      </property>
     </widget>
     <widget class="QToolButton" name="noir">
@@ -154,7 +154,33 @@
       </rect>
      </property>
      <property name="text">
-      <string>Turn on</string>
+      <string>Open</string>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_3">
+     <property name="geometry">
+      <rect>
+       <x>630</x>
+       <y>400</y>
+       <width>91</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;Obturateur&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+    </widget>
+    <widget class="QCheckBox" name="checkBox">
+     <property name="geometry">
+      <rect>
+       <x>420</x>
+       <y>100</y>
+       <width>91</width>
+       <height>17</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>infinite time</string>
      </property>
     </widget>
    </widget>

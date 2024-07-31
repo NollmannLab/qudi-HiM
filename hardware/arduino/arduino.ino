@@ -1,6 +1,6 @@
 """Qudi-CBS
 
-This module contains the code that has to be on the arduino device to use the arduino hardware.
+This script contains the code that has to be on the arduino device to use the arduino hardware.
 
 @author: D. Guerin, JB. Fiche
 
