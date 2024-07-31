@@ -133,7 +133,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # close the default FPGA session and start the time-lapse session on the fpga using the user parameters
         self.ref['laser'].close_default_session()
         # bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\50ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
+        bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\20ms_FPGATarget_QudiFTLQPDPID_u+Bjp+80wxk.lvbitx'
         self.ref['laser'].start_task_session(bitfile)
 
         # in order to have a session running for access to autofocus

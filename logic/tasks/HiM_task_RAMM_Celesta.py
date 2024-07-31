@@ -8,6 +8,8 @@ This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @todo: Save the injection data together with the log.
 @todo: Wash IB if experiment is aborted during acquisition
+@todo: In the parameter file - correct the imaging parameters (they are empty but an imaging sequence is indicated)
+@todo: In the parameter file - add the autofocus parameters
 
 @authors: JB.Fiche (based of F.Barho initial script)
 
@@ -118,7 +120,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.timeout: float = 0
         self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
         self.needle_rinsing_duration: int = 30  # time in seconds for rinsing the injection needle
-        self.FPGA_bitfile: str = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+                                  'QudiROImulticolorscan_20240115.lvbitx')
+        # self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+        #                           'QudiROImulticolorscan_KINETIX_20240731.lvbitx')
 
         # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
@@ -958,6 +963,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # pixel size
         return metadata
 
+    def get_hdf5_metadata(self):
+        """ Get a dictionary containing the metadata in a hdf5 header compatible format.
+        @return: dict metadata
+        """
+        metadata = {'sample_name': self.sample_name,
+                    'exposure_s': self.exposure,
+                    'z_step_µm': self.z_step,
+                    'z_total_length_µm': self.z_step * self.num_z_planes,
+                    'n_channels': self.num_laserlines,
+                    'roi_x_position': self.ref['roi'].stage_position[0],
+                    'roi_y_position': self.ref['roi'].stage_position[1],
+                    'autofocus_offset': self.ref['focus']._autofocus_logic._focus_offset,
+                    'autofocus_calibration_precision': np.round(self.ref['focus']._precision, 2),
+                    'autofocus_calibration_slope': np.round(self.ref['focus']._slope, 3),
+                    'autofocus_setpoint': np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+                    }
+        for i in range(self.num_laserlines):
+            metadata[f'laser_line_{i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'laser_intensity_{i + 1}'] = self.imaging_sequence[i][1]
+        return metadata
+
     def save_metadata_file(self, metadata, path):
         """ Save a txt file containing the metadata dictionary.
 
@@ -1121,8 +1147,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].active_roi = None
         self.ref['roi'].set_active_roi(name=roi_name)
         self.ref['roi'].go_to_roi_xy()
-        self.ref['roi'].stage_wait_for_idle()
-        self.log.info(f'Moved to {roi_name}')
+        timeout = self.ref['roi'].stage_wait_for_idle()
+        if timeout:
+            self.log.error(f'Timeout reach for ASI stage while moving to {roi_name}')
+        else:
+            self.log.info(f'Moved to {roi_name}')
         # if self.bokeh:
         #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi_name}')
 
@@ -1135,10 +1164,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pass
         else:
             dz = self.dz[n_roi]
-            print(f'modifying axial position by {dz}')
             self.ref['focus'].stage_move_z_relative(dz)
-            self.ref['focus'].stage_wait_for_idle()
-            self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
+            timeout = self.ref['focus'].stage_wait_for_idle()
+            if timeout:
+                self.log.error(f'Timeout reach for ASI stage while correcting objective axial position '
+                               f'dz={np.around(dz, decimals=1)}µm')
+            else:
+                self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
 
     def perform_autofocus(self):
         """ Launch the search focus procedure.
@@ -1246,6 +1278,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             file_path = cur_save_path.replace('npy', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
             self.log.info(f'Data saved as {file_path}')
+        elif self.file_format == 'hdf5':
+            metadata = self.get_hdf5_metadata()
+            self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
         else:  # use tiff as default format
             self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
             metadata = self.get_metadata()
@@ -1367,7 +1402,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # launch the worker to start the transfer
                 data_saved = False
-                self.log.info(f"uploading {path}")
+                self.log.info(f"uploading {network_dir}")
                 worker = UploadDataWorker(path, network_dir)
                 self.threadpool.start(worker)
 

@@ -27,12 +27,12 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import time
-
+import h5py
+import hdf5plugin
 import numpy as np
-from time import sleep  #, time
+from time import sleep
 import os
 from tifffile import TiffWriter
-# from PIL import Image
 from astropy.io import fits
 import yaml
 
@@ -40,6 +40,16 @@ from core.connector import Connector
 from core.configoption import ConfigOption
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
+
+
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    def new_function(*args, **kwargs):
+        print(f'*** DEBUGGING *** Executing {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
 
 # ======================================================================================================================
 # Worker class for camera live display
@@ -121,8 +131,6 @@ class SpoolProgressWorker(QtCore.QRunnable):
 # ======================================================================================================================
 # Logic class
 # ======================================================================================================================
-
-
 class CameraLogic(GenericLogic):
     """
     Class containing the logic to control a microscope camera.
@@ -161,7 +169,8 @@ class CameraLogic(GenericLogic):
     sigDisableFrameTransfer = QtCore.Signal()
 
     # attributes
-    enabled = False  # indicates if the camera is currently in live mode
+    cam_type = None  # indicated the type of camera used
+    live_enabled = False  # indicates if the camera is currently in live mode
     saving = False  # indicates if the camera is currently saving a movie
     restart_live = False
     frame_transfer = False  # indicates whether the frame transfer mode is activated
@@ -178,7 +187,7 @@ class CameraLogic(GenericLogic):
 
     _hardware = None
     _security_shutter = None
-    fileformat_list = ['tif', 'fits', 'npy']
+    fileformat_list = ['tif', 'hdf5', 'fits', 'npy']
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -190,11 +199,14 @@ class CameraLogic(GenericLogic):
         self._hardware = self.hardware()
         self._security_shutter = self.shutter()
 
-        self.enabled = False
+        # indicate the type of camera used
+        self.cam_type = self._hardware.__class__.__name__
+
+        self.live_enabled = False
         self.saving = False
         self.restart_live = False
         self.has_temp = self._hardware.has_temp()
-        if self.has_temp:
+        if self.has_temp and (self.cam_type != "KinetixCam"):
             self.temperature_setpoint = self._hardware._default_temperature
         self.has_shutter = self._hardware.has_shutter()
 
@@ -236,9 +248,8 @@ class CameraLogic(GenericLogic):
     def set_exposure(self, time):
         """ Set the exposure time of the camera. Inform the GUI that a new value was set.
 
-        :param: float time: desired new exposure time in seconds
-
-        :return: None
+        @param: time (float): desired new exposure time in seconds
+        @return: None
         """
         self._hardware.set_exposure(time)
         exp = self.get_exposure()  # updates also the attribute self._exposure and self._fps
@@ -293,12 +304,11 @@ class CameraLogic(GenericLogic):
         return self._hardware.get_progress()
 
     def set_temperature(self, temperature):
-        """ Set temperature of the camera, if accessible.
-
-         :param: int temperature: desired new temperature setpoint
-         :return: None
-         """
-        if not self.has_temp:
+        """
+        Set temperature of the camera, if accessible.
+        @param: int temperature: desired new temperature setpoint
+        """
+        if (not self.has_temp) or (self.cam_type != "IxonUltra"):
             pass
         else:
             # make sure the cooler is on
@@ -309,20 +319,20 @@ class CameraLogic(GenericLogic):
             self._hardware.set_temperature(temperature)
 
     def get_temperature(self):
-        """ Get temperature of the camera, if accessible, and update the class attribute _temperature.
-
-        :return: int temperature: current sensor temperature
+        """
+        Get temperature of the camera, if accessible, and update the class attribute _temperature.
+        @return: int temperature: current sensor temperature
         """
         if not self.has_temp:
             self.log.warn('Sensor temperature control not available')
         else:
-            if self.enabled:  # live mode on
+            if self.live_enabled:  # live mode on
                 self.interrupt_live()
                 
             temp = self._hardware.get_temperature()
             self._temperature = temp
             
-            if self.enabled:  # restart live mode
+            if self.live_enabled:  # restart live mode
                 self.resume_live()
             return temp
 
@@ -333,7 +343,7 @@ class CameraLogic(GenericLogic):
     def get_ready_state(self):
         """ Is the camera ready for an acquisition ?
 
-        :return: str: ready ? 'True', 'False'
+        @return: ready ? (str) 'True', 'False'
         """
         return str(self._hardware.get_ready_state())
 
@@ -347,9 +357,9 @@ class CameraLogic(GenericLogic):
             return self._hardware._shutter
 
     def get_cooler_state(self):
-        """ Retrieves the status of the cooler if there is one (only if has_temp is True).
-
-        :returns str: cooler on, cooler off """
+        """
+        Retrieves the status of the cooler if there is one (only if "has_temp" is True).
+        @returns str: cooler on, cooler off """
         if not self.has_temp:
             return
         else:
@@ -384,16 +394,14 @@ class CameraLogic(GenericLogic):
     def set_sensor_region(self, hbin, vbin, hstart, hend, vstart, vend):
         """ Defines a limited region on the sensor surface, hence accelerating the acquisition.
 
-        :param int hbin: number of pixels to bin horizontally
-        :param int vbin: number of pixels to bin vertically.
-        :param int hstart: Start column (inclusive)
-        :param int hend: End column (inclusive)
-        :param int vstart: Start row (inclusive)
-        :param int vend: End row (inclusive)
-
-        :return: None
+        @param int hbin: number of pixels to bin horizontally
+        @param int vbin: number of pixels to bin vertically.
+        @param int hstart: Start column (inclusive)
+        @param int hend: End column (inclusive)
+        @param int vstart: Start row (inclusive)
+        @param int vend: End row (inclusive)
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             self.interrupt_live()  # interrupt live to allow access to camera settings
 
         err = self._hardware.set_image(hbin, vbin, hstart, hend, vstart, vend)
@@ -402,28 +410,25 @@ class CameraLogic(GenericLogic):
         else:
             self.log.info('Sensor region set to {} x {}'.format(vend - vstart + 1, hend - hstart + 1))
 
-        if self.enabled:
+        if self.live_enabled:
             self.resume_live()  # restart live in case it was activated
 
     def reset_sensor_region(self):
-        """ Reset to full sensor size.
+        """ Reset to full sensor size. """
 
-        :return: None
-        """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             self.interrupt_live()
 
-        width = self._hardware._full_width  # store the full_width in the hardware module because _width is
-        # overwritten when image is set
-        height = self._hardware._full_height  # same goes for height
+        width = self._hardware._full_width
+        height = self._hardware._full_height
 
-        err = self._hardware.set_image(1, 1, 1, width, 1, height)
+        err = self._hardware.set_image(1, 1, 0, width, 0, height)
         if err < 0:
             self.log.warn('Sensor region not reset to default')
         else:
             self.log.info('Sensor region reset to default: {} x {}'.format(height, width))
 
-        if self.enabled:
+        if self.live_enabled:
             self.resume_live()
 
     @QtCore.Slot(bool)
@@ -436,10 +441,10 @@ class CameraLogic(GenericLogic):
         :return: None
         """
         if self.get_name() == 'iXon Ultra 897':
-            if self.enabled:  # if live mode is on, interrupt to be able to access frame transfer setting
+            if self.live_enabled:  # if live mode is on, interrupt to be able to access frame transfer setting
                 self.interrupt_live()
             self._hardware._set_frame_transfer(int(activate))
-            if self.enabled:  # if live mode was interrupted, restart it
+            if self.live_enabled:  # if live mode was interrupted, restart it
                 self.resume_live()
             self.log.info(f'Frametransfer mode activated: {activate}')
             self.frame_transfer = bool(activate)
@@ -460,22 +465,30 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Method invoked by snap button on GUI ---------------------------------------------------------------------------------
-    def start_single_acquistion(self):  # watch out for the typo !!
+    def start_single_acquisition(self):
         """ Take a single camera image.
         """
+        # For the RAMM microscope, a shutter is used to block the IR laser
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
-        self._hardware.start_single_acquisition()
-        self._last_image = self._hardware.get_acquired_data()
+
+        # Depending on the type of camera, image retrieval will be different
+        if self.cam_type == "KinetixCam":
+            self._last_image = self._hardware.start_single_acquisition()
+        else:
+            self._hardware.start_single_acquisition()
+            self._last_image = self._hardware.get_acquired_data()
+
+        # Send signal to GUi for image display
         self.sigUpdateDisplay.emit()
         self._hardware.stop_acquisition()  # this in needed to reset the acquisition mode to default
         self.sigAcquisitionFinished.emit()
 
 # Methods invoked by live button on GUI --------------------------------------------------------------------------------
     def start_loop(self):
-        """ Start the live display loop.
+        """ Start the live display mode.
         """
-        self.enabled = True
+        self.live_enabled = True
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
 
@@ -491,21 +504,33 @@ class CameraLogic(GenericLogic):
     def loop(self):
         """ Execute one step in the live display loop.
         """
-        if self.enabled:
-            self._last_image = self._hardware.get_acquired_data()
+        if self.live_enabled:
+            if self.cam_type == "KinetixCam":
+                self._last_image, _ = self._hardware.get_most_recent_image(copy=False)
+            else:
+                self._last_image = self._hardware.get_acquired_data()
             self.sigUpdateDisplay.emit()
 
             worker = LiveImageWorker(1 / self._fps)
             worker.signals.sigFinished.connect(self.loop)
             self.threadpool.start(worker)
 
+            # In case live mode does not exist, launch a new snap acquisition
             if not self._hardware.support_live_acquisition():
                 self._hardware.start_single_acquisition()  # the hardware has to check it's not busy
 
     def stop_loop(self):
         """ Stop the live display loop.
         """
-        self.enabled = False
+        self.live_enabled = False
+
+        # in the case of the Kinetix camera, no copy of the images is performed during live acquisition (to avoid
+        # lagging). However, a copy is performed before stopping the camera and removing all the images from the buffer.
+        # This copy is required for the GUI's display.
+        if self.cam_type == "KinetixCam":
+            self._last_image, _ = self._hardware.get_most_recent_image(copy=True)
+
+        # stop acquisition
         self._hardware.stop_acquisition()
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=False)
@@ -524,13 +549,14 @@ class CameraLogic(GenericLogic):
 
 # Method invoked by save last image button on GUI ----------------------------------------------------------------------
     def save_last_image(self, path, metadata, fileformat='.tif'):
-        """ saves a single image to disk
+        """
+        saves a single image to disk
 
-        :param: str path: path stem, such as '/home/barho/images/2020-12-16/samplename'
-        :param: dict metadata: dictionary containing the metadata
-        :param: str fileformat: default '.tif' but can be modified if needed.
+        @param: str path: path stem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: dict metadata: dictionary containing the metadata
+        @param: str fileformat: default '.tif' but can be modified if needed.
 
-        :return: None
+        @return: None
         """
         if self._last_image is None:
             self.log.warning('No image available to save')
@@ -545,31 +571,33 @@ class CameraLogic(GenericLogic):
     def start_save_video(self, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal=True):
         """ Starts saving n_frames to disk as a stack (tiff of fits formats supported)
 
-        :param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        :param: str fileformat (including the dot, such as '.tif', '.fits')
-        :param: int n_frames: number of frames to be saved
-        :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: str fileformat (including the dot, such as '.tif', '.fits')
+        @param: int n_frames: number of frames to be saved
+        @param: bool is_display: show images on live display on gui
+        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
+        @param: bool emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
-
-        :return: None
         """
-        if self.enabled:  # live mode is on
-            # store the state of live mode in a helper variable
-            self.restart_live = True
-            self.enabled = False  # live mode will stop then
+        # handle live mode variables
+        if self.live_enabled:  # live mode is on
+            self.restart_live = True  # store the state of live mode in a helper variable in order to restart it after
+            self.live_enabled = False  # live mode will stop then
             self._hardware.stop_acquisition()
-
         self.saving = True
+
+        # handle IR laser shutter security
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
 
+        # start movie acquisition
         err = self._hardware.start_movie_acquisition(n_frames)
         if not err:
             self.log.warning('Video acquisition did not start')
+            self.finish_save_video(filenamestem, fileformat, n_frames, metadata, emit_signal=True)
+            return
 
         # wait at least a full exposure time to make sure at least one image was acquired.
         time.sleep(self._exposure * 2)
@@ -584,27 +612,33 @@ class CameraLogic(GenericLogic):
         """ This method performs one step in saving procedure until the last image is saved.
         Handles also the update of the live display if activated.
 
-        :param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        :param: str fileformat (including the dot, such as '.tif', '.fits')
-        :param: int n_frames: number of frames to be saved
-        :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: str fileformat (including the dot, such as '.tif', '.fits')
+        @param: int n_frames: number of frames to be saved
+        @param: bool is_display: show images on live display on gui
+        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
+        @param: bool emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
-
-        :return: None
         """
+        # Check if the camera is still acquiring
         ready = self._hardware.get_ready_state()
 
+        # Handle progress and display - note that for the Kinetix camera, progress & display are handled in the same
+        # function.
         if not ready:
-            progress = self._hardware.get_progress()
-            self.sigProgress.emit(progress)
-
-            if is_display:
-                self._last_image = self._hardware.get_most_recent_image()
-                self.sigUpdateDisplay.emit()
+            if self.cam_type == "KinetixCam":
+                self._last_image, progress = self._hardware.get_most_recent_image()
+                self.sigProgress.emit(progress)
+                if is_display:
+                    self.sigUpdateDisplay.emit()
+            else:
+                progress = self._hardware.get_progress()
+                self.sigProgress.emit(progress)
+                if is_display:
+                    self._last_image = self._hardware.get_most_recent_image()
+                    self.sigUpdateDisplay.emit()
 
             # restart a worker if acquisition still ongoing
             worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
@@ -617,25 +651,23 @@ class CameraLogic(GenericLogic):
             self.finish_save_video(filenamestem, fileformat, n_frames, metadata, emit_signal)
 
     def finish_save_video(self, filenamestem, fileformat, n_frames, metadata, emit_signal=True):
-        """ This method finishes the saving procedure.
-        Live mode of the camera is eventually restarted.
+        """ This method finishes the saving procedure. Live mode of the camera is eventually restarted.
 
-        :param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        :param: str fileformat (including the dot, such as '.tif', '.fits')
-        :param: int n_frames: number of frames to be saved
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: str fileformat (including the dot, such as '.tif', '.fits')
+        @param: int n_frames: number of frames to be saved
+        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        :param: bool emit_signal: can be set to false to avoid sending the signal for gui interaction,
+        @param: bool emit_signal: can be set to false in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
-
-        :return: None
         """
         self._hardware.wait_until_finished()  # this is important especially if display is disabled
         self.sigSaving.emit()  # for info message on statusbar of GUI
 
-        # first get the data before resetting the acquisition mode of the camera
+        # get the acquired data before resetting the acquisition mode of the camera
         image_data = self._hardware.get_acquired_data()
+
         # reset the attributes and the default acquisition mode
         self._hardware.finish_movie_acquisition()
         if self._security_shutter is not None:
@@ -648,19 +680,22 @@ class CameraLogic(GenericLogic):
             self.start_loop()
 
         # data handling
-        complete_path = self.create_generic_filename(filenamestem, '_Movie', 'movie', fileformat, addfile=False)
-        # create the PIL.Image object and save it to tiff
-        if fileformat == '.tif':
-            self.save_to_tiff(n_frames, complete_path, image_data)
-            self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
-        elif fileformat == '.fits':
-            fits_metadata = self.convert_to_fits_metadata(metadata)
-            self.save_to_fits(complete_path, image_data, fits_metadata)
-        elif fileformat == '.npy':
-            self.save_to_npy(complete_path, image_data)
-            self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
-        else:
-            self.log.info(f'Your fileformat {fileformat} is currently not covered')
+        if image_data is not None:
+            complete_path = self.create_generic_filename(filenamestem, '_Movie', 'movie', fileformat, addfile=False)
+            if fileformat == '.tif':
+                self.save_to_tiff(n_frames, complete_path, image_data)
+                self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
+            elif fileformat == '.fits':
+                fits_metadata = self.convert_to_fits_metadata(metadata)
+                self.save_to_fits(complete_path, image_data, fits_metadata)
+            elif fileformat == '.npy':
+                self.save_to_npy(complete_path, image_data)
+                self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
+            elif fileformat == '.hdf5':
+                hdf5_metadata = {'exposure': self._exposure, 'n_channels': 1}
+                self.save_to_hdf5(complete_path, image_data, hdf5_metadata)
+            else:
+                self.log.info(f'Your fileformat {fileformat} is currently not covered')
 
         if emit_signal:
             self.sigVideoSavingFinished.emit()
@@ -681,10 +716,10 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        if self.enabled:  # live mode is on
+        if self.live_enabled:  # live mode is on
             # store the state of live mode in a helper variable
             self.restart_live = True
-            self.enabled = False  # live mode will stop then
+            self.live_enabled = False  # live mode will stop then
             self._hardware.stop_acquisition()
 
         self.saving = True
@@ -796,35 +831,41 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for Qudi tasks / experiments requiring synchronization between camera and lightsources
 # ----------------------------------------------------------------------------------------------------------------------
-
     def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
         """ Method used for camera in external trigger mode, used for tasks with synchonization between
         lightsources and camera. Prepares the camera setting the required parameters. Camera waits for trigger.
 
-        :param: int frames:
-        :param: float exposure:
-        :param: int gain:
-        :param: str save_path:
-        :param: str file_format:
-
-        :return: None
+        @param: int frames:
+        @param: float exposure:
+        @param: int gain:
+        @param: str save_path:
+        @param: str file_format:
         """
         self._hardware.prepare_camera_for_multichannel_imaging(frames, exposure, gain, save_path, file_format)
 
     def reset_camera_after_multichannel_imaging(self):
-        """ Reset the camera default state at the end of a synchronized acquisition mode.
-
-        :return: None
+        """
+        Reset the camera default state at the end of a synchronized acquisition mode.
         """
         self._hardware.reset_camera_after_multichannel_imaging()
 
     def get_acquired_data(self):   # used in Hi-M Task RAMM
         return self._hardware.get_acquired_data()
 
-    def start_acquisition(self):  # used in Hi-M Task RAMM
+    def start_acquisition(self):
+        """
+        This method is only used for the task, to launch an acquisition without connections to the GUI (no display and
+        no possible interactions with the user).
+        """
+        # close the shutter for IR laser (only for the RAMM setup)
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
-        self._hardware._start_acquisition()  # not on camera interface
+
+        # launch acquisition
+        if self.cam_type == "KinetixCam":
+            self._hardware._start_acquisition(mode='Sequence')
+        else:
+            self._hardware._start_acquisition()
 
     def stop_acquisition(self):  # used in Hi-M Task RAMM
         self._hardware.stop_acquisition()
@@ -887,15 +928,11 @@ class CameraLogic(GenericLogic):
 
     def save_to_tiff(self, n_frames, path, data):
         """ Save the image data to a tiff file.
-        Creates the PIL.Image object and saves it to tiff.
 
-        :param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
-        :param: str path: complete path where the object is saved to (including the suffix .tif)
-        :param: data: np.array
-
-        :return: None
+        @param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
+        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: data: (np.array) image stack
         """
-        # t0 = time()
         try:
             with TiffWriter(path) as tif:
                 tif.save(data.astype(np.uint16))
@@ -903,72 +940,24 @@ class CameraLogic(GenericLogic):
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
 
-        # t1 = time()
-        # print(f'Saving time : {t1-t0}s')
+    def save_to_tiff_separate(self, n_channels, path, data):
+        """ For each separate channel (laser line), save the image data to a tiff file.
 
-        # type conversion to uint16 - this is a good practice since the process can be significantly slower when working
-        # with float.
-        # data = data.astype(np.uint16)
-        #
-        # # 2D data case (no stack)
-        # if n_frames == 1:
-        #     try:
-        #         self.save_u16_to_tiff(data, (data.shape[1], data.shape[0]), path)
-        #         self.log.info('Saved data to file {}'.format(path))
-        #     except Exception:
-        #         self.log.warning('Data not saved')
-        #     return None
-        #
-        # # 3D data case (note: z stack is the first dimension)
-        # else:
-        #     try:
-        #         size = (data.shape[2], data.shape[1])
-        #         self.save_u16_to_tiff_stack(n_frames, data, size, path)
-        #         self.log.info('Saved data to file {}'.format(path))
-        #     except Exception:
-        #         self.log.warning('Data not saved')
-        #     return None
+        @param: int n_channels: number of acquisition channels
+        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: data: (np.array) image stack
+        """
+        try:
+            for channel in range(n_channels):
+                new_path, filename = os.path.split(path)
+                filename, _ = os.path.splitext(filename)
+                new_path = os.path.join(new_path, f'{filename}_ch{channel}.tif')
 
-    # @staticmethod
-    # def save_u16_to_tiff(u16int, size, tiff_filename):
-    #     """ Helper function for saving as tiff.
-    #     Function found at https://blog.itsayellow.com/technical/saving-16-bit-tiff-images-with-pillow-in-python/#
-    #     'Since Pillow has poor support for 16-bit TIFF, we make our own save function to properly save a 16-bit TIFF.'
-    #
-    #     Modified version for numpy array only.
-    #
-    #     :param u16int: np.array with dtype int16 to be saved as tiff. Make sure that the data is in int16 format !
-    #                     otherwise the conversion to bytes will not give the right result
-    #     :param float tuple size: size of the data
-    #     :param str tiff_filename: including the suffix '.tif'
-    #
-    #     :return: None
-    #     """
-    #     # write 16-bit TIFF image
-    #     # PIL interprets mode 'I;16' as "uint16, little-endian"
-    #     img_out = Image.new('I;16', size)
-    #     outpil = u16int.astype(u16int.dtype.newbyteorder("<")).tobytes()
-    #     img_out.frombytes(outpil)
-    #     img_out.save(tiff_filename)
-    #
-    # @staticmethod
-    # def save_u16_to_tiff_stack(n_frames, u16int, size, tiff_filename):
-    #     """ Helper function that handles saving of 3D image data to 16 bit tiff stacks.
-    #     :param int n_frames: number of frames to be saved (1st dimension of the image data)
-    #     :param u16int: 3D np.array with dtype int16 to be saved as tiff
-    #     :param int tuple size: size of an individual image in the stack (x pixel, y pixel)
-    #     :param str tiff_filename: complete path to the file, including the suffix .tif
-    #
-    #     :return: None
-    #     """
-    #     imlist = []  # this will be a list of pillow Image objects
-    #     for i in range(n_frames):
-    #         img_out = Image.new('I;16', size)  # initialize a new pillow object of the right size
-    #         outpil = u16int[i].astype(
-    #             u16int.dtype.newbyteorder("<")).tobytes()  # convert the i-th frame to bytes object
-    #         img_out.frombytes(outpil)  # create pillow object from bytes
-    #         imlist.append(img_out)  # create the list of pillow image objects
-    #     imlist[0].save(tiff_filename, save_all=True, append_images=imlist[1:])
+                with TiffWriter(new_path) as tif:
+                    tif.save(data[channel::n_channels].astype(np.uint16))
+                self.log.info('Saved data to file {}'.format(new_path))
+        except Exception as e:
+            self.log.warning(f'Data not saved: {e}')
 
     def save_metadata_txt_file(self, filenamestem, datatype, metadata):
         """"Save a txt file containing the metadata.
@@ -976,8 +965,6 @@ class CameraLogic(GenericLogic):
         :param: str filenamestem (example /home/barho/images/2020-12-16/samplename)
         :param: str datatype: string identifier of the data shape: _Movie or _Image
         :param: dict metadata: dictionary containing the annotations
-
-        :return: None
         """
         complete_path = self.create_generic_filename(filenamestem, datatype, 'parameters', '.txt', addfile=True)
         with open(complete_path, 'w') as file:
@@ -995,10 +982,8 @@ class CameraLogic(GenericLogic):
         :param: str path: complete path where the object is saved to, including the suffix .fits
         :param: data: np.array (2D or 3D)
         :param: dict metadata: dictionary containing the metadata that shall be saved with the image data
-
-        :return: None
         """
-        # t0 = time()
+
         data = data.astype(np.int16)  # data conversion because 16 bit image shall be saved
         hdu = fits.PrimaryHDU(data)  # PrimaryHDU object encapsulates the data
         hdul = fits.HDUList([hdu])
@@ -1015,6 +1000,31 @@ class CameraLogic(GenericLogic):
         #
         # t1 = time()
         # print(f'Saving time : {t1-t0}s')
+
+    def save_to_hdf5(self, path, data, metadata):
+        """ Save the data in h5 format. This function was specifically created for the Kinetix camera. Considering the
+        size of the images, a gzip compression is applied (this method is a lossless method - the decompressed images
+        should be identical to the original). Note the metadata are also saved in the same file and the images are
+        separated according to acquisition channels.
+
+        @param path: (str) complete path where to save the data
+        @param data: (numpy array) array containing the images to be saved
+        @param metadata: (dict) contains all the metadata regarding the acquisition parameters
+        """
+        n_channels = int(metadata['n_channels'])
+        with h5py.File(path, 'w') as hf:
+            for channel in range(n_channels):
+                self.log.info(f"Saving images for channel {channel}")
+                dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                                            compression='gzip', compression_opts=1)
+                # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                #                             compression='lzf')
+                # dataset = hf.create_dataset(f'image_ch{channel}', data=data[channel::n_channels],
+                #                             **hdf5plugin.Blosc())
+
+            self.log.info(f"Saving metadata.")
+            for key, value in metadata.items():
+                dataset.attrs[key] = value
 
     @staticmethod
     def add_fits_header(path, dictionary):
@@ -1060,16 +1070,11 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        # t0 = time()
-        #
         try:
             np.save(path, data.astype(np.uint16))
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
-        #
-        # t1 = time()
-        # print(f'Saving time : {t1-t0}s')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
@@ -1078,7 +1083,7 @@ class CameraLogic(GenericLogic):
     def stop_live_mode(self):
         """ Allows to stop the live mode programmatically, for example in the preparation steps of a task
         where live mode would interfere with the new camera settings. """
-        if self.enabled:
+        if self.live_enabled:
             self.stop_loop()
             self.sigLiveStopped.emit()  # to inform the GUI that live mode has been stopped programmatically
 
