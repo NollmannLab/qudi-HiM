@@ -35,7 +35,7 @@ import os
 import time
 
 import numpy as np
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QPixmap
 from matplotlib import pyplot as plt
 from qtpy import QtWidgets, uic, QtCore
@@ -166,6 +166,8 @@ class OdorCircuitGUI(GUIBase):
 
         self.pixmap1 = QPixmap(self._Fluidics_on_path)
         self.pixmap2 = QPixmap(self._Fluidics_off_path)
+        self.pixmap1 = self.pixmap1.scaled(1101, 651, Qt.KeepAspectRatio)
+        self.pixmap2 = self.pixmap2.scaled(1101, 651, Qt.KeepAspectRatio)
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.

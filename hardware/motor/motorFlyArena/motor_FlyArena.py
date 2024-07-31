@@ -78,6 +78,9 @@ class MotorControl(Base):
             print("No response received")
 
     def send_command(self, command):
+        """
+        Allows the command to be set if the elegoo was deconnected and reconnected
+        """
         try:
             self.command(command)
         except serial.SerialException as e:

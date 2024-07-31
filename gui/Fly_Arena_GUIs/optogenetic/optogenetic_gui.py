@@ -164,7 +164,7 @@ class OptogeneticGUI(GUIBase):
         """
         self.p = True
         self._optogenetic_logic.forward()
-        self._ow.toggleButton.setText('Turn off')
+        self._ow.toggleButton.setText('Close')
 
     def backward(self):
         """
@@ -172,7 +172,7 @@ class OptogeneticGUI(GUIBase):
         """
         self.p = False
         self._optogenetic_logic.backward()
-        self._ow.toggleButton.setText('Turn on')
+        self._ow.toggleButton.setText('Open')
 
     def noirdisplay(self):
         """

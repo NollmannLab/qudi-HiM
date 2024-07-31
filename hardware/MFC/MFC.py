@@ -49,7 +49,6 @@ class MFC(Base):
     _MFC_1_flow = ConfigOption('MFC_1_flow', 0.04)
     _MFC_2_flow = ConfigOption('MFC_2_flow', 0.26)
 
-
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
 
