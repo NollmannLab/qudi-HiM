@@ -329,6 +329,13 @@ class ExpConfigLogic(GenericLogic):
                                        'save_network_path', 'transfer_data', 'email', 'correlation_threshold']
                     config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
+            elif experiment == 'Hi-M Autofocus Check Epi':
+                if not filename:
+                    filename = 'calibration_task_epi.yml'
+                    keys_to_extract = ['sample_name', 'num_z_planes', 'roi_list_path', 'zen_ref_images_path',
+                                       'zen_saving_path', 'save_network_path', 'transfer_data', 'email']
+                    config_dict = {key: self.config_dict[key] for key in keys_to_extract}
+
             elif experiment == 'Hi-M Airyscan Confocal':
                 if not filename:
                     filename = 'hi_m_task_AIRYSCAN_confocal.yml'
