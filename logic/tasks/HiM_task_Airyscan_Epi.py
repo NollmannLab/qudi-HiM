@@ -41,7 +41,7 @@ import shutil
 from time import sleep
 from datetime import datetime
 from scipy.signal import correlate
-from scipy.ndimage import laplace
+from scipy.ndimage import laplace, gaussian_filter
 from czifile import imread
 from tifffile import TiffWriter
 from glob import glob
@@ -551,10 +551,10 @@ class Task(InterruptableTask):
 
                 ref_image = self.ref_images[n_roi]
                 new_image = imread(new_autofocus_image_path[0])
-                correlation_score = self.calculate_correlation_score(ref_image, new_image[0, 0, :, :, 0])
+                correlation_score = self.calculate_correlation_score_v2(ref_image, new_image[0, 0, :, :, 0])
                 self.correlation_score[self.probe_counter-1, n_roi] = correlation_score
 
-                if (correlation_score < self.correlation_threshold) and (roi != "ROI_036"):
+                if correlation_score < self.correlation_threshold:
                     answer = messagebox.askokcancel("Autofocus is lost!", "Proceed?")
                     if not answer:
                         self.aborted = True
@@ -1114,6 +1114,45 @@ class Task(InterruptableTask):
         correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
 
         # compute the position where the maximum of correlation was detected (where the laplacian is the highest)
+        correlation_laplacian = laplace(correlation_new)
+        idx = np.argmax(np.abs(correlation_laplacian))
+        x, y = np.unravel_index(idx, correlation_laplacian.shape)
+
+        # compute a score (with respect to the reference)
+        correlation_score = correlation_new[x, y] / np.max(correlation_ref)
+
+        return correlation_score
+
+    @staticmethod
+    def calculate_correlation_score_v2(ref_image, new_image):
+        """ Compute a correlation score (1 = perfectly correlated - 0 = no correlation) between two images
+
+        @param ref_image: reference image (specific of the roi)
+        @param new_image: newly acquired autofocus image
+        @return: correlation score
+        """
+        # bin the two images from 2048x2048 to 1024x1024
+        shape = (1024, 2, 1024, 2)
+        # shape = (512, 4, 512, 4)
+        ref_image_bin = ref_image.reshape(shape).mean(-1).mean(1)
+        new_image_bin = new_image.reshape(shape).mean(-1).mean(1)
+
+        # apply a gaussian blur in order to remove the background
+        ref_image_bin = ref_image_bin - gaussian_filter(ref_image_bin, sigma=10)
+        new_image_bin = new_image_bin - gaussian_filter(new_image_bin, sigma=10)
+
+        # select the central portion of the reference image. The idea is to use a smaller image to compute the
+        # correlation faster but also to be less sensitive to any translational variations between the two images.
+        ref_image_bin_roi = ref_image_bin[262:762, 262:762]
+        # ref_image_bin_roi = ref_image_bin[128:384, 128:384]
+
+        # calculate the correlation between the two images
+        correlation_ref = correlate(ref_image_bin_roi, ref_image_bin, mode='valid')
+        correlation_new = correlate(ref_image_bin_roi, new_image_bin, mode='valid')
+
+        # compute the position where the maximum of correlation was detected (where the laplacian is the highest) - this
+        # was introduced since local maxima where sometimes observed but on quite large area. The Laplacian is used to
+        # detect the bins where the variation of correlation is the highest.
         correlation_laplacian = laplace(correlation_new)
         idx = np.argmax(np.abs(correlation_laplacian))
         x, y = np.unravel_index(idx, correlation_laplacian.shape)
