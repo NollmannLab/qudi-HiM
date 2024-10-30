@@ -187,7 +187,7 @@ class CameraLogic(GenericLogic):
 
     _hardware = None
     _security_shutter = None
-    fileformat_list = ['tif', 'fits', 'npy']
+    fileformat_list = ['tif', 'hdf5', 'fits', 'npy']
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -691,6 +691,9 @@ class CameraLogic(GenericLogic):
             elif fileformat == '.npy':
                 self.save_to_npy(complete_path, image_data)
                 self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
+            elif fileformat == '.hdf5':
+                hdf5_metadata = {'exposure': self._exposure, 'n_channels': 1}
+                self.save_to_hdf5(complete_path, image_data, hdf5_metadata)
             else:
                 self.log.info(f'Your fileformat {fileformat} is currently not covered')
 
@@ -1067,16 +1070,11 @@ class CameraLogic(GenericLogic):
 
         :return: None
         """
-        # t0 = time()
-        #
         try:
             np.save(path, data.astype(np.uint16))
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
-        #
-        # t1 = time()
-        # print(f'Saving time : {t1-t0}s')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
