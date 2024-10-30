@@ -100,16 +100,16 @@ class OdorCircuitGUI(GUIBase):
     _path_MFC1 = ConfigOption('path_MFC1', None)
     _path_MFC2 = ConfigOption('path_MFC2', None)
     _path_MFCPurge = ConfigOption('path_MFCPurge', None)
-    valve_odor_1_in = 0
-    valve_odor_2_in = 0
-    valve_odor_3_in = 0
-    valve_odor_4_in = 0
-    valve_odor_1_out = 0
-    valve_odor_2_out = 0
-    valve_odor_3_out = 0
-    valve_odor_4_out = 0
-    mixing_valve = 0
-    final_valve = 0
+    # valve_odor_1_in = 0
+    # valve_odor_2_in = 0
+    # valve_odor_3_in = 0
+    # valve_odor_4_in = 0
+    # valve_odor_1_out = 0
+    # valve_odor_2_out = 0
+    # valve_odor_3_out = 0
+    # valve_odor_4_out = 0
+    # mixing_valve = 0
+    # final_valve = 0
     MFC_status = False
 
     sigStartFlowMeasure = QtCore.Signal()
@@ -129,15 +129,18 @@ class OdorCircuitGUI(GUIBase):
         self.G = 0
         self.timer1 = None
         self.timer2 = None
-        self.mesure2 = None
-        self._flowrate3_timetrace = None
-        self._flowrate2_timetrace = None
         self._flowrate1_timetrace = None
-        self.mesure3 = None
+        self._flowrate2_timetrace = None
+        self._flowrate3_timetrace = None
+        self._flowrate4_timetrace = None
         self.mesure1 = None
-        self.flowrate3_data = None
-        self.flowrate2_data = None
+        self.mesure2 = None
+        self.mesure3 = None
+        self.mesure4 = None
         self.flowrate1_data = None
+        self.flowrate2_data = None
+        self.flowrate3_data = None
+        self.flowrate4_data = None
         self.t_data = None
         self._odor_circuit_arduino_logic = None
         self._mw = None
@@ -179,10 +182,9 @@ class OdorCircuitGUI(GUIBase):
         self._mw.stoplaunch.setDisabled(True)
         self._mfcw.cancel.setDisabled(True)
         self.init_flowcontrol()
-        self._mw.label_8.setPixmap(self.pixmap2)
+        self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
 
         # Connecting signals of the buttons to the methods.
-
         self._mw.odor1.stateChanged.connect(self.odor_changed)
         self._mw.odor2.stateChanged.connect(self.odor_changed)
         self._mw.odor3.stateChanged.connect(self.odor_changed)
@@ -242,9 +244,11 @@ class OdorCircuitGUI(GUIBase):
         self.flowrate1_data = []
         self.flowrate2_data = []
         self.flowrate3_data = []
+        self.flowrate4_data = []
         self.mesure1 = []
         self.mesure2 = []
         self.mesure3 = []
+        self.mesure4 = []
         # create a reference to the line object (this is returned when calling plot method of pg.PlotWidget)
         self._mw.flowrate_PlotWidget_1.setLabel('left', 'Flowrate', units='L/min')
         self._mw.flowrate_PlotWidget_1.setLabel('bottom', 'Time', units='s')
@@ -258,7 +262,9 @@ class OdorCircuitGUI(GUIBase):
         self._flowrate2_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate2_data,
                                                                         pen=(0, 255, 0), name='MFC2')
         self._flowrate3_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate3_data,
-                                                                        pen=(0, 0, 255), name='MFC_purge')
+                                                                        pen=(0, 0, 255), name='MFC3_purge')
+        self._flowrate4_timetrace = self._mw.flowrate_PlotWidget_1.plot(self.t_data, self.flowrate4_data,
+                                                                        pen=(255, 255, 255), name='MFC4')
 
         # toolbar actions: internal signals
         self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
@@ -516,9 +522,9 @@ class OdorCircuitGUI(GUIBase):
         @param state :  (bool) ON or OFF (1 or 0)
         """
         if state == 1:
-            self._mw.label_8.setPixmap(self.pixmap1)
+            self._mw.label_circuit_scheme.setPixmap(self.pixmap1)
         else:
-            self._mw.label_8.setPixmap(self.pixmap2)
+            self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
 
     def check_box_changed(self, state):
         """
@@ -620,12 +626,11 @@ class OdorCircuitGUI(GUIBase):
 
     def mfc_on(self):
         """
-        Open the MFCs at the value entered on the interface
+        Open the MFCs at the value indicated on the interface
         """
-        value1 = self._mw.doubleSpinBox_5.value()
-        value2 = self._mw.doubleSpinBox_6.value()
-        value3 = self._mw.doubleSpinBox_4.value()
-        self._odor_circuit_arduino_logic.open_air(value1, value2, value3)
+        flow_setpoints = [self._mw.doubleSpinBox_MFC1.value(), self._mw.doubleSpinBox_MFC2.value(),
+                          self._mw.doubleSpinBox_MFC3_purge.value(), self._mw.doubleSpinBox_MFC4.value()]
+        self._odor_circuit_arduino_logic.turn_MFC_on(flow_setpoints)
 
     def mfc_on_off(self):
         """
@@ -638,7 +643,8 @@ class OdorCircuitGUI(GUIBase):
             self.update_valve_label(self._mw.label_M_2, 1)
             Permission = self.check_valves(self.valves_status)
             if Permission == 1:
-                logger.info("Opening air...")
+                logger.info("Turning MFCs on")
+                # self.mfc_on()
                 self.sigMFC_ON.emit()
                 self._mw.actionMFC_ON_OFF.setText('MFC : ON')
                 self.MFC_status = True
@@ -677,6 +683,7 @@ class OdorCircuitGUI(GUIBase):
         self.mesure1 = []
         self.mesure2 = []
         self.mesure3 = []
+        self.mesure4 = []
         self._odor_circuit_arduino_logic.start_flow_measurement()
         self.date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         self._mw.setDisabled(True)
@@ -709,60 +716,63 @@ class OdorCircuitGUI(GUIBase):
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self.sigStopFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(False)
-
-
         else:
             self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
             self.t_data = []
             self.flowrate1_data = []
             self.flowrate2_data = []
             self.flowrate3_data = []
+            self.flowrate4_data = []
             self.sigStartFlowMeasure.emit()
             self._mw.actionMFC_ON_OFF.setDisabled(True)
 
-    @QtCore.Slot(list, list, list)
-    def update_flowrate(self, flowrate1, flowrate2, flowrate3):
+    @QtCore.Slot(list)
+    def update_flowrate(self, flow_rates):
         """
         Callback of a signal emitted from logic informing the GUI about the new flowrate values.
-        @param float flowrate1: current flowrate retrieved from hardware MFC1
-        @param float flowrate2: current flowrate retrieved from hardware MFC2
-        @param float flowrate3: current flowrate retrieved from hardware MFCPurge
+        @param list flow_rates: current flow-rates retrieved from hardware MFCs
         """
-        self.update_flowrate_timetrace(flowrate1[0], flowrate2[0], flowrate3[0])
-
-    def update_flowrate_timetrace(self, flowrate1, flowrate2, flowrate3):
-        """
-        Add a new data point to the  flowrate timetraces.
-        @param float flowrate1: current flowrate retrieved from hardware MFC1
-        @param float flowrate2: current flowrate retrieved from hardware MFC2
-        @param float flowrate3: current flowrate retrieved from hardware MFCPurge
-        """
+    #     self.update_flowrate_timetrace(flowrate1[0], flowrate2[0], flowrate3[0])
+    #
+    # def update_flowrate_timetrace(self, flowrate1, flowrate2, flowrate3):
+    #     """
+    #     Add a new data point to the  flowrate timetraces.
+    #     @param float flowrate1: current flowrate retrieved from hardware MFC1
+    #     @param float flowrate2: current flowrate retrieved from hardware MFC2
+    #     @param float flowrate3: current flowrate retrieved from hardware MFCPurge
+    #     """
         self.G += 1
         if len(self.flowrate1_data) < 100:
             self.t_data.append(len(self.t_data))
-            self.flowrate1_data.append(flowrate1)
-            self.flowrate2_data.append(flowrate2)
-            self.flowrate3_data.append(flowrate3)
-            self._mw.MFC1.setText(f'{np.around(flowrate1, decimals=4)}')
-            self._mw.MFC2.setText(f'{np.around(flowrate2, decimals=4)}')
-            self._mw.MFCPurge.setText(f'{np.around(flowrate3, decimals=4)}')
+            self.flowrate1_data.append(flow_rates[0])
+            self.flowrate2_data.append(flow_rates[1])
+            self.flowrate3_data.append(flow_rates[2])
+            self.flowrate4_data.append(flow_rates[3])
+            self._mw.MFC1.setText(f'{np.around(flow_rates[0], decimals=4)}')
+            self._mw.MFC2.setText(f'{np.around(flow_rates[1], decimals=4)}')
+            self._mw.MFC3.setText(f'{np.around(flow_rates[2], decimals=4)}')
+            self._mw.MFC4.setText(f'{np.around(flow_rates[3], decimals=4)}')
         else:
             self.t_data[:-1] = self.t_data[1:]
             self.t_data[-1] += 1
 
             self.flowrate1_data[:-1] = self.flowrate1_data[1:]  # shift data one position to the left
-            self.flowrate1_data[-1] = flowrate1
+            self.flowrate1_data[-1] = flow_rates[0]
             self.flowrate2_data[:-1] = self.flowrate2_data[1:]  # shift data one position to the left
-            self.flowrate2_data[-1] = flowrate2
+            self.flowrate2_data[-1] = flow_rates[1]
             self.flowrate3_data[:-1] = self.flowrate3_data[1:]  # shift data one position to the left
-            self.flowrate3_data[-1] = flowrate3
+            self.flowrate3_data[-1] = flow_rates[2]
+            self.flowrate4_data[:-1] = self.flowrate4_data[1:]  # shift data one position to the left
+            self.flowrate4_data[-1] = flow_rates[3]
 
-        self.mesure1.append(flowrate1)
-        self.mesure2.append(flowrate2)
-        self.mesure3.append(flowrate3)
+        self.mesure1.append(flow_rates[0])
+        self.mesure2.append(flow_rates[1])
+        self.mesure3.append(flow_rates[2])
+        self.mesure4.append(flow_rates[3])
         self._flowrate1_timetrace.setData(self.t_data, self.flowrate1_data)  # t axis running with time
         self._flowrate2_timetrace.setData(self.t_data, self.flowrate2_data)
         self._flowrate3_timetrace.setData(self.t_data, self.flowrate3_data)
+        self._flowrate4_timetrace.setData(self.t_data, self.flowrate4_data)
 
         if self.G == self.Caltime * 60:
             self._odor_circuit_arduino_logic.stop_flow_measurement()
@@ -802,7 +812,6 @@ class OdorCircuitGUI(GUIBase):
         Show the Plot
         """
         fig, axes = plt.subplots(3, 1, figsize=(10, 18))
-
         self.plot_histogram_with_density(self.mesure1, 'MFC 1', 'b', axes[0])
         self.plot_histogram_with_density(self.mesure2, 'MFC 2', 'g', axes[1])
         self.plot_histogram_with_density(self.mesure3, 'MFC Purge', 'r', axes[2])
