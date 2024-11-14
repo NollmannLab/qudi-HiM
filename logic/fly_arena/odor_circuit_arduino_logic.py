@@ -82,14 +82,14 @@ class OdorCircuitArduinoLogic(GenericLogic):
     arduino_uno = Connector(interface='Base')  # no specific arduino interface required
     MFC = Connector(interface='Base')  # no specific MFC interface required
 
-    sigUpdateFlowMeasurement = QtCore.Signal(list, list, list)
+    # declare signals for GUI
+    sigUpdateFlowMeasurement = QtCore.Signal(list)
     sigDisableFlowActions = QtCore.Signal()
     sigEnableFlowActions = QtCore.Signal()
 
     # attributes
     measuring_flowrate = False
     time_since_start = 0
-    # declare connectors
 
     _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
     _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
@@ -102,9 +102,11 @@ class OdorCircuitArduinoLogic(GenericLogic):
     _mixing_valve = ConfigOption('mixing_valve', 9)
     _final_valve = ConfigOption('final_valve', 8)
 
-    _MFC_purge = ConfigOption('MFC_purge', 2)
     _MFC_1 = ConfigOption('MFC_1', 0)
     _MFC_2 = ConfigOption('MFC_2', 1)
+    _MFC_3_purge = ConfigOption('MFC_purge', 2)
+    _MFC_4 = ConfigOption('MFC_4', 3)
+
     _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.4)
     _MFC_1_flow = ConfigOption('MFC_1_flow', 0.04)
     _MFC_2_flow = ConfigOption('MFC_2_flow', 0.36)
@@ -114,6 +116,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.threadpool = QtCore.QThreadPool()
         self._MFC = None
         self._ard = None
+        self.MFC_number: int = 0
 
     def on_activate(self):
         """
@@ -121,6 +124,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         self._ard = self.arduino_uno()
         self._MFC = self.MFC()
+        self.MFC_number = self._MFC.MFC_number
 
     def on_deactivate(self):
         """
@@ -177,18 +181,13 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
         print('Odor circuit off')
 
-    def open_air(self, flow1, flow2, flow3):
+    def turn_MFC_on(self, flow_setpoints):
         """
         Open the MFCs
-        @param flow1 : the flow you want to put in the MFC1
-        @param  flow2 : the flow you want to put in the MFC2
-        @param  flow3 : the flow you want to put in the MFC Purge
+        @param flow_setpoints : list of the setpoints for each MFC
         """
-        self._MFC.MFC_ON(self._MFC_1, flow1)
-        time.sleep(0.3)
-        self._MFC.MFC_ON(self._MFC_2, flow2)
-        time.sleep(0.3)
-        self._MFC.MFC_ON(self._MFC_purge, flow3)
+        for n_MFC, flow in enumerate(flow_setpoints):
+            self._MFC.MFC_ON(n_MFC, flow)
 
     def close_air(self):
         """
@@ -198,27 +197,20 @@ class OdorCircuitArduinoLogic(GenericLogic):
         time.sleep(0.3)
         self._MFC.MFC_OFF(self._MFC_2)
         time.sleep(0.3)
-        self._MFC.MFC_OFF(self._MFC_purge)
+        self._MFC.MFC_OFF(self._MFC_3_purge)
+        time.sleep(0.3)
+        self._MFC.MFC_OFF(self._MFC_4)
 
-    @property
     def read_all_average_measure(self):
         """
         Read the flow passing through the MFCs
+        @return flow: (list) contains the mean value of the flow measured separately for each MFC
         """
+        flow = []
+        for n in range(self.MFC_number):
+            flow.append(self._MFC.average_measure(n, 20))
 
-        A1 = self._MFC.average_measure(self._MFC_purge, 20)
-        A2 = self._MFC.average_measure(self._MFC_1, 20)
-        A3 = self._MFC.average_measure(self._MFC_2, 20)
-
-        return A2, A3, A1
-
-    def get_flowrate(self):
-        """
-        The flowrate turns to matrix
-        """
-        M1, M2, M3 = self.read_all_average_measure
-        M1, M2, M3 = [M1], [M2], [M3]
-        return M1, M2, M3
+        return flow
 
     # -----------------------------------------------------------------------------------------------------------------
     # Methods for continuous processes (flowrate measurement loop)
@@ -240,8 +232,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
         """
-        flowrate1, flowrate2, flowrate3 = self.get_flowrate()
-        self.sigUpdateFlowMeasurement.emit(flowrate1, flowrate2, flowrate3)
+        flow_rates = self.read_all_average_measure()
+        self.sigUpdateFlowMeasurement.emit(flow_rates)
         if self.measuring_flowrate:
             # enter a loop until measuring mode is switched off
             worker = MeasurementWorker()
