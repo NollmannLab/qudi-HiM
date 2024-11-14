@@ -377,6 +377,7 @@ class BasicGUI(GUIBase):
 
         # control of the UI state by logic
         self._camera_logic.sigLiveStopped.connect(self.reset_start_video_button)
+        self._camera_logic.sigLiveStarted.connect(self.start_video_clicked)
         self._camera_logic.sigDisableCameraActions.connect(self.disable_camera_toolbuttons)
         self._camera_logic.sigEnableCameraActions.connect(self.enable_camera_toolbuttons)
 

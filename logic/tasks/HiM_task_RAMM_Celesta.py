@@ -1282,7 +1282,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata = self.get_hdf5_metadata()
             self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
         else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            # self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            self.ref['cam'].save_to_tiff_separate(self.num_laserlines, cur_save_path, image_data)
             metadata = self.get_metadata()
             file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
