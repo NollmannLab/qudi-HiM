@@ -81,12 +81,12 @@ class ArduinoUno(Base):
 
     def pin_on(self, pin):
         """
-        Turn on a choosen pin
+        Turn on a chosen pin
         """
         self.send_command(pin, 1)
 
     def pin_off(self, pin):
         """
-        Turn off a choosen pin
+        Turn off a chosen pin
         """
         self.send_command(pin, 0)

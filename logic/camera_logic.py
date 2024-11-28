@@ -163,6 +163,7 @@ class CameraLogic(GenericLogic):
     sigSaving = QtCore.Signal()
     sigCleanStatusbar = QtCore.Signal()
     sigUpdateCamStatus = QtCore.Signal(str, str, str, str)
+    sigLiveStarted = QtCore.Signal()  # informs the GUI that live mode was started programmatically
     sigLiveStopped = QtCore.Signal()  # informs the GUI that live mode was stopped programmatically
     sigDisableCameraActions = QtCore.Signal()
     sigEnableCameraActions = QtCore.Signal()
@@ -584,8 +585,13 @@ class CameraLogic(GenericLogic):
         # handle live mode variables
         if self.live_enabled:  # live mode is on
             self.restart_live = True  # store the state of live mode in a helper variable in order to restart it after
-            self.live_enabled = False  # live mode will stop then
-            self._hardware.stop_acquisition()
+            # self.live_enabled = False  # live mode will stop then
+            self.stop_live_mode()
+            status = self._hardware.get_ready_state()
+            while not status:
+                status = self._hardware.get_ready_state()
+                print(status)
+                sleep(0.5)
         self.saving = True
 
         # handle IR laser shutter security
@@ -677,7 +683,8 @@ class CameraLogic(GenericLogic):
         # restart live in case it was activated
         if self.restart_live:
             self.restart_live = False  # reset to default value
-            self.start_loop()
+            self.start_live_mode()
+            # self.start_loop()
 
         # data handling
         if image_data is not None:
@@ -951,7 +958,7 @@ class CameraLogic(GenericLogic):
             for channel in range(n_channels):
                 new_path, filename = os.path.split(path)
                 filename, _ = os.path.splitext(filename)
-                new_path = os.path.join(new_path, f'{filename}_ch{channel}.tif')
+                new_path = os.path.join(new_path, f'{filename}_ch{str(channel).zfill(2)}.tif')
 
                 with TiffWriter(new_path) as tif:
                     tif.save(data[channel::n_channels].astype(np.uint16))
@@ -1079,6 +1086,12 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
 # ----------------------------------------------------------------------------------------------------------------------
+
+    def start_live_mode(self):
+        """ Allows to start the live mode programmatically.
+        """
+        if not self.live_enabled:
+            self.sigLiveStarted.emit()  # to inform the GUI that live mode has been started programmatically
 
     def stop_live_mode(self):
         """ Allows to stop the live mode programmatically, for example in the preparation steps of a task

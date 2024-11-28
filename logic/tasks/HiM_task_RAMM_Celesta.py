@@ -120,10 +120,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.timeout: float = 0
         self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
         self.needle_rinsing_duration: int = 30  # time in seconds for rinsing the injection needle
-        self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
-                                  'QudiROImulticolorscan_20240115.lvbitx')
         # self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
-        #                           'QudiROImulticolorscan_KINETIX_20240731.lvbitx')
+        #                           'QudiROImulticolorscan_20240115.lvbitx')
+        self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+                                  'QudiROImulticolorscan_KINETIX_20240731.lvbitx')
 
         # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
@@ -1282,7 +1282,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata = self.get_hdf5_metadata()
             self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
         else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            # self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            self.ref['cam'].save_to_tiff_separate(self.num_laserlines, cur_save_path, image_data)
             metadata = self.get_metadata()
             file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
