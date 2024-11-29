@@ -132,17 +132,23 @@ class IxonUltra(Base, CameraInterface):
             else:
                 print(f"Cannot continue, could not initialise camera - error code : {ret}")
 
+            # below are the default parameters that can also be accessed through the GUI
             self._width, self._height = self._get_detector()
             self._full_width, self._full_height = self._width, self._height
             self._set_read_mode(self._read_mode)
             self._set_trigger_mode(self._trigger_mode)
             self._set_exposuretime(self._exposure)
             self._set_acquisition_mode(self._acquisition_mode)
-            # start cooler if specified in config (otherwise it must be done via the console)
             self._set_cooler(self._cooler_on)
             self._set_temperature(self._default_temperature)
-            # set the preamp gain (it is not accessible by the user interface)
-            self._set_preamp_gain(2)  # pass in the index as argument to set the gain to a specific value.
+
+            # the following parameters will define a default configuration of the camera. Those parameters are not
+            # accessible through the GUI. They have been copied from SOLIS default configuration.
+            self._set_preamp_gain(1)
+            self._set_vertical_shift_speed(1)
+            self._set_vertical_clock(0)
+            self._set_output_amplifier(0)
+            self._set_horizontal_readout_rate(0)
         except Exception as e:
             self.log.error(f'Andor iXon Ultra 888 Camera: Connection failed: {e}.')
 
@@ -162,13 +168,21 @@ class IxonUltra(Base, CameraInterface):
 # Methods for handling error message
 # ----------------------------------------------------------------------------------------------------------------------
 
+    @staticmethod
+    def get_key_from_value(value):
+        for error in Error_Codes:
+            if error.value == value:
+                return error.name
+        return None  # Return None if value is not found
+
     def check_error(self, ret, func):
         """
         Error handling function returning an error message if drv_success not working
         @return : return False if no error and True if an error was detected
         """
         if Error_Codes.DRV_SUCCESS != ret:
-            self.log.error(f'The command issued by {func} returned the following error message : {Error_Codes(ret)}')
+            error_code = self.get_key_from_value(ret)
+            self.log.error(f'The command issued by {func} returned the following error message : {error_code}')
             return True
         else:
             return False
@@ -240,9 +254,8 @@ class IxonUltra(Base, CameraInterface):
 
         :return: bool: ready ?
         """
-        status = c_int()
-        self._get_status(status)
-        if ERROR_DICT[status.value] == 'DRV_IDLE':
+        status = self._get_status()
+        if status == 'DRV_IDLE':
             return True
         else:
             return False
@@ -422,11 +435,10 @@ class IxonUltra(Base, CameraInterface):
 
         :return: None
         """
-        status = c_int()
-        self._get_status(status)
-        while ERROR_DICT[status.value] != 'DRV_IDLE':
-            status = c_int()
-            self._get_status(status)
+        status = self._get_status()
+        while status != 'DRV_IDLE':
+            sleep(0.05)
+            self._get_status()
         return
 
 # Methods for acquiring image data using synchronization between lightsource and camera---------------------------------
@@ -597,27 +609,29 @@ class IxonUltra(Base, CameraInterface):
     #         return False
 
     def get_temperature(self):
-        """ Get the current temperature.
-
-        :return int: temperature
+        """ Get the current temperature. Note this is one of the rare methods where the error is handled locally since
+        multiple error message are specific to this action.
+        @return int: temperature
         """
-        temp = c_int()
-        error_code = self.dll.GetTemperature(byref(temp))
-        pass_returns = ['DRV_TEMP_STABILIZED', 'DRV_TEMP_NOT_REACHED', 'DRV_TEMP_DRIFT', 'DRV_TEMP_NOT_STABILIZED']
-        if ERROR_DICT[error_code] not in pass_returns:
-            self.log.warning('Can not retrieve temperature: {}'.format(ERROR_DICT[error_code]))
-        return temp.value
+        ret, temperature = self.sdk.GetTemperature()
+        pass_returns = ['DRV_TEMPERATURE_STABILIZED', 'DRV_TEMPERATURE_NOT_REACHED', 'DRV_TEMPERATURE_DRIFT',
+                        'DRV_TEMPERATURE_NOT_STABILIZED']
+        if self.get_key_from_value(ret) not in pass_returns:
+            self.log.warning(f'Can not retrieve temperature due to the following error : '
+                             f'{self.get_key_from_value(ret[0])}')
+        return temperature
 
     def is_cooler_on(self):
         """ Checks the status of the cooler.
-
-        :return: int: 0: cooler is off, 1: cooler is on
+        @return: (int) 0: cooler is off, 1: cooler is on
         """
-        cooler_status = c_int()
-        error_code = self.dll.IsCoolerOn(byref(cooler_status))
-        if ERROR_DICT[error_code] != 'DRV_SUCCESS':
-            self.log.warning('Can not retrieve cooler state: {}'.format(ERROR_DICT[error_code]))
-        return cooler_status.value
+        ret, cooler_status = self.sdk.IsCoolerOn()
+        err = self.check_error(ret, "is_cooler_on")
+        if err:
+            self.log.error("The status of the cooler could not be retrieved.")
+            return None
+        else:
+            return cooler_status
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Non-interface functions to handle acquisitions
@@ -753,20 +767,58 @@ class IxonUltra(Base, CameraInterface):
             self._width = int((self._hend - self._hstart + 1) / self._hbin)
             self._height = int((self._vend - self._vstart + 1) / self._vbin)
 
-    def _set_output_amplifier(self, typ):
-        """
-        @param c_int typ: 0: EMCCD gain, 1: Conventional CCD register
-        @return string: error code
-        """
-        error_code = self.dll.SetOutputAmplifier(typ)
-        return ERROR_DICT[error_code]
-
     def _set_preamp_gain(self, index):
         """
         @param index (int): indicate the preamp gain value
         """
         ret = self.sdk.SetPreAmpGain(index)
-        self.check_error(ret, "_set_preamp_gain")
+        err = self.check_error(ret, "_set_preamp_gain")
+        if not err:
+            ret = self.sdk.GetPreAmpGain(index)
+            print(f'PreAmpGain was set to {ret[1]}')
+
+    def _set_vertical_shift_speed(self, index):
+        """
+        @param index (int): indicate the value of the default vertical shift speed
+        """
+        ret = self.sdk.SetFKVShiftSpeed(index)
+        err = self.check_error(ret, "_set_vertical_shift_speed")
+        if not err:
+            ret = self.sdk.GetFKVShiftSpeed(index)
+            print(f'The Vertical shift speed was set to {ret[1]}µs')
+
+    def _set_vertical_clock(self, index):
+        """
+        @param index (int): indicate the index associate to thevertical clock range selected
+        """
+        ret = self.sdk.SetVSAmplitude(index)
+        err = self.check_error(ret, "_set_vertical_clock")
+        if not err:
+            ret = self.sdk.GetVSAmplitudeString(0)
+            print(f'The vertical clock is set to {ret[1].value.decode("utf-8")}')
+
+    def _set_output_amplifier(self, index):
+        """
+        @param index (int): indicate which amplifier output mode is selected. 0:EMCCD gain, 1:Conventional CCD register
+        """
+        ret = self.sdk.SetOutputAmplifier(index)
+        err = self.check_error(ret, "_set_output_amplifier")
+        if not err:
+            self._output_amp = index
+            if index == 0:
+                print('The output amplifier was set to Electron Multiplying standard mode')
+            else:
+                print('The output amplifier was set to conventional CCD register/Extended NIR mode')
+
+    def _set_horizontal_readout_rate(self, index):
+        """
+        @param index (int): indicate the horizontal readout rate to use (0=30MHz; 1=20MHz; 2=10MHz; 3=1MHz)
+        """
+        ret = self.sdk.SetHSSpeed(self._output_amp, index)
+        err = self.check_error(ret, "_set_horizontal_readout_rate")
+        if not err:
+            ret = self.sdk.GetHSSpeed(0, self._output_amp, index)
+            print(f'The horizontal readout rate was set to {ret[1]}MHz')
 
     def _set_temperature(self, temp):
         """ Sets a new temperature setpoint for the camera cooler
@@ -880,12 +932,22 @@ class IxonUltra(Base, CameraInterface):
 # Non-interface getter functions
 # ----------------------------------------------------------------------------------------------------------------------
 
-    def _get_status(self, status):
+    def _get_status(self):
         """
-        @params: c_int status: its value corresponds to the current camera status (idle, tempcycle, acquiring, ..)
-        @returns:  error message: DRV_SUCCESS if ok, DRV_NOT_INITIALIZED if not ok"""
-        error_code = self.dll.GetStatus(byref(status))
-        return ERROR_DICT[error_code]
+        This function is used to query the status of the camera. The following status are available :
+                DRV_IDLE - waiting on instructions.
+                DRV_TEMPCYCLE - Executing temperature cycle.
+                DRV_ACQUIRING - Acquisition in progress.
+                DRV_ACCUM_TIME_NOT_MET - Unable to meet Accumulate cycle time.
+                DRV_KINETIC_TIME_NOT_MET - Unable to meet Kinetic cycle time.
+                DRV_ERROR_ACK - Unable to communicate with card.
+                DRV_ACQ_BUFFER - Computer unable to read the data via the ISA slot at the required rate.
+                DRV_SPOOLERROR - Overflow of the spool buffer.
+        @return: (str) status of the camera
+        """
+        ret, status = self.sdk.GetStatus()
+        self.check_error(ret, "_get_status")
+        return status
 
     def _get_detector(self):
         """ retrieves the size of the detector in pixels
@@ -916,14 +978,16 @@ class IxonUltra(Base, CameraInterface):
 
         @returns: str error message
         """
-        exposure = c_float()
-        accumulate = c_float()
-        kinetic = c_float()
-        error_code = self.dll.GetAcquisitionTimings(byref(exposure), byref(accumulate), byref(kinetic))
-        self._exposure = exposure.value
-        self._accumulate = accumulate.value
-        self._kinetic = kinetic.value
-        return ERROR_DICT[error_code]
+        ret, exposure, accumulate, kinetic = self.sdk.GetAcquisitionTimings()
+        err = self.check_error(ret, "_get_acquisition_timings")
+        if not err:
+            self._exposure = exposure
+            self._accumulate = accumulate
+            self._kinetic = kinetic
+        else:
+            self._exposure = None
+            self._accumulate = None
+            self._kinetic = None
 
     def _get_oldest_image(self):
         """ Return an array of last acquired image.
@@ -963,34 +1027,34 @@ class IxonUltra(Base, CameraInterface):
         image_array = np.reshape(image_array, (int(self._width / self._hbin), int(self._height / self._vbin)))
         return image_array
 
-    def _get_number_amp(self):
-        """
-        @return int: Number of amplifiers available
-        """
-        n_amps = c_int()
-        self.dll.GetNumberAmp(byref(n_amps))
-        return n_amps.value
-
-    def _get_number_preamp_gains(self):
-        """
-        Number of gain settings available for the pre amplifier
-
-        @return int: Number of gains available
-        """
-        n_gains = c_int()
-        self.dll.GetNumberPreAmpGains(byref(n_gains))
-        return n_gains.value
-
-    def _get_preamp_gain(self, index):
-        """
-        :param: int index: ranging from 0 to (number of preamp gains-1)
-        Function returning
-        @return tuple (int1, int2): First int describing the gain setting, second value the actual gain
-        """
-        index = c_int(index)
-        gain = c_float()
-        self.dll.GetPreAmpGain(index, byref(gain))
-        return index.value, gain.value
+    # def _get_number_amp(self):
+    #     """
+    #     @return int: Number of amplifiers available
+    #     """
+    #     n_amps = c_int()
+    #     self.dll.GetNumberAmp(byref(n_amps))
+    #     return n_amps.value
+    #
+    # def _get_number_preamp_gains(self):
+    #     """
+    #     Number of gain settings available for the pre amplifier
+    #
+    #     @return int: Number of gains available
+    #     """
+    #     n_gains = c_int()
+    #     self.dll.GetNumberPreAmpGains(byref(n_gains))
+    #     return n_gains.value
+    #
+    # def _get_preamp_gain(self, index):
+    #     """
+    #     :param: int index: ranging from 0 to (number of preamp gains-1)
+    #     Function returning
+    #     @return tuple (int1, int2): First int describing the gain setting, second value the actual gain
+    #     """
+    #     index = c_int(index)
+    #     gain = c_float()
+    #     self.dll.GetPreAmpGain(index, byref(gain))
+    #     return index.value, gain.value
 
     # def _get_temperature_f(self):
     #     """
@@ -1036,13 +1100,16 @@ class IxonUltra(Base, CameraInterface):
         return low.value, high.value
 
     def _get_emccd_gain(self):
-        """ Returns the current gain setting"""
-        gain = c_int()
-        error_code = self.dll.GetEMCCDGain(byref(gain))
-        if ERROR_DICT[error_code] != 'DRV_SUCCESS':
-            self.log.warning('Could not retrieve EM gain. {}'.format(ERROR_DICT[error_code]))
-            return
-        return gain.value
+        """
+        Returns the current gain setting
+        """
+        ret = self.sdk.GetEMCCDGain()
+        err = self.check_error(ret[0], "_get_emccd_gain")
+        if not err:
+            return ret[1]
+        else:
+            self.log.error("Could not retrieve the value of the emCCD gain.")
+            return None
 
     def _get_spool_progress(self):
         """ Retrieves information on the progress of the current spool operation.
