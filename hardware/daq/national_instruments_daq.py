@@ -340,7 +340,7 @@ class NIDAQMSeries(Base, LasercontrolInterface):
                 print(f"Unexpected {err}, {type(err)}")
                 print('Failed to close di channel for shutter')
 
-        if self._valve_intlet_1:
+        if self._valve_inlet_1:
             try:
                 self.close_task(self.valve_intlet_1_taskhandle)
             except Exception as err:
