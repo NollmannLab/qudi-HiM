@@ -4,7 +4,8 @@ Qudi-CBS
 
 This file contains the hardware class representing an Andor iXon Ultra camera.
 
-This module was first created by F.Barho for the Ixon-897 and then adapted for the 888-ultra.
+This module was first created by F.Barho for the Ixon-897 and then adapted for the 888-ultra. Note that all error codes
+can be found here : "C:\Program Files\Andor SDK\Python\pyAndorSDK2\pyAndorSDK2\atmcd_errors.py", together with examples.
 
 @author: JB. Fiche (original code from F. Barho)
 Created on Wed Nov 27 2024
@@ -64,8 +65,24 @@ from interface.camera_interface import CameraInterface
 #     EXTERNAL_CHARGE_SHIFTING = 12
 
 ERROR_DICT = {}
+verbose = True
+
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    global verbose
+
+    def new_function(*args, **kwargs):
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
 
 
+# ======================================================================================================================
+# Hardware class
+# ======================================================================================================================
 class IxonUltra(Base, CameraInterface):
     """ Hardware class for Andor Ixon Ultra 897. Example config for copy-paste:
 
@@ -89,6 +106,9 @@ class IxonUltra(Base, CameraInterface):
     _default_trigger_mode = ConfigOption('default_trigger_mode', 'INTERNAL')
 
     # camera attributes
+    _has_temp = True
+    _support_live_acquisition = True
+    _has_shutter = True
     _exposure = _default_exposure
     _temperature = _default_temperature
     _cooler_on = _default_cooler_on
@@ -102,12 +122,9 @@ class IxonUltra(Base, CameraInterface):
     _full_width = 0  # store this for default sensor size
     _full_height = 0  # for default sensor size
     # _last_acquisition_mode = None  # useful if config changes during acquisition
-    _supported_read_modes = None
-    _supported_acquisition_modes = None
-    _supported_trigger_modes = None
     _max_cooling = -80
-    _camera_name = 'iXon Ultra 897'
-    _shutter = "closed"
+    _camera_name = 'iXon Ultra 888'
+    _shutter = "Closed"
 
     _live = False
     _acquiring = False
@@ -156,7 +173,7 @@ class IxonUltra(Base, CameraInterface):
         """ Deinitialisation performed during deactivation of the module.
         """
         self.stop_acquisition()
-        self._set_shutter(0, 0, 0.1, 0.1)
+        self._set_shutter(1, 0, 100, 100, 2)
         self._set_cooler(False)
         self._shut_down()
 
@@ -175,12 +192,12 @@ class IxonUltra(Base, CameraInterface):
                 return error.name
         return None  # Return None if value is not found
 
-    def check_error(self, ret, func):
+    def check_error(self, ret, func, pass_returns=['DRV_SUCCESS']):
         """
         Error handling function returning an error message if drv_success not working
         @return : return False if no error and True if an error was detected
         """
-        if Error_Codes.DRV_SUCCESS != ret:
+        if self.get_key_from_value(ret) not in pass_returns:
             error_code = self.get_key_from_value(ret)
             self.log.error(f'The command issued by {func} returned the following error message : {error_code}')
             return True
@@ -251,10 +268,10 @@ class IxonUltra(Base, CameraInterface):
 
     def get_ready_state(self):
         """ Is the camera ready for an acquisition ?
-
-        :return: bool: ready ?
+        @return: (bool) ready ?
         """
-        status = self._get_status()
+        status_code = self._get_status()
+        status = self.get_key_from_value(status_code)
         if status == 'DRV_IDLE':
             return True
         else:
@@ -300,14 +317,14 @@ class IxonUltra(Base, CameraInterface):
 
         :return: bool: True if supported, False if not
         """
-        return True
+        return self._support_live_acquisition
 
     def has_temp(self):
         """ Does the camera support setting of the temperature?
 
         :return: bool: has temperature ?
         """
-        return True
+        return self._has_temp
 
     def has_shutter(self):
         """ Is the camera equipped with a mechanical shutter?
@@ -316,41 +333,42 @@ class IxonUltra(Base, CameraInterface):
 
         :return: bool: has shutter ?
         """
-        return True
+        return self._has_shutter
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle camera acquisitions
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Methods for displaying images on the GUI -----------------------------------------------------------------------------
+    @decorator_print_function
     def start_single_acquisition(self):
         """ Start a single acquisition.
 
         :return: bool: Success ?
         """
-        if self._shutter == 'closed':
-            msg = self._set_shutter(0, 1, 0.1, 0.1)
-            if msg == 'DRV_SUCCESS':
-                self._shutter = 'open'
+        if self._shutter == 'Closed':
+            err = self._set_shutter(1, 0, 100, 100, 1)
+            if not err:
+                self._shutter = 'Open'
             else:
-                self.log.error('shutter did not open.{0}'.format(msg))
+                self.log.error('Shutter did not open in start_single_acquisition.')
 
         if self._live:
             return False
         else:
-            self._acquiring = True  # do we need this here?
+            # self._acquiring = True  # do we need this here?
             self._set_acquisition_mode('SINGLE_SCAN')
-            # self.log.info('set acquisition mode: single scan')
-            msg = self._start_acquisition()
-            if msg != "DRV_SUCCESS":
+            err = self._start_acquisition()
+            if not err:
                 return False
-            self._acquiring = False
-            return True
+            # self._acquiring = False
+            else:
+                return True
 
+    @decorator_print_function
     def start_live_acquisition(self):
         """ Start a continuous acquisition.
-
-        :return: bool: Success ?
+        @return: (bool) Success ?
         """
         # handle the variables indicating the status
         if self.support_live_acquisition():
@@ -358,30 +376,31 @@ class IxonUltra(Base, CameraInterface):
             self._acquiring = False
 
         # make sure shutter is opened
-        if self._shutter == 'closed':
-            msg = self._set_shutter(0, 1, 0.1, 0.1)
-            if msg == 'DRV_SUCCESS':
-                self._shutter = 'open'
+        if self._shutter == 'Closed':
+            err = self._set_shutter(1, 1, 100, 100, 1)
+            if not err:
+                self._shutter = 'Open'
             else:
-                self.log.error('shutter did non open. {}'.format(msg))
+                self.log.error(f'Shutter did not open!')
 
         self._set_acquisition_mode('RUN_TILL_ABORT')
-        msg = self._start_acquisition()
-        if msg != "DRV_SUCCESS":
+        err = self._start_acquisition()
+        if not err:
             return False
-
-        return True
+        else:
+            return True
 
     def stop_acquisition(self):
         """ Stop/abort live or single acquisition
-
-        :return: bool: Success ?
+        @return: (bool) Success ?
         """
-        msg = self._abort_acquisition()
+        err = self._abort_acquisition()
         self._set_acquisition_mode(self._default_acquisition_mode)  # reset to default (run till abort typically)
-        if msg == "DRV_SUCCESS":
+        if not err:
             self._live = False
             self._acquiring = False
+            self._set_shutter(1, 0, 100, 100, 2)
+            self._shutter == 'Closed'
             return True
         else:
             return False
@@ -400,10 +419,10 @@ class IxonUltra(Base, CameraInterface):
             self._acquiring = False
 
         # make sure shutter is opened
-        if self._shutter == 'closed':
-            msg = self._set_shutter(0, 1, 0.1, 0.1)
+        if self._shutter == 'Closed':
+            msg = self._set_shutter(1, 1, 100, 100,1)
             if msg == 'DRV_SUCCESS':
-                self._shutter = 'open'
+                self._shutter = 'Open'
             else:
                 self.log.error('shutter did non open. {}'.format(msg))
 
@@ -472,10 +491,10 @@ class IxonUltra(Base, CameraInterface):
             self._set_spool(1, 7, save_path, 10)
 
         # open the shutter
-        if self._shutter == 'closed':
-            msg = self._set_shutter(0, 1, 0.1, 0.1)
+        if self._shutter == 'Closed':
+            msg = self._set_shutter(1, 0, 100, 100, 1)
             if msg == 'DRV_SUCCESS':
-                self._shutter = 'open'
+                self._shutter = 'Open'
             else:
                 self.log.error('shutter did non open. {}'.format(msg))
         sleep(1.5)  # wait until shutter is opened
@@ -529,10 +548,8 @@ class IxonUltra(Base, CameraInterface):
         """ Return an array of the acquired data.
         Depending on the acquisition mode, this can be just one frame (single scan, run_till_abort)
         or the entire data as a 3D stack (kinetic series)
-
-        :return: numpy ndarray: image data in format [[row],[row]...]
-
-        Each pixel might be a float, integer or sub pixels
+        @return: (numpy ndarray) image data in format [[row],[row]...]. Each pixel might be a float, integer or
+        sub-pixels
         """
         width = self._width
         height = self._height
@@ -547,6 +564,7 @@ class IxonUltra(Base, CameraInterface):
             else:
                 self.log.error('Your acquisition mode is not covered currently')
                 return
+
         elif self._read_mode == 'SINGLE_TRACK' or self._read_mode == 'FVB':
             if self._acquisition_mode == 'SINGLE_SCAN':
                 dim = width
@@ -559,31 +577,29 @@ class IxonUltra(Base, CameraInterface):
             self.log.error('Your acquisition mode is not covered currently')
             return
 
-        dim = int(dim)
-        image_array = np.zeros(dim)
-        cimage_array = c_int * dim
-        cimage = cimage_array()
-
         if self._acquisition_mode == 'RUN_TILL_ABORT':
-            error_code = self.dll.GetMostRecentImage(pointer(cimage), dim)
+            ret, arr = self.sdk.GetMostRecentImage(dim)
         else:
-            error_code = self.dll.GetAcquiredData(pointer(cimage), dim)
-        if ERROR_DICT[error_code] != 'DRV_SUCCESS':
-            self.log.warning('Couldn\'t retrieve an image. {0}'.format(ERROR_DICT[error_code]))
-        else:
-            # self.log.debug('image length {0}'.format(len(cimage)))  # commented for tests fb 20 jan
-            for i in range(len(cimage)):
-                # could be problematic for 'FVB' or 'SINGLE_TRACK' readmode
-                image_array[i] = cimage[i]
+            ret, arr = self.sdk.GetAcquiredData(dim)
 
-        if self._scans > 1:  # distinguish between 3D and 2D case
-            image_array = np.reshape(image_array,
-                                     (self._scans, self._height, self._width))  # row major, so, height comes before width
-        else:
-            image_array = np.reshape(image_array, (self._height, self._width))
+        err = self.check_error(ret, "get_acquired_data")
 
-        self._cur_image = image_array
-        return image_array
+        if err:
+            self.log.warning("Could not retrieve an image... an empty image will be displayed.")
+            return np.zeros(dim)
+        else:
+
+            # for i in range(dim):
+            #     # could be problematic for 'FVB' or 'SINGLE_TRACK' readmode
+            #     image_array[i] = arr[i]
+
+            if self._scans > 1:  # distinguish between 3D and 2D case
+                image_array = np.reshape(arr, (self._scans, self._height, self._width))
+            else:
+                image_array = np.reshape(arr, (self._height, self._width))
+
+            self._cur_image = image_array
+            return image_array
 
 # ======================================================================================================================
 # Non-Interface functions
@@ -616,9 +632,7 @@ class IxonUltra(Base, CameraInterface):
         ret, temperature = self.sdk.GetTemperature()
         pass_returns = ['DRV_TEMPERATURE_STABILIZED', 'DRV_TEMPERATURE_NOT_REACHED', 'DRV_TEMPERATURE_DRIFT',
                         'DRV_TEMPERATURE_NOT_STABILIZED']
-        if self.get_key_from_value(ret) not in pass_returns:
-            self.log.warning(f'Can not retrieve temperature due to the following error : '
-                             f'{self.get_key_from_value(ret[0])}')
+        self.check_error(ret, "get_temperature", pass_returns=pass_returns)
         return temperature
 
     def is_cooler_on(self):
@@ -637,44 +651,56 @@ class IxonUltra(Base, CameraInterface):
 # Non-interface functions to handle acquisitions
 # ----------------------------------------------------------------------------------------------------------------------
 
+    @decorator_print_function
     def _start_acquisition(self):
-        error_code = self.dll.StartAcquisition()
-        if self._trigger_mode == 'INTERNAL':
-            self.dll.WaitForAcquisition()
-        return ERROR_DICT[error_code]
+        """ Launch an acquisition in two steps. If the trigger is set as INTERNAL, the function will wait for the
+        acquisition actually starts.
+        @return: err (bool): indicate if an error occured during the process
+        """
+        ret = self.sdk.StartAcquisition()
+        err = self.check_error(ret, "_start_acquisition")
 
-    def wait_for_acquisition(self):
-        error_code = self.dll.WaitForAcquisition()
-        if ERROR_DICT[error_code] != 'DRV_SUCCESS':
-            self.log.info('non-acquisition event occured')
-        return ERROR_DICT[error_code]
+        if (not err) and (self._trigger_mode == 'INTERNAL'):
+            ret = self.sdk.WaitForAcquisition()
+            err = self.check_error(ret, "_start_acquisition")
+        return err
+
+    # def wait_for_acquisition(self):
+    #     error_code = self.dll.WaitForAcquisition()
+    #     if ERROR_DICT[error_code] != 'DRV_SUCCESS':
+    #         self.log.info('non-acquisition event occured')
+    #     return ERROR_DICT[error_code]
 
     def _abort_acquisition(self):
-        error_code = self.dll.AbortAcquisition()
-        return ERROR_DICT[error_code]
+        ret = self.sdk.AbortAcquisition()
+        err = self.check_error(ret, "_abort_acquisition", pass_returns=['DRV_SUCCESS', 'DRV_IDLE'])
+        return err
 
     def _shut_down(self):
-        error_code = self.sdk.ShutDown()
-        return ERROR_DICT[error_code]
+        ret = self.sdk.ShutDown()
+        self.check_error(ret, "_shut_down")
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Non-interface setter functions
 # ----------------------------------------------------------------------------------------------------------------------
-
-    def _set_shutter(self, typ, mode, closingtime, openingtime):
+    @decorator_print_function
+    def _set_shutter(self, typ, mode, closing_time, opening_time, ext_shutter):
         """
         @param int typ:   0 Output TTL low signal to open shutter
                           1 Output TTL high signal to open shutter
-        @param int mode:  0 Fully Auto
-                          1 Permanently Open
-                          2 Permanently Closed
-                          4 Open for FVB series
-                          5 Open for any series
+        @param int mode:  0 - Automatic
+                          1 - Open
+                          2 - Close
+        @closing_time - Time shutter takes to close (milliseconds)
+        @opening_time - Time shutter takes to open (milliseconds)
+        @ext_shutter : 0 - Automatic
+                       1 - Open
+                       2 - Close
         """
-        typ, mode, closingtime, openingtime = c_int(typ), c_int(mode), c_float(closingtime), c_float(openingtime)
-        error_code = self.dll.SetShutter(typ, mode, closingtime, openingtime)
-
-        return ERROR_DICT[error_code]
+        ret = self.sdk.SetShutterEx(typ, mode, closing_time, opening_time, ext_shutter)
+        err = self.check_error(ret, "_set_shutter")
+        sleep(0.1)  # sometimes required to make sure the shutter has enough time to react
+        return err
 
     def _set_exposuretime(self, time):
         """
