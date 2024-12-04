@@ -451,8 +451,10 @@ class FocusLogic(GenericLogic):
     @decorator_print_function
     def stage_wait_for_idle(self):
         """ This method waits that the connected translation stage is in idle state.
+        @return timeout (bool) indicate whether the timeout limit was reach while waiting for the movement to stop
         """
-        self._autofocus_logic.stage_wait_for_idle()
+        timeout = self._autofocus_logic.stage_wait_for_idle()
+        return timeout
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods for autofocus (autofocus dockwidget and toolbar)
@@ -603,12 +605,13 @@ class FocusLogic(GenericLogic):
             if self._shutter.open_shutter():
                 return
 
-        # autofocus can be started
+        # autofocus can be started - check the signal is detected, meaning that the correction can be performed. If the
+        # IR signal is lost, a rescue is launched.
         self.autofocus_enabled = True
         self.check_autofocus()  # this updates self._autofocus_lost
 
         if self._autofocus_lost:
-            self.log.warning('Autofocus lost! (in start_autofocus')
+            self.log.warning('Autofocus lost! (in start_autofocus)')
             if self.rescue:
                 success = self.rescue_autofocus()
                 if success:
@@ -646,6 +649,7 @@ class FocusLogic(GenericLogic):
                                                    search_focus=search_focus))
         self.threadpool.start(worker)
 
+    @decorator_print_function
     def run_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ Based on the pid output, the position of the piezo is corrected in real time. In order to avoid
         unnecessary movement of the piezo, the corrections are only applied when an absolute displacement >100nm is
@@ -669,7 +673,7 @@ class FocusLogic(GenericLogic):
         if self.autofocus_enabled:
 
             if self._autofocus_lost:
-                self.log.warning('autofocus lost! in run_autofocus')
+                self.log.warning('autofocus lost! (in run_autofocus)')
                 if self.rescue:
                     # to verify: add here stop autofocus ?
                     success = self.rescue_autofocus()

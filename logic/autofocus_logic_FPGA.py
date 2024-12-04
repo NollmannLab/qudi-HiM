@@ -343,11 +343,10 @@ class AutofocusLogic(GenericLogic):
 
     def stage_wait_for_idle(self):
         """ This method waits that the connected translation stage is in idle state.
-        :return: None
+        @return timeout (bool) indicate whether the timeout limit was reach while waiting for the movement to stop
         """
-        self._stage.wait_for_idle()
-        # pos = self._stage.get_pos()
-        # print("stage position : {}".format(pos))
+        timeout = self._stage.wait_for_idle()
+        return timeout
 
     def do_position_correction(self, step):
         """ This method handles the stage movement which is needed to perform the piezo position correction routine.

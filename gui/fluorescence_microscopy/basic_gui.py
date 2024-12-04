@@ -326,11 +326,11 @@ class BasicGUI(GUIBase):
         # camera toolbar
         # configure the toolbar action buttons and connect internal signals
         self._mw.take_image_Action.setEnabled(True)
-        self._mw.take_image_Action.setChecked(self._camera_logic.enabled)
+        self._mw.take_image_Action.setChecked(self._camera_logic.live_enabled)
         self._mw.take_image_Action.triggered.connect(self.take_image_clicked)
 
         self._mw.start_video_Action.setEnabled(True)
-        self._mw.start_video_Action.setChecked(self._camera_logic.enabled)
+        self._mw.start_video_Action.setChecked(self._camera_logic.live_enabled)
         self._mw.start_video_Action.triggered.connect(self.start_video_clicked)
 
         self._mw.save_last_image_Action.triggered.connect(self.save_last_image_clicked)
@@ -349,7 +349,7 @@ class BasicGUI(GUIBase):
         self._mw.select_folder_pushButton.clicked.connect(self.load_saving_path_clicked)
 
         # signals to logic
-        self.sigImageStart.connect(self._camera_logic.start_single_acquistion)
+        self.sigImageStart.connect(self._camera_logic.start_single_acquisition)
         self.sigVideoStart.connect(self._camera_logic.start_loop)
         self.sigVideoStop.connect(self._camera_logic.stop_loop)
         self.sigVideoSavingStart.connect(self._camera_logic.start_save_video)
@@ -377,6 +377,7 @@ class BasicGUI(GUIBase):
 
         # control of the UI state by logic
         self._camera_logic.sigLiveStopped.connect(self.reset_start_video_button)
+        self._camera_logic.sigLiveStarted.connect(self.start_video_clicked)
         self._camera_logic.sigDisableCameraActions.connect(self.disable_camera_toolbuttons)
         self._camera_logic.sigEnableCameraActions.connect(self.enable_camera_toolbuttons)
 
@@ -550,7 +551,7 @@ class BasicGUI(GUIBase):
         # interrupt live display if it is on - a sleep time was added to make sure the live was stopped before the
         # exposure time was updated. Else, it is executed too fast and is not taken into account because live seems not
         # yet to be interrupted. This is why kinetic time indicator was not updated when live is on.
-        if self._camera_logic.enabled:  # camera is acquiring
+        if self._camera_logic.live_enabled:  # camera is acquiring
             self.sigInterruptLive.emit()
             time.sleep(0.5)
 
@@ -560,20 +561,20 @@ class BasicGUI(GUIBase):
         self._camera_logic.set_gain(self._cam_sd.gain_spinBox.value())
         self._camera_logic.set_temperature(int(self._cam_sd.temp_spinBox.value()))
         self._mw.temp_setpoint_LineEdit.setText(str(self._cam_sd.temp_spinBox.value()))
-        if self._camera_logic.enabled:
+        if self._camera_logic.live_enabled:
             self.sigResumeLive.emit()
 
     def cam_keep_former_settings(self):
         """ Keep the old settings and restores them in the gui. 
         """
         # interrupt live display
-        if self._camera_logic.enabled:  # camera is acquiring
+        if self._camera_logic.live_enabled:  # camera is acquiring
             self.sigInterruptLive.emit()
         self._cam_sd.exposure_doubleSpinBox.setValue(self._camera_logic._exposure)
         self._cam_sd.gain_spinBox.setValue(self._camera_logic._gain)
         self._cam_sd.temp_spinBox.setValue(self._camera_logic.temperature_setpoint)
         self._cam_sd.frame_transfer_CheckBox.setChecked(False)  # as default value
-        if self._camera_logic.enabled:
+        if self._camera_logic.live_enabled:
             self.sigResumeLive.emit()
 
     def open_camera_settings(self):
@@ -786,7 +787,7 @@ class BasicGUI(GUIBase):
         Handles the state of the start button and emits a signal (connected to logic) to start the live loop.
         """
         self._mw.take_image_Action.setDisabled(True)  # snap and live are mutually exclusive
-        if self._camera_logic.enabled:  # video already running
+        if self._camera_logic.live_enabled:  # video already running
             self._mw.start_video_Action.setText('Live')
             self._mw.start_video_Action.setToolTip('Start live video')
             self.sigVideoStop.emit()
@@ -893,7 +894,7 @@ class BasicGUI(GUIBase):
         """ This slot is called when the user has selected an area of the camera image using the rubberband tool.
         Allows to reduce the used area of the camera sensor.
 
-        :param: QRectF rect: Qt object defining the corners of a rectangle selected in an image item.
+        @param: (QRectF) rect: Qt object defining the corners of a rectangle selected in an image item.
         """
         self.log.debug('selected an area')
         self.log.debug(rect.getCoords())
@@ -916,7 +917,7 @@ class BasicGUI(GUIBase):
         # self.log.debug(num_px_y)
 
         self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_)
-        if self._camera_logic.enabled:  # if live mode is on hide rubberband selector directly
+        if self._camera_logic.live_enabled:  # if live mode is on hide rubberband selector directly
             self.imageitem.getViewBox().rbScaleBox.hide()
 
         # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
@@ -1009,11 +1010,10 @@ class BasicGUI(GUIBase):
         self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
     def enable_camera_toolbuttons(self):
-        """ Enables all toolbuttons of the camera toolbar.
-
-        Serves also as callback of SigVideoFinished.
         """
-        if not self._camera_logic.enabled:  # do not reset to active state if live mode is on
+        Enables all toolbuttons of the camera toolbar. Serves also as callback of SigVideoFinished.
+        """
+        if not self._camera_logic.live_enabled:  # do not reset to active state if live mode is on
             self._mw.take_image_Action.setDisabled(False)
         self._mw.start_video_Action.setDisabled(False)
         self._mw.save_last_image_Action.setDisabled(False)
@@ -1235,7 +1235,7 @@ class BasicGUI(GUIBase):
         """ This method serves as a reimplementation of the close event. Continuous modes (such as camera live,
         laser on, etc. are stopped) when the main window is closed. """
         # stop live mode when window is closed
-        if self._camera_logic.enabled:
+        if self._camera_logic.live_enabled:
             self.start_video_clicked()
             self.reset_start_video_button()
         # switch laser off when window is closed

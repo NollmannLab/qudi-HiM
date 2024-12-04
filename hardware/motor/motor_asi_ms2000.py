@@ -342,17 +342,21 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
     def wait_for_idle(self):
         """ Wait until a motorized stage is in idle state.
         Checks every 1 s until timeout if a motor is running from a serial command 'B' or not 'N'
-        :return None
+        @return timeout (bool) indicate whether the timeout limit was reach while waiting for the movement to stop
         """
         status = self.get_status()
         t0 = time()
+        timeout = False
         while status != "N":
             sleep(0.5)
             waiting_time = time() - t0
             status = self.get_status()
             if waiting_time >= self._timeout:
                 self.log.error("ASI MS2000 translation stage timeout occurred")
+                timeout = True
                 break
+
+        return timeout
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Additional custom functions not on the interface

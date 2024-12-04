@@ -10,7 +10,7 @@ This module contains a task to perform a multicolor scan on the RAMM setup equip
 
 @author: JB. Fiche (from F. Barho original code)
 
-Created on Tue January 9, 2024
+Created on Tue January 9, 2024 - last update Fri July 26, 2024
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -31,9 +31,9 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-from datetime import datetime
-import numpy as np
 import yaml
+import numpy as np
+from datetime import datetime
 from time import sleep, time
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
@@ -139,7 +139,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                                             np.array([0], dtype=np.uint8))
 
         # download the bitfile for the task on the FPGA and start the FPGA session
-        bitfile = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240112.lvbitx'
+        # bitfile = 'C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\Qudimulticolourscan_20240112.lvbitx'
+        bitfile = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+                   'Qudimulticolourscan_KINETIX_20240731.lvbitx')
         self.ref['laser'].start_task_session(bitfile)
         self.log.info('FPGA bitfile loaded for Multicolour task')
         self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
@@ -207,6 +209,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # set the ASI stage in internal mode
         self.ref['roi'].set_stage_led_mode('Internal')
 
+        # close the fpga session and restart the default session (to make sure the laser power are set to zero)
+        self.ref['laser'].end_task_session()
+        self.ref['laser'].restart_default_session()
+        self.log.info('restarted default fpga session')
+
         # get acquired data from the camera and save it to file in case the task has not been stopped during acquisition
         if self.step_counter == self.num_z_planes:
             image_data = self.ref['cam'].get_acquired_data()
@@ -219,8 +226,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 metadata = self.get_metadata()
                 file_path = self.complete_path.replace('npy', 'yaml', 1)
                 self.save_metadata_file(metadata, file_path)
+            elif self.file_format == 'hdf5':
+                metadata = self.get_hdf5_metadata()
+                self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
             else:   # use tiff as default format
-                self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
+                # self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
+                self.ref['cam'].save_to_tiff_separate(self.num_laserlines, self.complete_path, image_data)
                 metadata = self.get_metadata()
                 file_path = self.complete_path.replace('tif', 'yaml', 1)
                 self.save_metadata_file(metadata, file_path)
@@ -232,11 +243,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # reset the camera to default state
         self.ref['cam'].reset_camera_after_multichannel_imaging()
         self.ref['cam'].set_exposure(self.default_exposure)
-
-        # close the fpga session and restart the default session
-        self.ref['laser'].end_task_session()
-        self.ref['laser'].restart_default_session()
-        self.log.info('restarted default fpga session')
 
         # enable gui actions
         self.ref['cam'].enable_camera_actions()
@@ -367,8 +373,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             else:
                 self.FPGA_wavelength_channels.append(0)
 
-        print(self.FPGA_wavelength_channels)
-
     # For the FPGA, the wavelength list should have "FPGA_max_laserlines" entries. The list is padded with zero.
         for i in range(self.num_laserlines, self.FPGA_max_laserlines):
             self.FPGA_wavelength_channels.append(0)
@@ -416,9 +420,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return metadata
 
     def get_fits_metadata(self):
-        """ Get a dictionary containing the metadata in a fits header compatible format.
-
-        :return: dict metadata
+        """ Get a dictionary containing the metadata in a fits header compatible format. Note this format is also
+        compatible for the h5 format.
+        @return: dict metadata
         """
         metadata = {'SAMPLE': (self.sample_name, 'sample name'), 'EXPOSURE': (self.exposure, 'exposure time (s)'),
                     'Z_STEP': (self.z_step, 'scan step length (um)'),
@@ -427,6 +431,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         for i in range(self.num_laserlines):
             metadata[f'LINE{i+1}'] = (self.imaging_sequence[i][0], f'laser line {i+1}')
             metadata[f'INTENS{i+1}'] = (self.imaging_sequence[i][1], f'laser intensity {i+1}')
+        return metadata
+
+    def get_hdf5_metadata(self):
+        """ Get a dictionary containing the metadata in a hdf5 header compatible format.
+        @return: dict metadata
+        """
+        metadata = {'sample_name': self.sample_name,
+                    'exposure_s': self.exposure,
+                    'z_step_µm': self.z_step,
+                    'z_total_length_µm': self.z_step * self.num_z_planes,
+                    'n_channels': self.num_laserlines}
+
+        for i in range(self.num_laserlines):
+            metadata[f'laser_line_{i+1}'] = self.imaging_sequence[i][0]
+            metadata[f'laser_intensity_{i+1}'] = self.imaging_sequence[i][1]
         return metadata
 
     def save_metadata_file(self, metadata, path):

@@ -8,6 +8,8 @@ This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @todo: Save the injection data together with the log.
 @todo: Wash IB if experiment is aborted during acquisition
+@todo: In the parameter file - correct the imaging parameters (they are empty but an imaging sequence is indicated)
+@todo: In the parameter file - add the autofocus parameters
 
 @authors: JB.Fiche (based of F.Barho initial script)
 
@@ -34,7 +36,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import yaml
 import numpy as np
-import pandas as pd
+# import pandas as pd
 import os
 import shutil
 import logging
@@ -47,7 +49,7 @@ from tqdm import tqdm
 from logic.generic_task import InterruptableTask
 # from logic.task_helper_functions import save_z_positions_to_file, save_injection_data_to_csv, \
 #     create_path_for_injection_data
-from logic.task_logging_functions import update_default_info, write_status_dict_to_file
+# from logic.task_logging_functions import update_default_info, write_status_dict_to_file
 # from logic.task_logging_functions import add_log_entry
 from qtpy import QtCore
 from glob import glob
@@ -118,7 +120,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.timeout: float = 0
         self.IP_to_check: str = "192.168.6.30"  # IP address of GREY
         self.needle_rinsing_duration: int = 30  # time in seconds for rinsing the injection needle
-        self.FPGA_bitfile: str = 'C:\\Users\\sCMOS-1\\qudi-cbs\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\QudiROImulticolorscan_20240115.lvbitx'
+        # self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+        #                           'QudiROImulticolorscan_20240115.lvbitx')
+        self.FPGA_bitfile: str = ('C:\\Users\\CBS\\qudi-HiM\\hardware\\fpga\\FPGA\\FPGA Bitfiles\\'
+                                  'QudiROImulticolorscan_KINETIX_20240731.lvbitx')
 
         # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
@@ -127,14 +132,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # parameters for logging
         self.file_handler: object = None
         self.email: str = ''
+        self.log_file: str = 'HiM_task.log'
 
-        # parameters for bokeh - DEPRECATED -
-        self.bokeh: bool = False
-        self.status_dict_path: str = ""
-        self.status_dict: dict = {}
-        self.log_path: str = ""
-        self.log_folder: str = ""
-        self.default_info_path: str = ""
+        # # parameters for bokeh - DEPRECATED -
+        # self.bokeh: bool = False
+        # self.status_dict_path: str = ""
+        # self.status_dict: dict = {}
+        # self.log_path: str = ""
+        # self.log_folder: str = ""
+        # self.default_info_path: str = ""
 
         # parameters for data handling
         self.directory: str = ""
@@ -495,6 +501,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.log.removeHandler(self.file_handler)
         self.ref['focus'].log.removeHandler(self.file_handler)
 
+        # if the transfer option was selected, upload the log file
+        if self.transfer_data:
+            self.upload_log()
+
     # ==================================================================================================================
     # Helper functions
     # ==================================================================================================================
@@ -587,7 +597,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         be written in the log file, together with the task specific messages.
         """
         # define the handler for the log file
-        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, 'HiM_task_log.log'))
+        self.file_handler = logging.FileHandler(filename=os.path.join(self.directory, self.log_file))
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
         self.file_handler.setFormatter(formatter)
 
@@ -688,16 +698,29 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # save all parameters into a yaml file
         param = {'1- global parameters': self.user_param_dict,
                  '2- fluidic parameters': {'probes': self.probe_dict,
-                                             'hybridization list': self.hybridization_list,
-                                             'photobleaching list': self.photobleaching_list},
+                                           'hybridization list': self.hybridization_list,
+                                           'photobleaching list': self.photobleaching_list},
                  '3- imaging parameters': {'number of laser lines': self.num_laserlines,
-                                             'celesta intensity dict': self.celesta_intensity_dict,
-                                             'daq analogic output sequence': self.ao_channel_sequence},
+                                           'celesta intensity dict': self.celesta_intensity_dict,
+                                           'FPGA sequence': self.FPGA_wavelength_channels},
                  '4- ROIs': roi_dict
                  }
 
         with open(param_filepath, 'w') as outfile:
             yaml.dump(param, outfile, default_flow_style=False)
+
+    def upload_log(self):
+        """ At the end of the experiment, upload the log file.
+        """
+        global data_saved
+        data_saved = False
+
+        log_path = os.path.join(self.directory, self.log_file)
+        relative_dir = os.path.relpath(os.path.dirname(log_path), start=self.directory)
+        network_dir = os.path.join(self.network_directory, relative_dir)
+
+        worker = UploadDataWorker(log_path, network_dir)
+        self.threadpool.start(worker)
 
     # ------------------------------------------------------------------------------------------------------------------
     # methods for mails
@@ -940,6 +963,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # pixel size
         return metadata
 
+    def get_hdf5_metadata(self):
+        """ Get a dictionary containing the metadata in a hdf5 header compatible format.
+        @return: dict metadata
+        """
+        metadata = {'sample_name': self.sample_name,
+                    'exposure_s': self.exposure,
+                    'z_step_µm': self.z_step,
+                    'z_total_length_µm': self.z_step * self.num_z_planes,
+                    'n_channels': self.num_laserlines,
+                    'roi_x_position': self.ref['roi'].stage_position[0],
+                    'roi_y_position': self.ref['roi'].stage_position[1],
+                    'autofocus_offset': self.ref['focus']._autofocus_logic._focus_offset,
+                    'autofocus_calibration_precision': np.round(self.ref['focus']._precision, 2),
+                    'autofocus_calibration_slope': np.round(self.ref['focus']._slope, 3),
+                    'autofocus_setpoint': np.round(self.ref['focus']._autofocus_logic._setpoint, 3)
+                    }
+        for i in range(self.num_laserlines):
+            metadata[f'laser_line_{i + 1}'] = self.imaging_sequence[i][0]
+            metadata[f'laser_intensity_{i + 1}'] = self.imaging_sequence[i][1]
+        return metadata
+
     def save_metadata_file(self, metadata, path):
         """ Save a txt file containing the metadata dictionary.
 
@@ -1103,8 +1147,11 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['roi'].active_roi = None
         self.ref['roi'].set_active_roi(name=roi_name)
         self.ref['roi'].go_to_roi_xy()
-        self.ref['roi'].stage_wait_for_idle()
-        self.log.info(f'Moved to {roi_name}')
+        timeout = self.ref['roi'].stage_wait_for_idle()
+        if timeout:
+            self.log.error(f'Timeout reach for ASI stage while moving to {roi_name}')
+        else:
+            self.log.info(f'Moved to {roi_name}')
         # if self.bokeh:
         #     add_log_entry(self.log_path, self.probe_counter, 2, f'Moved to {roi_name}')
 
@@ -1117,10 +1164,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pass
         else:
             dz = self.dz[n_roi]
-            print(f'modifying axial position by {dz}')
             self.ref['focus'].stage_move_z_relative(dz)
-            self.ref['focus'].stage_wait_for_idle()
-            self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
+            timeout = self.ref['focus'].stage_wait_for_idle()
+            if timeout:
+                self.log.error(f'Timeout reach for ASI stage while correcting objective axial position '
+                               f'dz={np.around(dz, decimals=1)}µm')
+            else:
+                self.log.info(f'Correct objective axial position dz={np.around(dz, decimals=1)}µm')
 
     def perform_autofocus(self):
         """ Launch the search focus procedure.
@@ -1228,8 +1278,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             file_path = cur_save_path.replace('npy', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
             self.log.info(f'Data saved as {file_path}')
+        elif self.file_format == 'hdf5':
+            metadata = self.get_hdf5_metadata()
+            self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
         else:  # use tiff as default format
-            self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            # self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
+            self.ref['cam'].save_to_tiff_separate(self.num_laserlines, cur_save_path, image_data)
             metadata = self.get_metadata()
             file_path = cur_save_path.replace('tif', 'yaml', 1)
             self.save_metadata_file(metadata, file_path)
@@ -1285,16 +1339,16 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # look for all the tif/npy/yml files in the folder
             path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
-            print(f'Number of npy files found : {len(path_to_upload_npy)}')
-            path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
-            print(f'Number of yaml files found : {len(path_to_upload_yml)}')
+            # print(f'Number of npy files found : {len(path_to_upload_npy)}')
+            path_to_upload_yml = glob(self.directory + '/**/*.yml', recursive=True)
+            # print(f'Number of yaml files found : {len(path_to_upload_yml)}')
             path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
-            print(f'Number of tif files found : {len(path_to_upload_tif)}')
+            # print(f'Number of tif files found : {len(path_to_upload_tif)}')
             path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
 
             # look for all the tif/npy/yml files in the destination folder
             uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
-            uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
+            uploaded_path_yml = glob(self.network_directory + '/**/*.yml', recursive=True)
             uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
             uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif
             uploaded_files = []
@@ -1349,7 +1403,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
                 # launch the worker to start the transfer
                 data_saved = False
-                self.log.info(f"uploading {path}")
+                self.log.info(f"uploading {network_dir}")
                 worker = UploadDataWorker(path, network_dir)
                 self.threadpool.start(worker)
 
@@ -1357,74 +1411,74 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 #    DEPRECATED FUNCTIONS
 # ======================================================================================================================
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # Bokeh help function
-    # ------------------------------------------------------------------------------------------------------------------
-    def init_bokeh(self):
-        """ This function was previously used for initializing the log for bokeh. This code was kept for history but is
-        no longer used.
-        """
-        self.log_folder = os.path.join(self.network_directory, 'hi_m_log')
-        os.makedirs(self.log_folder)  # recursive creation of all directories on the path
-
-        # default info file is used on start of the bokeh app to configure its display elements. It is needed only once
-        self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
-        # the status dict 'current_status.yaml' contains basic information and updates regularly
-        self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
-        # the log file contains more detailed information about individual steps and is a user readable format.
-        # It is also useful after the experiment has finished.
-        self.log_path = os.path.join(self.log_folder, 'log.csv')
-
-        if self.bokeh:
-            # initialize the status dict yaml file
-            self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
-            write_status_dict_to_file(self.status_dict_path, self.status_dict)
-            # initialize the log file
-            log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
-            df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
-            df.to_csv(self.log_path, index=False, header=True)
-
-        # update the default_info file that is necessary to run the bokeh app
-        if self.bokeh:
-            # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
-            # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
-            last_roi_number = int(self.roi_names[-1].strip('ROI_'))
-            update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
-                                self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for injection tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    def append_flow_data(self, pressure_list, volume_list, flowrate_list):
-        """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
-        append them to lists storing all values.
-        :param: list pressure_list
-        :param: list volume_list
-        :param: list flowrate_list
-        :return: None
-        """
-        new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list, we just need the first element
-        new_total_volume = self.ref['flow'].total_volume
-        new_flowrate = self.ref['flow'].get_flowrate()[0]
-        pressure_list.append(new_pressure)
-        volume_list.append(new_total_volume)
-        flowrate_list.append(new_flowrate)
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # data for acquisition tracking
-    # ------------------------------------------------------------------------------------------------------------------
-
-    @staticmethod
-    def calculate_save_projection(num_channel, image_array, saving_path):
-
-        # According to the number of channels acquired, split the stack accordingly
-        deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
-
-        # For each channel, the projection is calculated and saved as a npy file
-        for n_channel in range(num_channel):
-            image_array = deinterleaved_array_list[n_channel]
-            projection = np.max(image_array, axis=0)
-            path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
-            np.save(path, projection)
+    # # ----------------------------------------------------------------------------------------------------------------
+    # # Bokeh help function
+    # # ----------------------------------------------------------------------------------------------------------------
+    # def init_bokeh(self):
+    #     """ This function was previously used for initializing the log for bokeh. This code was kept for history but
+    #      is no longer used.
+    #     """
+    #     self.log_folder = os.path.join(self.network_directory, 'hi_m_log')
+    #     os.makedirs(self.log_folder)  # recursive creation of all directories on the path
+    #
+    #     # default info file is used on start of bokeh app to configure its display elements. It is needed only once
+    #     self.default_info_path = os.path.join(self.log_folder, 'default_info.yaml')
+    #     # the status dict 'current_status.yaml' contains basic information and updates regularly
+    #     self.status_dict_path = os.path.join(self.log_folder, 'current_status.yaml')
+    #     # the log file contains more detailed information about individual steps and is a user readable format.
+    #     # It is also useful after the experiment has finished.
+    #     self.log_path = os.path.join(self.log_folder, 'log.csv')
+    #
+    #     if self.bokeh:
+    #         # initialize the status dict yaml file
+    #         self.status_dict = {'cycle_no': None, 'process': None, 'start_time': self.start, 'cycle_start_time': None}
+    #         write_status_dict_to_file(self.status_dict_path, self.status_dict)
+    #         # initialize the log file
+    #         log = {'timestamp': [], 'cycle_no': [], 'process': [], 'event': [], 'level': []}
+    #         df = pd.DataFrame(log, columns=['timestamp', 'cycle_no', 'process', 'event', 'level'])
+    #         df.to_csv(self.log_path, index=False, header=True)
+    #
+    #     # update the default_info file that is necessary to run the bokeh app
+    #     if self.bokeh:
+    #         # hybr_list = [item for item in self.hybridization_list if item['time'] is None]
+    #         # photobl_list = [item for item in self.photobleaching_list if item['time'] is None]
+    #         last_roi_number = int(self.roi_names[-1].strip('ROI_'))
+    #         update_default_info(self.default_info_path, self.user_param_dict, self.directory, self.file_format,
+    #                             self.probe_dict, last_roi_number, self.hybridization_list, self.photobleaching_list)
+    #
+    # # ----------------------------------------------------------------------------------------------------------------
+    # # data for injection tracking
+    # # ----------------------------------------------------------------------------------------------------------------
+    #
+    # def append_flow_data(self, pressure_list, volume_list, flowrate_list):
+    #     """ Retrieve most recent values of pressure, volume and flowrate from flowcontrol logic and
+    #     append them to lists storing all values.
+    #     :param: list pressure_list
+    #     :param: list volume_list
+    #     :param: list flowrate_list
+    #     :return: None
+    #     """
+    #     new_pressure = self.ref['flow'].get_pressure()[0]  # get_pressure returns a list. just need the first element
+    #     new_total_volume = self.ref['flow'].total_volume
+    #     new_flowrate = self.ref['flow'].get_flowrate()[0]
+    #     pressure_list.append(new_pressure)
+    #     volume_list.append(new_total_volume)
+    #     flowrate_list.append(new_flowrate)
+    #
+    # # ----------------------------------------------------------------------------------------------------------------
+    # # data for acquisition tracking
+    # # ----------------------------------------------------------------------------------------------------------------
+    #
+    # @staticmethod
+    # def calculate_save_projection(num_channel, image_array, saving_path):
+    #
+    #     # According to the number of channels acquired, split the stack accordingly
+    #     deinterleaved_array_list = [image_array[idx::num_channel] for idx in range(num_channel)]
+    #
+    #     # For each channel, the projection is calculated and saved as a npy file
+    #     for n_channel in range(num_channel):
+    #         image_array = deinterleaved_array_list[n_channel]
+    #         projection = np.max(image_array, axis=0)
+    #         path = saving_path.replace('.tif', f'_ch{n_channel}_2D', 1)
+    #         np.save(path, projection)
             
