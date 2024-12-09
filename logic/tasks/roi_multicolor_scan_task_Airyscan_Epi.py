@@ -316,8 +316,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
     def wait_for_camera_trigger(self, value):
         """ This method contains a loop to wait for the camera exposure starts or stops.
-
-        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        @return: (bool) ready: True=trigger was received, False=experiment cannot be started because ZEN is not ready
         """
         bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
         counter = 0
@@ -326,6 +325,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         while bit_value != value and error is False and not self.aborted:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+
+            # This step was added as security. Sometimes, the camera is sending a short false-positive pulse that should
+            # not be interpreted as an "acquiring" signal. Therefore, after a delay of 5ms, we are double-checking that
+            # the camera is actually acquiring.
+            if bit_value == value:
+                sleep(0.005)
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+
             if counter > 10000:
                 self.log.warning(
                     'No trigger was detected during the past 60s... experiment is aborted')
