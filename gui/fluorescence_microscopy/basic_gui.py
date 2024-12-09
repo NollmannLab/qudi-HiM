@@ -100,7 +100,6 @@ class BasicWindow(QtWidgets.QMainWindow):
         # this label is used to display the progress during spooling and video saving
         self.progress_label = QtWidgets.QLabel('')
         self.statusBar().addPermanentWidget(self.progress_label)
-
         self.show()
 
 
@@ -308,7 +307,7 @@ class BasicGUI(GUIBase):
 
         # initialize the camera setting indicators on the GUI
         # use the kinetic time for andor camera, exposure time for all others
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_kinetic_time()))
             self._mw.exposure_Label.setText('Kinetic time (s):')
         else:
@@ -539,7 +538,7 @@ class BasicGUI(GUIBase):
             self._cam_sd.temp_spinBox.setEnabled(False)
             self._cam_sd.label_3.setEnabled(False)
 
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._cam_sd.frame_transfer_CheckBox.setEnabled(True)
 
         # write the configuration to the settings window of the GUI.
@@ -624,9 +623,7 @@ class BasicGUI(GUIBase):
         fileformat = '.'+str(self._save_sd.file_format_ComboBox.currentText())
 
         n_frames = self._save_sd.n_frames_SpinBox.value()
-
         display = self._save_sd.enable_display_CheckBox.isChecked()
-
         metadata = self._create_metadata_dict()
 
         # we need a case structure here: if the dialog was on a system with Andor iXon Ultra camera, sigSpoolingStart
@@ -695,12 +692,11 @@ class BasicGUI(GUIBase):
     def update_exposure(self, exposure):
         """ Updates the displayed value of exposure time in the corresponding read-only lineedit.
         Indicates the kinetic time instead of the user defined exposure time in case of andor camera.
-
-        :param: float exposure
-        :return: None
+        @param: float exposure
+        @return: None
         """
         # indicate the kinetic time instead of the exposure time for andor ixon camera
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_kinetic_time()))
         else:
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(exposure))
@@ -708,27 +704,24 @@ class BasicGUI(GUIBase):
     @QtCore.Slot(float)
     def update_gain(self, gain):
         """ Updates the read-only lineedit showing the applied gain.
-
-        :param: float gain
-        :return: None
+        @param: float gain
+        @return: None
         """
         self._mw.gain_LineEdit.setText(str(gain))
 
     @QtCore.Slot(float)
     def update_temperature(self, temp):
         """ Updates the read-only lineedit showing the current sensor temperature.
-
-        :param: float temperature
-        :return: None
+        @param: float temperature
+        @return: None
         """
         self._mw.temperature_LineEdit.setText(str(temp))
 
     @QtCore.Slot(str)
     def update_sample_name(self, samplename):
         """ Updates the folder name lineedit in the save settings dialog when the sample name on the gui was modified.
-
-        :param: str samplename
-        :return: None
+        @param: str samplename
+        @return: None
         """
         self._save_sd.foldername_LineEdit.setText(samplename)
 
@@ -832,7 +825,7 @@ class BasicGUI(GUIBase):
         # disable camera related toolbuttons
         self.disable_camera_toolbuttons()
         # set the flag to True so that the dialog knows that is was called from save video button
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._spooling = True
         else:
             self._video = True
@@ -850,7 +843,7 @@ class BasicGUI(GUIBase):
         self.disable_camera_toolbuttons()
         # decide depending on camera which signal has to be emitted in save_video_accepted method
         # same approach can later be used to regroup save_video and save_long_video buttons into one action
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._spooling = True
         else:
             self._video = True
@@ -1033,7 +1026,7 @@ class BasicGUI(GUIBase):
         # sample name ?
         # ----camera-----------------------------------------------------------------------------
         metadata['Exposure time (s)'] = self._camera_logic.get_exposure()
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             metadata['Kinetic time (s)'] = self._camera_logic.get_kinetic_time()
         metadata['Gain'] = self._camera_logic.get_gain()
         if self._camera_logic.has_temp:

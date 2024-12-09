@@ -227,8 +227,7 @@ class CameraLogic(GenericLogic):
 
     def get_name(self):
         """ Retrieve an identifier of the camera that the GUI can print.
-
-        :return: string: name for the camera
+        @return: (string) name for the camera
         """
         return self._hardware.get_name()
 
@@ -258,8 +257,7 @@ class CameraLogic(GenericLogic):
 
     def get_exposure(self):
         """ Get the exposure time of the camera and update the class attributes _exposure and _fps.
-
-        :return: float exposure time (in seconds)
+        @return: (float) exposure time (in seconds)
         """
         self._exposure = self._hardware.get_exposure()
         self._fps = min(1 / self._exposure, self._max_fps)
@@ -268,10 +266,9 @@ class CameraLogic(GenericLogic):
     # this function is specific to andor camera
     def get_kinetic_time(self):
         """ Andor camera only: Get the kinetic time of the camera and update the class attribute _kinetic_time.
-
-        :return: float kinetic time (in seconds)
+        @return: (float) kinetic time (in seconds)
         """
-        if self.get_name() == 'iXon Ultra 897':
+        if (self.get_name() == 'iXon Ultra 897') or (self.get_name() == 'iXon Ultra 888'):
             self._kinetic_time = self._hardware.get_kinetic_time()
             return self._kinetic_time
         else:
@@ -317,7 +314,7 @@ class CameraLogic(GenericLogic):
                 self._hardware._set_cooler(True)
 
             self.temperature_setpoint = temperature  # store the new setpoint to compare against actual temperature
-            self._hardware.set_temperature(temperature)
+            self._hardware._set_temperature(temperature)
 
     def get_temperature(self):
         """
@@ -423,7 +420,7 @@ class CameraLogic(GenericLogic):
         width = self._hardware._full_width
         height = self._hardware._full_height
 
-        err = self._hardware.set_image(1, 1, 0, width, 0, height)
+        err = self._hardware.set_image(1, 1, 1, width, 1, height)
         if err < 0:
             self.log.warn('Sensor region not reset to default')
         else:
@@ -590,7 +587,6 @@ class CameraLogic(GenericLogic):
             status = self._hardware.get_ready_state()
             while not status:
                 status = self._hardware.get_ready_state()
-                print(status)
                 sleep(0.5)
         self.saving = True
 
@@ -600,7 +596,7 @@ class CameraLogic(GenericLogic):
 
         # start movie acquisition
         err = self._hardware.start_movie_acquisition(n_frames)
-        if not err:
+        if err:
             self.log.warning('Video acquisition did not start')
             self.finish_save_video(filenamestem, fileformat, n_frames, metadata, emit_signal=True)
             return
@@ -713,15 +709,12 @@ class CameraLogic(GenericLogic):
     def start_spooling(self, filenamestem, fileformat, n_frames, is_display, metadata):
         """ Starts saving n_frames to disk as a tiff stack without need of data handling within this function.
         Available for andor camera. Useful for large data sets which would be overwritten in the buffer.
-
-        :param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
-        :param: str fileformat: including the dot, such as '.tif', '.fits'
-        :param: int n_frames: number of frames to be saved
-        :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: str fileformat: including the dot, such as '.tif', '.fits'
+        @param: int n_frames: number of frames to be saved
+        @param: bool is_display: show images on live display on gui
+        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
                 fileformat, or in the header if fits format)
-
-        :return: None
         """
         if self.live_enabled:  # live mode is on
             # store the state of live mode in a helper variable
@@ -746,7 +739,7 @@ class CameraLogic(GenericLogic):
         # 5 save as fits), filenamestem, framebuffersize
         err = self._hardware.start_movie_acquisition(n_frames)  # setting kinetics acquisition mode, make sure
         # everything is ready for an acquisition
-        if not err:
+        if err:
             self.log.warning('Spooling did not start')
 
         # start a worker thread that will monitor the status of the saving
@@ -757,26 +750,26 @@ class CameraLogic(GenericLogic):
     def spooling_loop(self, filenamestem, path, fileformat, is_display, metadata):
         """ This method performs one step in spooling procedure.
         Handles also the update of the live display if activated.
-
-        :param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
-        :param: str path: generic filepath created in start_spooling using the filenamestem
-        :param: str fileformat: including the dot, such as '.tif', '.fits'
-        :param: bool is_display: show images on live display on gui - True, False
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: str path: generic filepath created in start_spooling using the filenamestem
+        @param: str fileformat: including the dot, such as '.tif', '.fits'
+        @param: bool is_display: show images on live display on gui - True, False
+        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
                 fileformat, or in the header if fits format)
 
-                most of the parameters are only needed to hand them over to finish_spooling method.
-
-        :return: None
+        NB : most of the parameters are only needed to hand them over to finish_spooling method.
         """
         ready = self._hardware.get_ready_state()
 
         if not ready:
             spoolprogress = self._hardware.get_progress()
+            print(spoolprogress)
             self.sigProgress.emit(spoolprogress)
 
             if is_display:
                 self._last_image = self._hardware.get_most_recent_image()
+                print(self._last_image.shape)
+                print(np.max(self._last_image))
                 self.sigUpdateDisplay.emit()
 
             # restart a worker if acquisition still ongoing
