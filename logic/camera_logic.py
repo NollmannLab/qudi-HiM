@@ -28,26 +28,32 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import time
 import h5py
-import hdf5plugin
+# import hdf5plugin
 import numpy as np
-from time import sleep
 import os
-from tifffile import TiffWriter
-from astropy.io import fits
 import yaml
 
+from time import sleep
+from tifffile import TiffWriter
+from astropy.io import fits
 from core.connector import Connector
 from core.configoption import ConfigOption
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
+from glob import glob
+
+verbose = True
 
 
 # ======================================================================================================================
 # Decorator (for debugging)
 # ======================================================================================================================
 def decorator_print_function(function):
+    global verbose
+
     def new_function(*args, **kwargs):
-        print(f'*** DEBUGGING *** Executing {function.__name__}')
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__}')
         return function(*args, **kwargs)
     return new_function
 
@@ -59,7 +65,7 @@ def decorator_print_function(function):
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread """
     sigFinished = QtCore.Signal()
-    sigStepFinished = QtCore.Signal(str, str, int, bool, dict, bool)
+    sigStepFinished = QtCore.Signal(str, str, str, int, bool, dict, bool, bool)
     sigSpoolingStepFinished = QtCore.Signal(str, str, str, bool, dict)
 
 
@@ -84,24 +90,27 @@ class SaveProgressWorker(QtCore.QRunnable):
     """ Worker thread to update the progress during video saving and eventually handle the image display.
 
     The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators """
-    def __init__(self, time_constant, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal):
+    def __init__(self, time_constant, filename, filenamestem, fileformat, n_frames, is_display, metadata, addfile,
+                 emit_signal):
         super(SaveProgressWorker, self).__init__()
         self.signals = WorkerSignals()
         self.time_constant = time_constant
         # the following attributes need to be transmitted by the worker to the finish_save_video method
         self.filenamestem = filenamestem
+        self.filename = filename
         self.fileformat = fileformat
         self.n_frames = n_frames
         self.is_display = is_display
         self.metadata = metadata
+        self.addfile = addfile
         self.emit_signal = emit_signal
 
     @QtCore.Slot()
     def run(self):
         """ """
         sleep(self.time_constant)
-        self.signals.sigStepFinished.emit(self.filenamestem, self.fileformat, self.n_frames, self.is_display,
-                                          self.metadata, self.emit_signal)
+        self.signals.sigStepFinished.emit(self.filenamestem, self.filename, self.fileformat, self.n_frames,
+                                          self.is_display, self.metadata, self.addfile, self.emit_signal)
 
 
 class SpoolProgressWorker(QtCore.QRunnable):
@@ -185,6 +194,8 @@ class CameraLogic(GenericLogic):
     temperature_setpoint = _temperature
     _last_image = None
     _kinetic_time = None
+    _max_frames_movie = None
+    _max_frames_spool = None
 
     _hardware = None
     _security_shutter = None
@@ -215,6 +226,9 @@ class CameraLogic(GenericLogic):
         self.get_exposure()
         self.get_gain()
         self.get_temperature()
+
+        # inquire the maximum number of images to acquire for movies acquisition
+        self._max_frames_movie, self._max_frames_spool = self._hardware.get_max_frames()
 
     def on_deactivate(self):
         """ Perform required deactivation. """
@@ -333,6 +347,15 @@ class CameraLogic(GenericLogic):
             if self.live_enabled:  # restart live mode
                 self.resume_live()
             return temp
+
+    def get_max_frames(self):
+        """ Return the maximum number of frames that can be handled by the camera for a single movie acquisition. Two
+        values are returned, depending on which methods is used for the acquisition (video or spooling)
+        @return:
+            max frames video mode (int)
+            max frames spool mode (int)
+        """
+        return self._max_frames_movie, self._max_frames_spool
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to access camera state
@@ -566,16 +589,19 @@ class CameraLogic(GenericLogic):
             self.save_metadata_txt_file(path, '_Image', metadata)
 
 # Methods invoked by start video button on GUI--------------------------------------------------------------------------
-    def start_save_video(self, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal=True):
+    def start_save_video(self, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile=False,
+                         emit_signal=True):
         """ Starts saving n_frames to disk as a stack (tiff of fits formats supported)
 
-        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        @param: str fileformat (including the dot, such as '.tif', '.fits')
-        @param: int n_frames: number of frames to be saved
-        @param: bool is_display: show images on live display on gui
-        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: (str) filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: (str) filename, such as movie_00
+        @param: (str) fileformat (including the dot, such as '.tif', '.fits')
+        @param: (int) n_frames: number of frames to be saved
+        @param: (bool) is_display: show images on live display on gui
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        @param: bool emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
+        @param: (bool) addfile: indicate if the images are saved in a new folder or appended to the last created
+        @param: (bool) emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
         """
@@ -605,22 +631,24 @@ class CameraLogic(GenericLogic):
         time.sleep(self._exposure * 2)
 
         # start a worker thread that will monitor the status of the saving
-        worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
-                                    emit_signal)
+        worker = SaveProgressWorker(1 / self._fps, filenamestem, filename, fileformat, n_frames, is_display, metadata,
+                                    addfile, emit_signal)
         worker.signals.sigStepFinished.connect(self.save_video_loop)
         self.threadpool.start(worker)
 
-    def save_video_loop(self, filenamestem, fileformat, n_frames, is_display, metadata, emit_signal):
+    def save_video_loop(self, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile, emit_signal):
         """ This method performs one step in saving procedure until the last image is saved.
         Handles also the update of the live display if activated.
 
-        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        @param: str fileformat (including the dot, such as '.tif', '.fits')
-        @param: int n_frames: number of frames to be saved
-        @param: bool is_display: show images on live display on gui
-        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: (str) filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: (str) filename, such as movie_00
+        @param: (str) fileformat (including the dot, such as '.tif', '.fits')
+        @param: (int) n_frames: number of frames to be saved
+        @param: (bool) is_display: show images on live display on gui
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        @param: bool emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
+        @param: (bool) addfile: indicate if the images are saved in a new folder or appended to the last created
+        @param: (bool) emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
         """
@@ -643,24 +671,26 @@ class CameraLogic(GenericLogic):
                     self.sigUpdateDisplay.emit()
 
             # restart a worker if acquisition still ongoing
-            worker = SaveProgressWorker(1 / self._fps, filenamestem, fileformat, n_frames, is_display, metadata,
-                                        emit_signal)
+            worker = SaveProgressWorker(1 / self._fps, filenamestem, filename, fileformat, n_frames, is_display,
+                                        metadata, addfile, emit_signal)
             worker.signals.sigStepFinished.connect(self.save_video_loop)
             self.threadpool.start(worker)
 
         # finish the save procedure when hardware is ready
         else:
-            self.finish_save_video(filenamestem, fileformat, n_frames, metadata, emit_signal)
+            self.finish_save_video(filenamestem, filename, fileformat, n_frames, metadata, emit_signal)
 
-    def finish_save_video(self, filenamestem, fileformat, n_frames, metadata, emit_signal=True):
+    def finish_save_video(self, filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal=True):
         """ This method finishes the saving procedure. Live mode of the camera is eventually restarted.
 
-        @param: str filenamestem, such as /home/barho/images/2020-12-16/samplename
-        @param: str fileformat (including the dot, such as '.tif', '.fits')
-        @param: int n_frames: number of frames to be saved
-        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: (str) filenamestem, such as /home/barho/images/2020-12-16/samplename
+        @param: (str) filename, such as movie_00
+        @param: (str) fileformat (including the dot, such as '.tif', '.fits')
+        @param: (int) n_frames: number of frames to be saved
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
                                 fileformat, or in the header if fits format)
-        @param: bool emit_signal: can be set to false in order to avoid sending the signal for gui interaction,
+        @param: (bool) addfile: indicate if the images are saved in a new folder or appended to the last created
+        @param: (bool) emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
         """
@@ -684,7 +714,7 @@ class CameraLogic(GenericLogic):
 
         # data handling
         if image_data is not None:
-            complete_path = self.create_generic_filename(filenamestem, '_Movie', 'movie', fileformat, addfile=False)
+            complete_path = self.create_generic_filename(filenamestem, '_Movie', filename, fileformat, addfile=addfile)
             if fileformat == '.tif':
                 self.save_to_tiff(n_frames, complete_path, image_data)
                 self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
@@ -706,15 +736,16 @@ class CameraLogic(GenericLogic):
             self.sigCleanStatusbar.emit()
 
     # methods specific for andor ixon ultra camera for video saving ----------------------------------------------------
-    def start_spooling(self, filenamestem, fileformat, n_frames, is_display, metadata):
+    def start_spooling(self, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile=False):
         """ Starts saving n_frames to disk as a tiff stack without need of data handling within this function.
         Available for andor camera. Useful for large data sets which would be overwritten in the buffer.
-        @param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
-        @param: str fileformat: including the dot, such as '.tif', '.fits'
-        @param: int n_frames: number of frames to be saved
-        @param: bool is_display: show images on live display on gui
-        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: (str) filenamestem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: (str) fileformat: including the dot, such as '.tif', '.fits'
+        @param: (int) n_frames: number of frames to be saved
+        @param: (bool) is_display: show images on live display on gui
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
                 fileformat, or in the header if fits format)
+        @param: (bool) addfile: indicate if the images are saved in a new folder or appended to the last created
         """
         if self.live_enabled:  # live mode is on
             # store the state of live mode in a helper variable
@@ -725,21 +756,20 @@ class CameraLogic(GenericLogic):
         self.saving = True
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
-        path = self.create_generic_filename(filenamestem, '_Movie', 'movie', '', addfile=False)  # use an empty
-        # string for fileformat. this will be handled by the camera itself
+        path = self.create_generic_filename(filenamestem, '_Movie', filename, '', addfile=addfile)
+        # Depending on the selected format, set the correct spool method
         if fileformat == '.tif':
             method = 7
         elif fileformat == '.fits':
             method = 5
         else:
-            self.log.info(f'Your fileformat {fileformat} is currently not covered')
+            self.log.info(f'Your fileformat {fileformat} is currently not covered for spool conditions')
             return
+        err_spool = self._hardware.set_spool(1, method, path, 10)
 
-        self._hardware._set_spool(1, method, path, 10)  # parameters: active (1 = yes), method (7 save as tiff,
-        # 5 save as fits), filenamestem, framebuffersize
-        err = self._hardware.start_movie_acquisition(n_frames)  # setting kinetics acquisition mode, make sure
-        # everything is ready for an acquisition
-        if err:
+        # Start acquisition
+        err_acq = self._hardware.start_movie_acquisition(n_frames)  # setting kinetics acquisition mode, make sure
+        if err_spool or err_acq:
             self.log.warning('Spooling did not start')
 
         # start a worker thread that will monitor the status of the saving
@@ -750,26 +780,22 @@ class CameraLogic(GenericLogic):
     def spooling_loop(self, filenamestem, path, fileformat, is_display, metadata):
         """ This method performs one step in spooling procedure.
         Handles also the update of the live display if activated.
-        @param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
-        @param: str path: generic filepath created in start_spooling using the filenamestem
-        @param: str fileformat: including the dot, such as '.tif', '.fits'
-        @param: bool is_display: show images on live display on gui - True, False
-        @param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
-                fileformat, or in the header if fits format)
-
         NB : most of the parameters are only needed to hand them over to finish_spooling method.
+        @param: (str) filenamestem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: (str) path: generic filepath created in start_spooling using the filenamestem
+        @param: (str) fileformat: including the dot, such as '.tif', '.fits'
+        @param: (bool) is_display: show images on live display on gui - True, False
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
+                fileformat, or in the header if fits format)
         """
         ready = self._hardware.get_ready_state()
 
         if not ready:
             spoolprogress = self._hardware.get_progress()
-            print(spoolprogress)
             self.sigProgress.emit(spoolprogress)
 
             if is_display:
                 self._last_image = self._hardware.get_most_recent_image()
-                print(self._last_image.shape)
-                print(np.max(self._last_image))
                 self.sigUpdateDisplay.emit()
 
             # restart a worker if acquisition still ongoing
@@ -783,15 +809,12 @@ class CameraLogic(GenericLogic):
 
     def finish_spooling(self, filenamestem, path, fileformat, metadata):
         """ This method finishes the spooling procedure.
-
-        :param: str filenamestem, such as '/home/barho/images/2020-12-16/samplename'
-        :param: str path: generic filepath created in start_spooling using the filenamestem
-        :param: str fileformat: including the dot, such as '.tif', '.fits'
-        :param: bool is_display: show images on live display on gui
-        :param: dict metadata: meta information to be saved with the image data (in a separate txt file if tiff
+        @param: (str) filenamestem, such as '/home/barho/images/2020-12-16/samplename'
+        @param: (str) path: generic filepath created in start_spooling using the filenamestem
+        @param: (str) fileformat: including the dot, such as '.tif', '.fits'
+        @param: (bool) is_display: show images on live display on gui - True, False
+        @param: (dict) metadata: meta information to be saved with the image data (in a separate txt file if tiff
                 fileformat, or in the header if fits format)
-
-        :return: None
         """
         if fileformat == '.tif':
             method = 7
@@ -802,8 +825,9 @@ class CameraLogic(GenericLogic):
 
         self._hardware.wait_until_finished()
         self._hardware.finish_movie_acquisition()
-        self._hardware._set_spool(0, method, path, 10)  # deactivate spooling
-        self.log.info('Saved data to file {}{}'.format(path, fileformat))
+        self._hardware.set_spool(0, method, path, 10)  # deactivate spooling
+        self.log.info(f'Saved data to file {path}{fileformat}')
+
         # metadata saving
         if fileformat == '.tif':
             self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
@@ -826,6 +850,7 @@ class CameraLogic(GenericLogic):
             self.restart_live = False  # reset to default value
             self.start_loop()
 
+        # send signal to the GUI to either stop the acquisition or start the following block
         self.sigSpoolingFinished.emit()
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -892,22 +917,21 @@ class CameraLogic(GenericLogic):
         filenamestem is typically generated by the save settings dialog in basic gui but can also entered manually if
         function is called in the console
 
-        :param: str filenamestem  (example /home/barho/images/2020-12-16/samplename)
-        :param: str folder: specify the type of experiment (ex. Movie, Snap)
-        :param: str file: filename (ex movie, image). do not specify the fileformat.
-        :param: str fileformat: specify the type of file (.tif, .txt, ..) including the dot !
-        :param: bool addfile: if True, the last created folder will again be accessed (needed for metadata saving)
-
-        :return: str complete path
+        @param: (str) filenamestem  (example /home/barho/images/2020-12-16/samplename)
+        @param: (str) folder: specify the type of experiment (ex. Movie, Snap)
+        @param: (str) file: filename (ex movie, image). do not specify the fileformat.
+        @param: (str) fileformat: specify the type of file (.tif, .txt, ..) including the dot !
+        @param: (bool) addfile: if True, the last created folder will again be accessed (needed for metadata saving)
+        @return: (str) complete path
         """
-        # check if folder filenamestem exists, if not create it
+        # Check if folder filenamestem exists, if not create it
         if not os.path.exists(filenamestem):
             try:
                 os.makedirs(filenamestem)  # recursive creation of all directories on the path
             except Exception as e:
                 self.log.error('Error {0}'.format(e))
 
-        # count the subdirectories in the directory filenamestem (non recursive !) to generate an incremental prefix
+        # Count the subdirectories in the directory filenamestem (non recursive !) to generate an incremental prefix
         dir_list = [name for name in os.listdir(filenamestem) if os.path.isdir(os.path.join(filenamestem, name))]
         number_dirs = len(dir_list)
         if addfile:
@@ -915,14 +939,16 @@ class CameraLogic(GenericLogic):
         prefix = str(number_dirs+1).zfill(3)
         folder_name = prefix + folder
         path = os.path.join(filenamestem, folder_name)
-        # now create this folder
-        if not os.path.exists(path):  # we need this condition because metadata will be written in the same folder, so
-            # the folder may already exist
+
+        # Create this folder (since addfile is possible, need to check first whether the folder already exists)
+        if not os.path.exists(path):
             try:
                 os.makedirs(path)
             except Exception as e:
                 self.log.error('Error creating the target folder: {}'.format(e))
-        filename = '{0}{1}'.format(file, fileformat)
+
+        # Count the number of files in the folder
+        filename = f"{file}{fileformat}"
         complete_path = os.path.join(path, filename)
         return complete_path
 
@@ -961,10 +987,9 @@ class CameraLogic(GenericLogic):
 
     def save_metadata_txt_file(self, filenamestem, datatype, metadata):
         """"Save a txt file containing the metadata.
-
-        :param: str filenamestem (example /home/barho/images/2020-12-16/samplename)
-        :param: str datatype: string identifier of the data shape: _Movie or _Image
-        :param: dict metadata: dictionary containing the annotations
+        @param: (str) filenamestem (example /home/barho/images/2020-12-16/samplename)
+        @param: (str) datatype: string identifier of the data shape: _Movie or _Image
+        @param: (dict) metadata: dictionary containing the annotations
         """
         complete_path = self.create_generic_filename(filenamestem, datatype, 'parameters', '.txt', addfile=True)
         with open(complete_path, 'w') as file:

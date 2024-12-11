@@ -50,11 +50,55 @@ from core.configoption import ConfigOption
 # from qtwidgets.scan_plotwidget import ScanImageItem, ScanViewBox
 from gui.validators import NameValidator
 
+verbose = True
+
+
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    global verbose
+
+    def new_function(*args, **kwargs):
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__}')
+        return function(*args, **kwargs)
+    return new_function
+
+
+# ======================================================================================================================
+# Classes for the workers
+# ======================================================================================================================
+class WorkerSignals(QtCore.QObject):
+    sigAcquisitionProgress = QtCore.Signal(str, str, list, bool, dict, int, str)
+
+
+class AcquisitionProgressWorker(QtCore.QRunnable):
+    """ Worker thread to monitor the acquisition process.
+    The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators. """
+
+    def __init__(self, path, fileformat, acquisition_blocks, is_display, metadata, block, method):
+        super(AcquisitionProgressWorker, self).__init__()
+        self.signals = WorkerSignals()
+        self.path = path
+        self.fileformat = fileformat
+        self.is_display = is_display
+        self.metadata = metadata
+        self.block = block
+        self.acquisition_blocks = acquisition_blocks
+        self.method = method
+
+    @QtCore.Slot()
+    def run(self):
+        """ """
+        sleep(0.5)
+        self.signals.sigAcquisitionProgress.emit(self.path, self.fileformat, self.acquisition_blocks, self.is_display,
+                                                 self.metadata, self.block, self.method)
+
 
 # ======================================================================================================================
 # Classes for the dialog windows and main window
 # ======================================================================================================================
-
 class CameraSettingDialog(QtWidgets.QDialog):
     """ Create the SettingsDialog window, based on the corresponding *.ui file.
 
@@ -118,8 +162,6 @@ class BasicWindowCE(BasicWindow):
 # ======================================================================================================================
 # GUI class
 # ======================================================================================================================
-
-
 class BasicGUI(GUIBase):
     """ Main window containing the basic tools for the fluorescence microscopy setup
 
@@ -156,8 +198,8 @@ class BasicGUI(GUIBase):
     sigVideoStop = QtCore.Signal()
     sigImageStart = QtCore.Signal()
 
-    sigVideoSavingStart = QtCore.Signal(str, str, int, bool, dict)
-    sigSpoolingStart = QtCore.Signal(str, str, int, bool, dict)
+    sigVideoSavingStart = QtCore.Signal(str, str, str, int, bool, dict, bool)
+    sigSpoolingStart = QtCore.Signal(str, str, str, int, bool, dict, bool)
     
     sigInterruptLive = QtCore.Signal()
     sigResumeLive = QtCore.Signal()
@@ -206,6 +248,9 @@ class BasicGUI(GUIBase):
         self.brightfield_on_Action = None
         self._cam_sd = None
         self._save_sd = None
+        self._max_frames_movie = None
+        self._max_frames_spool = None
+        self.threadpool = QtCore.QThreadPool()
 
     def on_activate(self):
         """ Initializes all needed UI files and establishes the connectors.
@@ -217,9 +262,11 @@ class BasicGUI(GUIBase):
         if self.brightfield_control:
             self._brightfield_logic = self.brightfield_logic()
 
+        # Inquire the max number of images that the camera can handle for a single acquisition
+        self._max_frames_movie, self._max_frames_spool = self._camera_logic.get_max_frames()
+
         # Windows
         self._mw = BasicWindowCE(self.close_function)
-
         self._mw.centralwidget.hide()  # everything is in dockwidgets
         # self._mw.setDockNestingEnabled(True)
         self.init_camera_settings_ui()
@@ -521,7 +568,6 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods belonging to the camera settings window in the options menu
 # ----------------------------------------------------------------------------------------------------------------------
-
     def init_camera_settings_ui(self):
         """ Definition, configuration and initialisation of the camera settings GUI.
         """
@@ -584,7 +630,6 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods belonging to the save settings window
 # ----------------------------------------------------------------------------------------------------------------------
-
     def init_save_settings_ui(self):
         """ Definition, configuration and initialisation of the dialog window which allows to configure the
         video saving.
@@ -611,6 +656,26 @@ class BasicGUI(GUIBase):
         # set default values on start
         self.set_default_values()
 
+    @staticmethod
+    def calculate_blocks(N, b):
+        """
+        Calculate the number of blocks and images in each block for acquiring N images.
+        @arguments:
+            N (int): Total number of images to acquire.
+            b (int): Number of images per block.
+        @returns:
+            list: A list where each element is the number of images in that block.
+        """
+        num_full_blocks = N // b  # Number of full blocks
+        remainder = N % b  # Remaining images after full blocks
+        # Create a list with `b` images for each full block
+        blocks = [b] * num_full_blocks
+        # If there's a remainder, add it as an additional block
+        if remainder > 0:
+            blocks.append(remainder)
+        return blocks
+
+    @decorator_print_function
     def save_video_accepted(self):
         """ Callback of the ok button.
         Retrieves the information given by the user and transfers them by the signal which will start the physical
@@ -621,20 +686,91 @@ class BasicGUI(GUIBase):
         today = datetime.today().strftime('%Y_%m_%d')
         path = os.path.join(default_path, today, folder_name)
         fileformat = '.'+str(self._save_sd.file_format_ComboBox.currentText())
-
         n_frames = self._save_sd.n_frames_SpinBox.value()
         display = self._save_sd.enable_display_CheckBox.isChecked()
         metadata = self._create_metadata_dict()
 
-        # we need a case structure here: if the dialog was on a system with Andor iXon Ultra camera, sigSpoolingStart
-        # must be emitted, else, sigVideoSavingStart must be emitted.
-        if self._video:
-            self.sigVideoSavingStart.emit(path, fileformat, n_frames, display, metadata)
-        elif self._spooling:
-            self.sigSpoolingStart.emit(path, fileformat, n_frames, display, metadata)
-        else:  # to do: write an error message or something like this ???
-            pass
+        # For the Andor camera 888, display does not work properly when the spooling mode is ON. Therefore, if display
+        # is ON, the acquisition mode is automatically switch to video.
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
+            if display and fileformat in ['.tif', '.fits']:
+                self._spooling = False
+                self._video = True
+            else:
+                self._spooling = True
+                self._video = False
+        else:
+            self._video = True
 
+        # Depending on the number of images, several consecutive acquisitions will be required. Below, the acquisition
+        # is divided in blocks, according to the maximum number of frames the camera & computer can handle.
+        if self._video:
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_movie)
+            acq_method = "video"
+        elif self._spooling:
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_spool)
+            acq_method = "spool"
+        else:
+            self.log.error('For some unknown reason, none of the two acquisition methods (video or spool) were properly'
+                           ' set. The error was detected in the "save_video_accepted" in basic_gui.py')
+
+        # Launch the first acquisition
+        filename = f'movie_{"{:02d}".format(0)}'
+        if self._video:
+            self.sigVideoSavingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
+        elif self._spooling:
+            self.sigSpoolingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
+
+        # Launch a worker thread that will monitor the saving procedures - this is required since having a while loop
+        # waiting for the end of the acquisition is freezing the GUI...
+        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, 0, acq_method)
+        worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
+        self.threadpool.start(worker)
+
+    def monitor_acquisition(self, path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method):
+        """ This method is used to monitor a current acquisition (block by block).
+        @param path: (str) path to the folder where the data are saved
+        @param fileformat: (str) indicates the selected format for the images
+        @param acquisition_blocks: (list) contains the number of frames for each acquisition block
+        @param display: (bool) indicate whether the acquisition mode is spooling or video
+        @param metadata: (dic) contains the metadata
+        @param n_block: (int) indicate which block is being processed
+        @param acq_method: (int) indicated which acquisition method is used
+        """
+        if self._video or self._spooling:
+            pass
+        else:
+            n_block = n_block + 1
+            if n_block < len(acquisition_blocks):
+                n_frames_block = acquisition_blocks[n_block]
+                print(f'Starting acquisition of {n_frames_block} frames for block #{n_block}')
+
+                # Reset the variable indicating that an acquisition is being processed
+                if acq_method == "video":
+                    self._video = True
+                elif acq_method == "spool":
+                    self._spooling = True
+
+                # Launch the acquisition
+                filename = f'movie_{"{:02d}".format(n_block)}'
+                if self._video:
+                    self.sigVideoSavingStart.emit(path, filename, fileformat, n_frames_block, display, metadata, True)
+                elif self._spooling:
+                    self.sigSpoolingStart.emit(path, filename, fileformat, n_frames_block, display, metadata, True)
+            else:
+                self.log.info("Acquisition is finished!")
+                # reset the toolbuttons and clear the status bar
+                self.enable_camera_toolbuttons()
+                self._mw.save_video_Action.setChecked(False)
+                self._mw.progress_label.setText('')
+                return
+
+        # Launch a worker thread that will monitor the saving procedures
+        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method)
+        worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
+        self.threadpool.start(worker)
+
+    @decorator_print_function
     def cancel_save(self):
         """ Callback of the cancel button of the video save settings dialog.
         """
@@ -820,7 +956,8 @@ class BasicGUI(GUIBase):
 
     @QtCore.Slot()
     def save_video_clicked(self):
-        """ Callback of save_video_Action. Handles toolbutton state, and opens the save settings dialog.
+        """ Callback of save_video_Action. Handles toolbutton state, and opens the save settings dialog. Note that two
+        acquisition modes are available, depending on the type of cameras. Spooling only exists for Andor.
         """
         # disable camera related toolbuttons
         self.disable_camera_toolbuttons()
@@ -834,6 +971,8 @@ class BasicGUI(GUIBase):
         # hide the rubberband tool used for roi selection on sensor
         self.imageitem.getViewBox().rbScaleBox.hide()
 
+        print(f"Video mode is {self._video} and spooling is {self._spooling}")
+
     @QtCore.Slot()
     def video_quickstart_clicked(self):
         """ Callback of video quickstart action
@@ -842,9 +981,15 @@ class BasicGUI(GUIBase):
         # disable camera related toolbuttons
         self.disable_camera_toolbuttons()
         # decide depending on camera which signal has to be emitted in save_video_accepted method
-        # same approach can later be used to regroup save_video and save_long_video buttons into one action
+        # same approach can later be used to regroup save_video and save_long_video buttons into one action. Note that
+        # display does not work properly in spooling mode (at least for the 888 model). Therefore, when display is ON,
+        # the camera will acquire is video mode.
+        display = self._save_sd.enable_display_CheckBox.isChecked()
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            self._spooling = True
+            if display:
+                self._video = True
+            else:
+                self._spooling = True
         else:
             self._video = True
         self.save_video_accepted()
@@ -857,11 +1002,11 @@ class BasicGUI(GUIBase):
         # reset the flags
         self._video = False
         self._spooling = False
-        # toolbuttons
-        self.enable_camera_toolbuttons()
-        self._mw.save_video_Action.setChecked(False)
-        # clear the statusbar
-        self._mw.progress_label.setText('')
+        # # toolbuttons
+        # self.enable_camera_toolbuttons()
+        # self._mw.save_video_Action.setChecked(False)
+        # # clear the statusbar
+        # self._mw.progress_label.setText('')
 
     @QtCore.Slot()
     def select_sensor_region(self):
