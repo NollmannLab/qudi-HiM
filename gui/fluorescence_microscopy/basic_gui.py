@@ -30,10 +30,8 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-# import sys
 import time
 from datetime import datetime
-# import re
 import numpy as np
 from time import sleep
 
@@ -42,7 +40,6 @@ from qtpy import QtCore
 from qtpy import QtWidgets
 from qtpy import uic
 import pyqtgraph as pg
-# from functools import partial
 
 from gui.guibase import GUIBase
 from core.connector import Connector
@@ -675,7 +672,6 @@ class BasicGUI(GUIBase):
             blocks.append(remainder)
         return blocks
 
-    @decorator_print_function
     def save_video_accepted(self):
         """ Callback of the ok button.
         Retrieves the information given by the user and transfers them by the signal which will start the physical
@@ -693,12 +689,12 @@ class BasicGUI(GUIBase):
         # For the Andor camera 888, display does not work properly when the spooling mode is ON. Therefore, if display
         # is ON, the acquisition mode is automatically switch to video.
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            if display and fileformat in ['.tif', '.fits']:
-                self._spooling = False
-                self._video = True
-            else:
+            if not display and fileformat in ['.tif', '.fits']:
                 self._spooling = True
                 self._video = False
+            else:
+                self._spooling = False
+                self._video = True
         else:
             self._video = True
 

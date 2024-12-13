@@ -28,7 +28,6 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import time
 import h5py
-# import hdf5plugin
 import numpy as np
 import os
 import yaml
@@ -40,7 +39,7 @@ from core.connector import Connector
 from core.configoption import ConfigOption
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
-from glob import glob
+from ome_types.model import OME, Image, Pixels, Channel, Plane
 
 verbose = True
 
@@ -156,6 +155,9 @@ class CameraLogic(GenericLogic):
     hardware = Connector(interface='CameraInterface')
     shutter = Connector(interface='ShutterInterface', optional=True)
 
+    # declare available file formats
+    fileformat_list = ConfigOption('fileformat_list', missing='error')
+
     # config options
     _max_fps = ConfigOption('default_exposure', 20)
 
@@ -199,7 +201,6 @@ class CameraLogic(GenericLogic):
 
     _hardware = None
     _security_shutter = None
-    fileformat_list = ['tif', 'hdf5', 'fits', 'npy']
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -715,6 +716,7 @@ class CameraLogic(GenericLogic):
         # data handling
         if image_data is not None:
             complete_path = self.create_generic_filename(filenamestem, '_Movie', filename, fileformat, addfile=addfile)
+            print(fileformat)
             if fileformat == '.tif':
                 self.save_to_tiff(n_frames, complete_path, image_data)
                 self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
@@ -727,8 +729,10 @@ class CameraLogic(GenericLogic):
             elif fileformat == '.hdf5':
                 hdf5_metadata = {'exposure': self._exposure, 'n_channels': 1}
                 self.save_to_hdf5(complete_path, image_data, hdf5_metadata)
+            elif fileformat == '.ome-tif':
+                self.save_to_ome_tif(complete_path, image_data, metadata)
             else:
-                self.log.info(f'Your fileformat {fileformat} is currently not covered')
+                self.log.error(f'Your fileformat {fileformat} is currently not covered')
 
         if emit_signal:
             self.sigVideoSavingFinished.emit()
@@ -961,7 +965,7 @@ class CameraLogic(GenericLogic):
         """
         try:
             with TiffWriter(path) as tif:
-                tif.save(data.astype(np.uint16))
+                tif.write(data.astype(np.uint16))
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
@@ -980,7 +984,7 @@ class CameraLogic(GenericLogic):
                 new_path = os.path.join(new_path, f'{filename}_ch{str(channel).zfill(2)}.tif')
 
                 with TiffWriter(new_path) as tif:
-                    tif.save(data[channel::n_channels].astype(np.uint16))
+                    tif.write(data[channel::n_channels].astype(np.uint16))
                 self.log.info('Saved data to file {}'.format(new_path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
@@ -1100,6 +1104,53 @@ class CameraLogic(GenericLogic):
             self.log.info('Saved data to file {}'.format(path))
         except Exception as e:
             self.log.warning(f'Data not saved: {e}')
+
+    def save_to_ome_tif(self, path, data, metadata):
+        """
+        Save a NumPy array as an OME-TIFF file.
+
+        Args:
+            array (numpy.ndarray): The NumPy array of shape (Nframes, Lx, Ly).
+            filename (str): Path to the output OME-TIFF file.
+            pixel_size (float, optional): Physical size of a pixel in microns. Defaults to None.
+            time_interval (float, optional): Time interval between frames in seconds. Defaults to None.
+        """
+        print(metadata)
+
+        # Create the metadata
+        Nframes, Lx, Ly = data.shape
+        exposure = metadata['Exposure time (s)']
+        kinetic = metadata['Kinetic time (s)']
+
+        planes = [Plane(delta_t=kinetic * i, delta_t_unit="s",
+                        exposure_time=exposure, exposure_time_unit="s",
+                        the_z=0, the_c=0, the_t=i)
+                  for i in range(Nframes)]
+
+        channel = Channel(
+            id='Channel:0:0',
+            name='CH1',
+            emission_wavelength=metadata["Laser lines"],
+            excitation_wavelength=488.0,
+            illumination_type='Epifluorescence'
+        )
+        pixels = Pixels(
+            id='Pixels:0',
+            dimension_order='XYZCT',
+            size_c=1,
+            size_t=Nframes,
+            size_x=Ly,
+            size_y=Lx,
+            size_z=1,
+            type='uint16',
+            channels=[channel],
+            planes=planes,
+        )
+        ome = OME(images=[Image(id="Image:0", pixels=pixels)])
+
+        # Save the data as TIFF
+        with TiffWriter(path) as tif:
+            tif.write(data.astype(np.uint16), metadata={"axes": "TXY", "OME": ome.to_xml()})
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
