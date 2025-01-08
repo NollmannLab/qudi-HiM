@@ -448,6 +448,9 @@ class BasicGUI(GUIBase):
 
         self._mw.video_quickstart_Action.triggered.connect(self.video_quickstart_clicked)
 
+        self._mw.abort_video_Action.triggered.connect(self.abort_video_clicked)
+        self._mw.abort_video_Action.setEnabled(False)
+
         self._mw.set_sensor_Action.setEnabled(True)
         self._mw.set_sensor_Action.setChecked(self.region_selector_enabled)
         self._mw.set_sensor_Action.triggered.connect(self.select_sensor_region)
@@ -1015,6 +1018,13 @@ class BasicGUI(GUIBase):
         self._camera_logic.save_last_image(filenamestem, metadata)
 
     @QtCore.Slot()
+    def abort_video_clicked(self):
+        """ Callback of abort_video_Action. Handles toolbutton state and allow the use to stop an acquisition before
+        its end.
+        """
+        self._camera_logic.acquisition_aborted = True
+
+    @QtCore.Slot()
     def save_video_clicked(self):
         """ Callback of save_video_Action. Handles toolbutton state, and opens the save settings dialog. Note that two
         acquisition modes are available, depending on the type of cameras. Spooling only exists for Andor.
@@ -1200,6 +1210,8 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(True)
         self._mw.video_quickstart_Action.setDisabled(True)
         self._mw.set_sensor_Action.setDisabled(True)
+        self._mw.abort_video_Action.setDisabled(False)
+        self._mw.abort_video_Action.setChecked(False)
 
     def disable_frame_transfer(self):
         """ Disables the frame transfer checkbox. """
@@ -1216,6 +1228,8 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(False)
         self._mw.video_quickstart_Action.setDisabled(False)
         self._mw.set_sensor_Action.setDisabled(False)
+        self._mw.abort_video_Action.setDisabled(True)
+        self._mw.abort_video_Action.setChecked(False)
 
 # helper functions -----------------------------------------------------------------------------------------------------
     def _create_metadata_dict(self, n_frames):

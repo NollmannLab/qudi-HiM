@@ -187,6 +187,7 @@ class CameraLogic(GenericLogic):
     saving = False  # indicates if the camera is currently saving a movie
     restart_live = False
     frame_transfer = False  # indicates whether the frame transfer mode is activated
+    acquisition_aborted = False
 
     has_temp = False
     has_shutter = False
@@ -661,7 +662,7 @@ class CameraLogic(GenericLogic):
 
         # Handle progress and display - note that for the Kinetix camera, progress & display are handled in the same
         # function.
-        if not ready:
+        if (not ready) and (not self.acquisition_aborted):
             if self.cam_type == "KinetixCam":
                 self._last_image, progress = self._hardware.get_most_recent_image()
                 self.sigProgress.emit(progress)
@@ -680,9 +681,38 @@ class CameraLogic(GenericLogic):
             worker.signals.sigStepFinished.connect(self.save_video_loop)
             self.threadpool.start(worker)
 
+        elif self.acquisition_aborted:
+            self.abort_save_video()
+
         # finish the save procedure when hardware is ready
         else:
             self.finish_save_video(filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal)
+
+    def abort_save_video(self, emit_signal=True):
+        """ This method is used when an acquisition is aborted
+
+        @param: (bool) emit_signal: can be set to False in order to avoid sending the signal for gui interaction,
+        for example when function is called from ipython console or in a task
+        #leave the default value True when function is called from gui
+        """
+        self._hardware.abort_movie_acquisition()
+        self.acquisition_aborted = False
+        self.saving = False
+
+        # if there is a shutter, release the shutter
+        if self._security_shutter is not None:
+            self._security_shutter.camera_security(acquiring=False)
+
+        # restart live in case it was activated
+        if self.restart_live:
+            self.restart_live = False  # reset to default value
+            self.start_live_mode()
+            # self.start_loop()
+
+        if emit_signal:
+            self.sigVideoSavingFinished.emit()
+        else:  # needed to clean up the info on statusbar when gui is opened without calling video_saving_finished
+            self.sigCleanStatusbar.emit()
 
     def finish_save_video(self, filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal=True):
         """ This method finishes the saving procedure. Live mode of the camera is eventually restarted.

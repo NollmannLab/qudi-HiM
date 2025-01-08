@@ -450,6 +450,17 @@ class IxonUltra(Base, CameraInterface):
         err = self._start_acquisition()
         return err
 
+    def abort_movie_acquisition(self):
+        """ Abort an acquisition.
+        @return: (bool) Success ?
+        """
+        err = self._abort_acquisition()
+        self._set_acquisition_mode(self._default_acquisition_mode)
+        self._scans = 1
+        self._live = False
+        self._acquiring = False
+        return err
+
     def finish_movie_acquisition(self):
         """ Reset the conditions used to save a movie to default.
         @return: (bool) Success ?
