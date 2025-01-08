@@ -119,6 +119,12 @@ class IxonUltra(Base, CameraInterface):
     _acquisition_mode = _default_acquisition_mode
     _trigger_mode = _default_trigger_mode
 
+    _preamp_gain = None
+    _vertical_shift_speed = None
+    _vertical_clock = None
+    _output_amplifier = None
+    _set_horizontal_readout_rate = None
+
     _gain = 0
     _width = 0
     _height = 0
@@ -480,10 +486,14 @@ class IxonUltra(Base, CameraInterface):
         self._abort_acquisition()  # as safety
         self._set_acquisition_mode('KINETICS')
         self._set_trigger_mode('EXTERNAL')
-        # add here eventually other settings .. frame transfer etc.
-
         self.set_gain(gain)
         self.set_exposure(exposure)
+
+        # check the number of frames is not too high
+        if frames > self._max_frames_number_spool:
+            self.log.warn(f'The requested number of frames might be too high for the spooling mode (max number '
+                          f'indicated in the config file is {self._max_frames_number_spool}). Images might be lost '
+                          f'or overwritten during the process!')
 
         # set the number of frames
         self._set_number_kinetics(frames)
@@ -792,8 +802,8 @@ class IxonUltra(Base, CameraInterface):
         ret = self.sdk.SetPreAmpGain(index)
         err = self.check_error(ret, "_set_preamp_gain")
         if not err:
-            ret = self.sdk.GetPreAmpGain(index)
-            print(f'PreAmpGain was set to {ret[1]}')
+            ret, self._preamp_gain = self.sdk.GetPreAmpGain(index)
+            print(f'PreAmpGain was set to {self._preamp_gain}')
 
     def _set_vertical_shift_speed(self, index):
         """
@@ -802,8 +812,9 @@ class IxonUltra(Base, CameraInterface):
         ret = self.sdk.SetFKVShiftSpeed(index)
         err = self.check_error(ret, "_set_vertical_shift_speed")
         if not err:
-            ret = self.sdk.GetFKVShiftSpeed(index)
-            print(f'The Vertical shift speed was set to {ret[1]}µs')
+            ret, self._vertical_shift_speed = self.sdk.GetFKVShiftSpeed(index)
+            self._vertical_shift_speed = float(self._vertical_shift_speed)
+            print(f'The Vertical shift speed was set to {self._vertical_shift_speed}µs')
 
     def _set_vertical_clock(self, index):
         """
@@ -813,7 +824,8 @@ class IxonUltra(Base, CameraInterface):
         err = self.check_error(ret, "_set_vertical_clock")
         if not err:
             ret = self.sdk.GetVSAmplitudeString(0)
-            print(f'The vertical clock is set to {ret[1].value.decode("utf-8")}')
+            self._vertical_clock = ret[1].value.decode("utf-8")
+            print(f'The vertical clock is set to {self._vertical_clock}')
 
     def _set_output_amplifier(self, index):
         """
@@ -824,9 +836,10 @@ class IxonUltra(Base, CameraInterface):
         if not err:
             self._output_amp = index
             if index == 0:
-                print('The output amplifier was set to Electron Multiplying standard mode')
+                self._output_amplifier = "Electron Multiplying standard mode"
             else:
-                print('The output amplifier was set to conventional CCD register/Extended NIR mode')
+                self._output_amplifier = "conventional CCD register/Extended NIR mode"
+            print(f'The output amplifier was set to {self._output_amplifier}')
 
     def _set_horizontal_readout_rate(self, index):
         """
@@ -835,8 +848,8 @@ class IxonUltra(Base, CameraInterface):
         ret = self.sdk.SetHSSpeed(self._output_amp, index)
         err = self.check_error(ret, "_set_horizontal_readout_rate")
         if not err:
-            ret = self.sdk.GetHSSpeed(0, self._output_amp, index)
-            print(f'The horizontal readout rate was set to {ret[1]}MHz')
+            ret, self._set_horizontal_readout_rate = self.sdk.GetHSSpeed(0, self._output_amp, index)
+            print(f'The horizontal readout rate was set to {self._set_horizontal_readout_rate}MHz')
 
     def _set_temperature(self, temp):
         """ Sets a new temperature setpoint for the camera cooler
@@ -876,7 +889,7 @@ class IxonUltra(Base, CameraInterface):
     def _set_frame_transfer(self, transfer_mode):
         """ set the frame transfer mode
         @param: int tranfer_mode: 0: off, 1: on
-        @returns: int error code 0 = ok, -1 = error
+        @return: int error code 0 = ok, -1 = error
         """
         acq_mode = self._acquisition_mode
 
@@ -906,16 +919,16 @@ class IxonUltra(Base, CameraInterface):
 
     def _set_emccd_gain(self, gain):
         """ allows to change the gain value. The allowed range depends on the gain mode currently used.
-        @params: (int) new gain value
-        @returns: (str) error message
+        @param: (int) new gain value
+        @return: (str) error message
         """
         ret = self.sdk.SetEMCCDGain(gain)
         self.check_error(ret, "_set_emccd_gain")
 
     def _set_spool(self, active, method, name, framebuffersize):
         """
-        @params: int active: 0: disable spooling, 1: enable spooling
-        @params: int method: indicates the format of the files written to disk.
+        @param: int active: 0: disable spooling, 1: enable spooling
+        @param: int method: indicates the format of the files written to disk.
                              0: sequence of 32-bit integers
                              1: 32-bit integer if data is being accumulated each scan, otherwise 16-bit integers
                              2: sequence of 16-bit integers
@@ -936,10 +949,19 @@ class IxonUltra(Base, CameraInterface):
 
     def _set_number_kinetics(self, number):
         """ set the number of scans for a kinetic series acquisition
-        @params: (int) number of frames to acquire
+        @param: (int) number of frames to acquire
         """
         ret = self.sdk.SetNumberKinetics(number)
         self.check_error(ret, '_set_number_kinetics')
+
+    def get_non_interfaced_parameters(self):
+        """ Get the values of the parameters that have been interfaced by default.
+        @return: (dic) dictionary containing all the parameters
+        """
+        param = {"preamp_gain": self._preamp_gain, "vertical_shift_speed_(µs)": self._vertical_shift_speed,
+                 "vertical_clock": self._vertical_clock, "output_amplifier": self._output_amplifier,
+                 "horizontal_readout_rate_(MHz)": self._set_horizontal_readout_rate}
+        return param
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Non-interface getter functions
