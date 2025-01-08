@@ -46,6 +46,7 @@ from core.connector import Connector
 from core.configoption import ConfigOption
 # from qtwidgets.scan_plotwidget import ScanImageItem, ScanViewBox
 from gui.validators import NameValidator
+from ruamel.yaml import YAML
 
 verbose = True
 
@@ -61,6 +62,61 @@ def decorator_print_function(function):
             print(f'*** DEBUGGING *** Executing {function.__name__}')
         return function(*args, **kwargs)
     return new_function
+
+
+# ======================================================================================================================
+# YAML file editor function for editing metadata
+# ======================================================================================================================
+def update_metadata(metadata, key_path, value, action="set"):
+    """
+    Generalized function to update nested metadata fields, including lists.
+    @param: metadata: The metadata structure (OrderedDict or dict).
+    @param: key_path: A list representing the nested path to the key.
+    @param: value: The value to set, append, or remove.
+    @param: action: The action to perform: "set", "append", or "remove".
+            - "set" (default): Replaces the value.
+            - "append": Adds to the list if it doesn't already exist.
+    @return: The updated metadata structure.
+    """
+    current = metadata
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if isinstance(current, list):
+            # Look for the key in a list of dictionaries or OrderedDicts
+            for item in current:
+                if key in item:
+                    current = item[key]
+                    break
+        else:
+            current = current[key]
+
+    # Perform the specified action on the target key
+    target_key = key_path[-1]
+    if isinstance(current, list):
+        # Handle lists of dictionaries
+        for item in current:
+            if target_key in item:
+                if action == "set":
+                    item[target_key] = value
+                elif action == "append":
+                    if isinstance(item[target_key], list):
+                        item[target_key].append(value)
+                break
+        else:
+            # If key not found in list, create it (for append action)
+            if action == "append":
+                current.append({target_key: [value]})
+    else:
+        # Handle direct dictionary updates
+        if action == "set":
+            current[target_key] = value
+        elif action == "append":
+            if target_key not in current:
+                current[target_key] = [value]
+            elif isinstance(current[target_key], list):
+                current[target_key].append(value)
+
+    return metadata
 
 
 # ======================================================================================================================
@@ -188,6 +244,7 @@ class BasicGUI(GUIBase):
     default_path = ConfigOption('default_path', missing='error')
     brightfield_control = ConfigOption('brightfield_control', False)
     setup = ConfigOption('Setup', False)
+    metadata_template_path = ConfigOption('metadata_template', missing='error')
 
     # signals
     # signals to camera logic
@@ -248,6 +305,7 @@ class BasicGUI(GUIBase):
         self._max_frames_movie = None
         self._max_frames_spool = None
         self.threadpool = QtCore.QThreadPool()
+        self.metadata_template = None
 
     def on_activate(self):
         """ Initializes all needed UI files and establishes the connectors.
@@ -261,6 +319,12 @@ class BasicGUI(GUIBase):
 
         # Inquire the max number of images that the camera can handle for a single acquisition
         self._max_frames_movie, self._max_frames_spool = self._camera_logic.get_max_frames()
+
+        # Load the metadata template
+        self.yaml = YAML()
+        with open(self.metadata_template_path, "r", encoding='utf-8') as file:
+            self.metadata_template = self.yaml.load(file)
+        self.metadata_template = dict(self.metadata_template)
 
         # Windows
         self._mw = BasicWindowCE(self.close_function)
@@ -684,7 +748,7 @@ class BasicGUI(GUIBase):
         fileformat = '.'+str(self._save_sd.file_format_ComboBox.currentText())
         n_frames = self._save_sd.n_frames_SpinBox.value()
         display = self._save_sd.enable_display_CheckBox.isChecked()
-        metadata = self._create_metadata_dict()
+        metadata = self._create_metadata_dict(n_frames)
 
         # For the Andor camera 888, display does not work properly when the spooling mode is ON. Therefore, if display
         # is ON, the acquisition mode is automatically switch to video.
@@ -712,6 +776,8 @@ class BasicGUI(GUIBase):
 
         # Launch the first acquisition
         filename = f'movie_{"{:02d}".format(0)}'
+        print(f'path : {path} in save_video_accepted')
+        print(f'filename : {filename} in save_video_accepted')
         if self._video:
             self.sigVideoSavingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
         elif self._spooling:
@@ -739,7 +805,6 @@ class BasicGUI(GUIBase):
             n_block = n_block + 1
             if n_block < len(acquisition_blocks):
                 n_frames_block = acquisition_blocks[n_block]
-                print(f'Starting acquisition of {n_frames_block} frames for block #{n_block}')
 
                 # Reset the variable indicating that an acquisition is being processed
                 if acq_method == "video":
@@ -766,7 +831,6 @@ class BasicGUI(GUIBase):
         worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
         self.threadpool.start(worker)
 
-    @decorator_print_function
     def cancel_save(self):
         """ Callback of the cancel button of the video save settings dialog.
         """
@@ -967,8 +1031,6 @@ class BasicGUI(GUIBase):
         # hide the rubberband tool used for roi selection on sensor
         self.imageitem.getViewBox().rbScaleBox.hide()
 
-        print(f"Video mode is {self._video} and spooling is {self._spooling}")
-
     @QtCore.Slot()
     def video_quickstart_clicked(self):
         """ Callback of video quickstart action
@@ -1156,40 +1218,54 @@ class BasicGUI(GUIBase):
         self._mw.set_sensor_Action.setDisabled(False)
 
 # helper functions -----------------------------------------------------------------------------------------------------
-    def _create_metadata_dict(self):
+    def _create_metadata_dict(self, n_frames):
         """ create a dictionary containing the metadata.
-
-        :return: dict metadata
+        @param: (int) number of frames required for the acquisition
+        @return: (dict) metadata
         """
-        metadata = {}
+        metadata = self.metadata_template
         # ----general----------------------------------------------------------------------------
         metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
-        # sample name ?
+
         # ----camera-----------------------------------------------------------------------------
-        metadata['Exposure time (s)'] = self._camera_logic.get_exposure()
+        metadata = update_metadata(metadata, ['Acquisition', 'number_frames'], n_frames)
+        folder_name = self._save_sd.foldername_LineEdit.text()
+        metadata = update_metadata(metadata, ['Acquisition', 'sample_name'], folder_name)
+        metadata = update_metadata(metadata, ['Acquisition', 'exposure_time_(s)'], self._camera_logic.get_exposure())
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            metadata['Kinetic time (s)'] = self._camera_logic.get_kinetic_time()
-        metadata['Gain'] = self._camera_logic.get_gain()
+            metadata = update_metadata(metadata, ['Acquisition', 'kinetic_time_(s)'],
+                                       self._camera_logic.get_kinetic_time())
+            parameters = self._camera_logic.get_non_interfaced_parameters()
+            for key, value in parameters.items():
+                metadata = update_metadata(metadata, ['Camera', 'specific_parameters', key], value)
+        metadata = update_metadata(metadata, ['Acquisition', 'gain'], self._camera_logic.get_gain())
         if self._camera_logic.has_temp:
             self.sigReadTemperature.emit()  # short interruption of live mode to read temperature
-            metadata['Sensor temperature (deg C)'] = self._camera_logic._temperature
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       self._camera_logic.get_temperature())
         else:
-            metadata['Sensor temperature (deg C)'] = 'Not available'
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       "Not available")
+
         # ----filter------------------------------------------------------------------------------
         filterpos = self._filterwheel_logic.get_position()
         filterdict = self._filterwheel_logic.get_filter_dict()
         label = 'filter{}'.format(filterpos)
-        metadata['Filter'] = filterdict[label]['name']
+        metadata = update_metadata(metadata, ['Acquisition', 'filter'], filterdict[label]['name'])
+
         # ----laser-------------------------------------------------------------------------------
         intensity_dict = self._laser_logic._intensity_dict
         keylist = [key for key in intensity_dict if intensity_dict[key] != 0]
         laser_dict = self._laser_logic.get_laser_dict()
-        metadata['Laser lines'] = [laser_dict[key]['wavelength'] for key in keylist]
-        if not metadata['Laser lines']:  # for compliance with fits header conventions ([] is forbidden)
-            metadata['Laser lines'] = None
-        metadata['Laser intensities (%)'] = [intensity_dict[key] for key in keylist]
-        if not metadata['Laser intensities (%)']:
-            metadata['Laser intensities (%)'] = None
+        for key in keylist:
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_lines'], laser_dict[key]['wavelength'],
+                                       action="append")
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_power_(%)'], intensity_dict[key],
+                                       action="append")
+        # if not metadata['Acquisition']['laser_lines']:  # for compliance with fits header conventions ([] is forbidden)
+        #     metadata['Acquisition']['laser_lines'] = None
+        # if not metadata['Acquisition']['laser_power_(%)']:
+        #     metadata['Acquisition']['laser_power_(%)'] = None
 
         return metadata
 
