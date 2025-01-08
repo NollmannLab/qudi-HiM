@@ -64,8 +64,8 @@ class RoiMarker(pg.RectROI):
     Have a look at:
     http://www.pyqtgraph.org/documentation/graphicsItems/roi.html
     """
-    default_pen = {'color': 'FFF', 'width': 2}  # white color as default
-    select_pen = {'color': '2F3', 'width': 2}  # colored frame is the active one
+    default_pen = {'color': '#FFFFFF', 'width': 2}  # white color as default
+    select_pen = {'color': '#22FF33', 'width': 2}  # colored frame is the active one
 
     sigRoiSelected = QtCore.Signal(str)
 
@@ -199,7 +199,7 @@ class StageMarker(pg.RectROI):
     Have a look at:
     http://www.pyqtgraph.org/documentation/graphicsItems/roi.html
     """
-    default_pen = {'color': '0FF', 'width': 2}  # color settings
+    default_pen = {'color': '#00FFFF', 'width': 2}  # color settings
 
     def __init__(self, position, width, view_widget=None, **kwargs):
         """
@@ -964,8 +964,8 @@ class RoiGUI(GUIBase):
             # remove the scaling handle
             stagemarker.removeHandle(stagemarker.getHandles()[0])
             self.stagemarker = stagemarker
-        except Exception:
-            self.log.warn('Unable to add stage marker to image')
+        except Exception as e:
+            self.log.warn(f'Unable to add stage marker to image due to the following error : {e}')
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Functions to handle user interface state
