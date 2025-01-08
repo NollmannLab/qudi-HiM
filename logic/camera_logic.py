@@ -6,7 +6,7 @@ This module contains the logic to control a microscope camera.
 
 An extension to Qudi.
 
-@author: F. Barho & JB. Fiche for later modifications
+@author: F.Barho & JB.Fiche for later modifications
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -30,7 +30,7 @@ import time
 import h5py
 import numpy as np
 import os
-import yaml
+# import yaml
 
 from time import sleep
 from tifffile import TiffWriter
@@ -40,6 +40,7 @@ from core.configoption import ConfigOption
 from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 from ome_types.model import OME, Image, Pixels, Channel, Plane
+from ruamel.yaml import YAML
 
 verbose = True
 
@@ -89,7 +90,7 @@ class SaveProgressWorker(QtCore.QRunnable):
     """ Worker thread to update the progress during video saving and eventually handle the image display.
 
     The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators """
-    def __init__(self, time_constant, filename, filenamestem, fileformat, n_frames, is_display, metadata, addfile,
+    def __init__(self, time_constant, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile,
                  emit_signal):
         super(SaveProgressWorker, self).__init__()
         self.signals = WorkerSignals()
@@ -351,12 +352,17 @@ class CameraLogic(GenericLogic):
 
     def get_max_frames(self):
         """ Return the maximum number of frames that can be handled by the camera for a single movie acquisition. Two
-        values are returned, depending on which methods is used for the acquisition (video or spooling)
+        values are returned, depending on which methods is used for the acquisition (video or spooling if it exists)
         @return:
             max frames video mode (int)
             max frames spool mode (int)
         """
         return self._max_frames_movie, self._max_frames_spool
+
+    def get_non_interfaced_parameters(self):
+        """ Return the values of all the non-interfaced parameters of the camera
+        """
+        return self._hardware.get_non_interfaced_parameters()
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to access camera state
@@ -573,12 +579,9 @@ class CameraLogic(GenericLogic):
     def save_last_image(self, path, metadata, fileformat='.tif'):
         """
         saves a single image to disk
-
         @param: str path: path stem, such as '/home/barho/images/2020-12-16/samplename'
         @param: dict metadata: dictionary containing the metadata
         @param: str fileformat: default '.tif' but can be modified if needed.
-
-        @return: None
         """
         if self._last_image is None:
             self.log.warning('No image available to save')
@@ -625,7 +628,7 @@ class CameraLogic(GenericLogic):
         err = self._hardware.start_movie_acquisition(n_frames)
         if err:
             self.log.warning('Video acquisition did not start')
-            self.finish_save_video(filenamestem, fileformat, n_frames, metadata, emit_signal=True)
+            self.finish_save_video(filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal=True)
             return
 
         # wait at least a full exposure time to make sure at least one image was acquired.
@@ -679,7 +682,7 @@ class CameraLogic(GenericLogic):
 
         # finish the save procedure when hardware is ready
         else:
-            self.finish_save_video(filenamestem, filename, fileformat, n_frames, metadata, emit_signal)
+            self.finish_save_video(filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal)
 
     def finish_save_video(self, filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal=True):
         """ This method finishes the saving procedure. Live mode of the camera is eventually restarted.
@@ -716,7 +719,6 @@ class CameraLogic(GenericLogic):
         # data handling
         if image_data is not None:
             complete_path = self.create_generic_filename(filenamestem, '_Movie', filename, fileformat, addfile=addfile)
-            print(fileformat)
             if fileformat == '.tif':
                 self.save_to_tiff(n_frames, complete_path, image_data)
                 self.save_metadata_txt_file(filenamestem, '_Movie', metadata)
@@ -940,7 +942,7 @@ class CameraLogic(GenericLogic):
         number_dirs = len(dir_list)
         if addfile:
             number_dirs -= 1
-        prefix = str(number_dirs+1).zfill(3)
+        prefix = str(number_dirs).zfill(3)
         folder_name = prefix + folder
         path = os.path.join(filenamestem, folder_name)
 
@@ -959,8 +961,8 @@ class CameraLogic(GenericLogic):
     def save_to_tiff(self, n_frames, path, data):
         """ Save the image data to a tiff file.
 
-        @param: int n_frames: number of frames (needed to distinguish between 2D and 3D data)
-        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: (int) n_frames: number of frames (needed to distinguish between 2D and 3D data)
+        @param: (str) path: complete path where the object is saved to (including the suffix .tif)
         @param: data: (np.array) image stack
         """
         try:
@@ -999,7 +1001,8 @@ class CameraLogic(GenericLogic):
         with open(complete_path, 'w') as file:
             # file.write(str(metadata))  # for standard txt file
             # yaml file. can use suffix .txt. change if .yaml preferred.
-            yaml.dump(metadata, file, default_flow_style=False)
+            yaml = YAML()
+            yaml.dump(metadata, file)
         self.log.info('Saved metadata to {}'.format(complete_path))
 
     def save_to_fits(self, path, data, metadata):
@@ -1093,11 +1096,8 @@ class CameraLogic(GenericLogic):
     def save_to_npy(self, path, data):
         """ Save the image data to a npy file. The images are reformated to uint16, in order to optimize the saving
         time.
-
-        :param: str path: complete path where the object is saved to (including the suffix .tif)
-        :param: data: np.array
-
-        :return: None
+        @param: str path: complete path where the object is saved to (including the suffix .tif)
+        @param: data: np.array
         """
         try:
             np.save(path, data.astype(np.uint16))
@@ -1106,22 +1106,31 @@ class CameraLogic(GenericLogic):
             self.log.warning(f'Data not saved: {e}')
 
     def save_to_ome_tif(self, path, data, metadata):
+        """Save a NumPy array as an OME-TIFF file.
+        @param: path (str): indicate the complete file path were to save the data
+        @param: data (numpy array): acquired data
+        @param: metadata (dict): contains all the metadata associated to the acquisition
         """
-        Save a NumPy array as an OME-TIFF file.
+        # Read the parameters from the metadata
+        acquisition = metadata.get('Acquisition', [])
+        exposure = None
+        kinetic = None
+        excitation_wavelength = []
 
-        Args:
-            array (numpy.ndarray): The NumPy array of shape (Nframes, Lx, Ly).
-            filename (str): Path to the output OME-TIFF file.
-            pixel_size (float, optional): Physical size of a pixel in microns. Defaults to None.
-            time_interval (float, optional): Time interval between frames in seconds. Defaults to None.
-        """
-        print(metadata)
+        for item in acquisition:
+            if 'exposure_time_(s)' in item:
+                exposure = item['exposure_time_(s)']
+            if 'laser_lines' in item:
+                excitation_wavelength = item['laser_lines']
+                if len(excitation_wavelength) > 0:
+                    excitation_wavelength = int(excitation_wavelength[0].split()[0])
+                else:
+                    excitation_wavelength = None
+            if 'kinetic_time_(s)' in item:
+                kinetic = item['kinetic_time_(s)']
 
         # Create the metadata
         Nframes, Lx, Ly = data.shape
-        exposure = metadata['Exposure time (s)']
-        kinetic = metadata['Kinetic time (s)']
-
         planes = [Plane(delta_t=kinetic * i, delta_t_unit="s",
                         exposure_time=exposure, exposure_time_unit="s",
                         the_z=0, the_c=0, the_t=i)
@@ -1130,10 +1139,11 @@ class CameraLogic(GenericLogic):
         channel = Channel(
             id='Channel:0:0',
             name='CH1',
-            emission_wavelength=metadata["Laser lines"],
-            excitation_wavelength=488.0,
             illumination_type='Epifluorescence'
         )
+        if excitation_wavelength is not None:
+            channel.excitation_wavelength = excitation_wavelength
+
         pixels = Pixels(
             id='Pixels:0',
             dimension_order='XYZCT',
