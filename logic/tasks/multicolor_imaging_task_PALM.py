@@ -29,7 +29,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import yaml
+# import yaml
 import os
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import get_entry_nested_dict
@@ -122,7 +122,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.err_count = None
         self.laser_allowed = False
         self.user_param_dict = {}
-        self.yaml = None
+        self.yaml = YAML()
         self.metadata_template: dict = {}
         self.metadata: dict = {}
         self.sample_name: str = ""
@@ -179,7 +179,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.max_fire_counts = int(self.exposure * 1000)
 
         # load the metadata template and update it according to the parameters
-        self.yaml = YAML()
         with open(self.metadata_template_path, "r", encoding='utf-8') as file:
             self.metadata_template = self.yaml.load(file)
         self.metadata_template = dict(self.metadata_template)
@@ -324,8 +323,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.user_config_path, 'r') as stream:
-                self.user_param_dict = yaml.safe_load(stream)
-
+                self.user_param_dict = self.yaml.load(stream)
                 self.sample_name = self.user_param_dict['sample_name']
                 self.filter_pos = self.user_param_dict['filter_pos']
                 self.exposure = self.user_param_dict['exposure']
@@ -512,11 +510,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     #     self.log.info('Saved metadata to {}'.format(path))
 
     def save_metadata_txt_file(self, metadata, path):
-        """"Save a txt file containing the metadata.
+        """ Save a txt file containing the metadata.
         @param: (str) path : complete path for the metadata file
         @param: (dict) metadata: dictionary containing the annotations
         """
         with open(path, 'w') as file:
-            yaml = YAML()
-            yaml.dump(metadata, file)
+            self.yaml.dump(metadata, file)
         self.log.info('Saved metadata to {}'.format(path))

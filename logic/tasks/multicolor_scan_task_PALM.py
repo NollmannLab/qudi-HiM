@@ -7,9 +7,9 @@ An extension to Qudi.
 This module contains a task to perform a multicolor scan on PALM setup.
 (Take at a given position a sequence of images in a stack of planes with different laserlines or intensities.)
 
-@author: F. Barho
+@author: F. Barho - JB Fiche for later modifications
 
-Created on Wed Mar 17 2021
+Created on Wed Mar 17 2021 - modified Thur Jan 09 2025
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -29,14 +29,73 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import yaml
-from datetime import datetime
+# import yaml
 import os
 from time import sleep
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import get_entry_nested_dict
+from ruamel.yaml import YAML
+from datetime import datetime
 
 
+# ======================================================================================================================
+# YAML file editor function for editing metadata
+# ======================================================================================================================
+def update_metadata(metadata, key_path, value, action="set"):
+    """
+    Generalized function to update nested metadata fields, including lists.
+    @param: metadata: The metadata structure (OrderedDict or dict).
+    @param: key_path: A list representing the nested path to the key.
+    @param: value: The value to set, append, or remove.
+    @param: action: The action to perform: "set", "append", or "remove".
+            - "set" (default): Replaces the value.
+            - "append": Adds to the list if it doesn't already exist.
+    @return: The updated metadata structure.
+    """
+    current = metadata
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if isinstance(current, list):
+            # Look for the key in a list of dictionaries or OrderedDicts
+            for item in current:
+                if key in item:
+                    current = item[key]
+                    break
+        else:
+            current = current[key]
+
+    # Perform the specified action on the target key
+    target_key = key_path[-1]
+    if isinstance(current, list):
+        # Handle lists of dictionaries
+        for item in current:
+            if target_key in item:
+                if action == "set":
+                    item[target_key] = value
+                elif action == "append":
+                    if isinstance(item[target_key], list):
+                        item[target_key].append(value)
+                break
+        else:
+            # If key not found in list, create it (for append action)
+            if action == "append":
+                current.append({target_key: [value]})
+    else:
+        # Handle direct dictionary updates
+        if action == "set":
+            current[target_key] = value
+        elif action == "append":
+            if target_key not in current:
+                current[target_key] = [value]
+            elif isinstance(current[target_key], list):
+                current[target_key].append(value)
+
+    return metadata
+
+
+# ======================================================================================================================
+# TASK definition
+# ======================================================================================================================
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
     """ This task does an acquisition of a stack of images from different channels or using different intensities.
 
@@ -60,16 +119,35 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path = self.config['path_to_user_config']
+        self.metadata_template_path = self.config['path_to_metadata_template']
         self.err_count = None
         self.laser_allowed = False
         self.user_param_dict = {}
+        self.yaml = YAML()
+        self.metadata_template: dict = {}
+        self.metadata: dict = {}
+        self.step_counter: int = 0
+        self.sample_name: str = ""
+        self.filter_pos: dict = {}
+        self.exposure: float = 0
+        self.gain: int = 0
+        self.num_frames: int = 0
+        self.num_z_planes: int = 0
+        self.z_step: int = 0
+        self.centered_focal_plane: bool = False
+        self.save_path: str = ""
+        self.imaging_sequence_raw: dict = {}
+        self.file_format: dict = {}
+        self.imaging_sequence: list = []
+        self.num_laserlines: int = 0
+        self.complete_path: str = ""
+        self.start_position: float = 0
+        self.focal_plane_position: float = 0
 
     def startTask(self):
         """ """
         self.log.info('started Task')
         self.err_count = 0  # initialize the error counter (counts number of missed triggers for debug)
-
-        # self.default_exposure = self.ref['camera'].get_exposure()  # store this value to reset it at the end of task
 
         # stop all interfering modes on GUIs and disable GUI actions. Make sure the camera is not in Frame Transfer mode
         self.ref['camera'].stop_live_mode()
@@ -77,7 +155,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         if self.ref['camera'].frame_transfer:
             self.log.warning('Frame Transfer mode is now switched OFF.')
             self.ref['camera'].disable_frame_transfer()
-
 
         self.ref['daq'].stop_laser_output()
         self.ref['daq'].disable_laser_actions()
@@ -92,7 +169,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # control the config : laser allowed for given filter ?
         self.laser_allowed = self.control_user_parameters()
-        
         if not self.laser_allowed:
             self.log.warning('Task aborted. Please specify a valid filter / laser combination')
             return
@@ -107,15 +183,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             pos = self.ref['filter'].get_position()
 
         # prepare the camera
-        frames = len(self.imaging_sequence) * self.num_frames * self.num_z_planes  # self.num_frames = 1 typically, but keep as an option 
-        self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain, self.complete_path.rsplit('.', 1)[0], self.file_format)
+        frames = len(self.imaging_sequence) * self.num_frames * self.num_z_planes
+        self.ref['camera'].prepare_camera_for_multichannel_imaging(frames, self.exposure, self.gain,
+                                                                   self.complete_path.rsplit('.', 1)[0],
+                                                                   self.file_format)
+
+        # load the metadata template and update it according to the parameters
+        with open(self.metadata_template_path, "r", encoding='utf-8') as file:
+            self.metadata_template = self.yaml.load(file)
+        self.metadata_template = dict(self.metadata_template)
+        self.metadata = self._create_metadata_dict(frames)
 
         # initialize the counter (corresponding to the number of planes already acquired)
         self.step_counter = 0
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        :return bool: True if the task should continue running, False if it should finish.
+        @return (bool): True if the task should continue running, False if it should finish.
         """
         if not self.laser_allowed:
             return False  # skip runTaskStep and directly go to cleanupTask
@@ -128,10 +212,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         position = self.start_position + (self.step_counter - 1) * self.z_step
         self.ref['focus'].go_to_position(position)
-        # print(f'target position: {position} um')
         sleep(0.03)  # stabilization time
-        # cur_pos = self.ref['focus'].get_position()
-        # print(f'current position: {cur_pos} um')
 
         # --------------------------------------------------------------------------------------------------------------
         # imaging sequence (image data is spooled to disk)
@@ -203,9 +284,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 metadata = self.get_fits_metadata()
                 self.ref['camera'].add_fits_header(self.complete_path, metadata)
             else:  # save metadata in a txt file
-                metadata = self.get_metadata()
+                # metadata = self.get_metadata()
                 file_path = self.complete_path.replace('tif', 'txt', 1)
-                self.save_metadata_file(metadata, file_path)
+                # self.save_metadata_file(metadata, file_path)
+                self.save_metadata_txt_file(self.metadata, file_path)
 
         # enable gui actions
         self.ref['camera'].enable_camera_actions()
@@ -244,7 +326,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.user_config_path, 'r') as stream:
-                self.user_param_dict = yaml.safe_load(stream)
+                self.user_param_dict = self.yaml.load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
                 self.filter_pos = self.user_param_dict['filter_pos']
@@ -283,7 +365,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         # use the filter position to create the key # simpler than using get_entry_netsted_dict method
         key = 'filter{}'.format(self.filter_pos)
-        bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']  # list of booleans, laser allowed ? such as [True True False True], corresponding to [laser1, laser2, laser3, laser4]
+        bool_laserlist = self.ref['filter'].get_filter_dict()[key]['lasers']
         forbidden_lasers = []
         for i, item in enumerate(bool_laserlist):
             if not item:  # if the element in the list is False:
@@ -306,13 +388,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: float piezo start position
         """
-        current_pos = self.ref['focus'].get_position()  # lets assume that we are at focus (user has set focus or run autofocus)
+        current_pos = self.ref['focus'].get_position()
         self.focal_plane_position = current_pos  # save it to come back to this plane at the end of the task
 
-        if centered_focal_plane:  # the scan should start below the current position so that the focal plane will be the central plane or one of the central planes in case of an even number of planes
+        # the scan should start below the current position so that the focal plane will be the central plane or one of
+        # the central planes in case of an even number of planes
+        if centered_focal_plane:
             # even number of planes:
             if self.num_z_planes % 2 == 0:
-                start_pos = current_pos - self.num_z_planes / 2 * self.z_step  # focal plane is the first one of the upper half of the number of planes
+                start_pos = current_pos - self.num_z_planes / 2 * self.z_step
             # odd number of planes:
             else:
                 start_pos = current_pos - (self.num_z_planes - 1)/2 * self.z_step
@@ -367,31 +451,77 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # metadata
     # ------------------------------------------------------------------------------------------------------------------
 
-    def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text easy readable format.
+    # def get_metadata(self):
+    #     """ Get a dictionary containing the metadata in a plain text easy readable format.
+    #
+    #     :return: dict metadata
+    #     """
+    #     metadata = {}
+    #     metadata['Time'] = datetime.now().strftime(
+    #         '%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ???
+    #     metadata['Sample name'] = self.sample_name
+    #     metadata['Exposure time (s)'] = self.exposure
+    #     metadata['Kinetic time (s)'] = self.ref['camera'].get_kinetic_time()
+    #     metadata['Gain'] = self.gain
+    #     metadata['Sensor temperature (deg C)'] = self.ref['camera'].get_temperature()
+    #     filterpos = self.ref['filter'].get_position()
+    #     filterdict = self.ref['filter'].get_filter_dict()
+    #     label = 'filter{}'.format(filterpos)
+    #     metadata['Filter'] = filterdict[label]['name']
+    #     metadata['Number laserlines'] = self.num_laserlines
+    #     imaging_sequence = self.imaging_sequence_raw
+    #     for i in range(self.num_laserlines):
+    #         metadata[f'Laser line {i + 1}'] = imaging_sequence[i][0]
+    #         metadata[f'Laser intensity {i + 1} (%)'] = imaging_sequence[i][1]
+    #     metadata['Scan step length (um)'] = self.z_step
+    #     metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
+    #     # pixel size ???
+    #     return metadata
 
-        :return: dict metadata
+    def _create_metadata_dict(self, n_frames):
+        """ create a dictionary containing the metadata.
+        @param: (int) number of frames required for the acquisition
+        @return: (dict) metadata
         """
-        metadata = {}
-        metadata['Time'] = datetime.now().strftime(
-            '%m-%d-%Y, %H:%M:%S')  # or take the starting time of the acquisition instead ??? # then add a variable to startTask
-        metadata['Sample name'] = self.sample_name
-        metadata['Exposure time (s)'] = self.exposure
-        metadata['Kinetic time (s)'] = self.ref['camera'].get_kinetic_time()
-        metadata['Gain'] = self.gain
-        metadata['Sensor temperature (deg C)'] = self.ref['camera'].get_temperature()
+        metadata = self.metadata_template
+        # ----general----------------------------------------------------------------------------
+        metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
+
+        # ----camera-----------------------------------------------------------------------------
+        metadata = update_metadata(metadata, ['Acquisition', 'number_frames'], n_frames)
+        metadata = update_metadata(metadata, ['Acquisition', 'sample_name'], self.sample_name)
+        metadata = update_metadata(metadata, ['Acquisition', 'exposure_time_(s)'], self.exposure)
+        metadata = update_metadata(metadata, ['Acquisition', 'kinetic_time_(s)'], self.ref['camera'].get_kinetic_time())
+        metadata = update_metadata(metadata, ['Acquisition', 'number_z_planes'], self.num_z_planes)
+        metadata = update_metadata(metadata, ['Acquisition', 'distance_z_planes_(µm)'], self.z_step)
+        metadata = update_metadata(metadata, ['Acquisition', 'number_frames_per_z_plane'], len(self.imaging_sequence) *
+                                   self.num_frames)
+
+        parameters = self.ref['camera'].get_non_interfaced_parameters()
+        for key, value in parameters.items():
+            metadata = update_metadata(metadata, ['Camera', 'specific_parameters', key], value)
+        metadata = update_metadata(metadata, ['Acquisition', 'gain'], self.gain)
+        if self.ref['camera'].has_temp:
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       self.ref['camera'].get_temperature())
+        else:
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       "Not available")
+
+        # ----filter------------------------------------------------------------------------------
         filterpos = self.ref['filter'].get_position()
         filterdict = self.ref['filter'].get_filter_dict()
         label = 'filter{}'.format(filterpos)
-        metadata['Filter'] = filterdict[label]['name']
-        metadata['Number laserlines'] = self.num_laserlines
-        imaging_sequence = self.imaging_sequence_raw
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i + 1}'] = imaging_sequence[i][0]
-            metadata[f'Laser intensity {i + 1} (%)'] = imaging_sequence[i][1]
-        metadata['Scan step length (um)'] = self.z_step
-        metadata['Scan total length (um)'] = self.z_step * self.num_z_planes
-        # pixel size ???
+        metadata = update_metadata(metadata, ['Acquisition', 'filter'], filterdict[label]['name'])
+
+        # ----laser-------------------------------------------------------------------------------
+        for laser_lines in range(self.num_laserlines):
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_lines'],
+                                       self.imaging_sequence_raw[laser_lines][0],
+                                       action="append")
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_power_(%)'],
+                                       self.imaging_sequence_raw[laser_lines][1],
+                                       action="append")
         return metadata
 
     def get_fits_metadata(self):
@@ -399,13 +529,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         :return: dict metadata
         """
-        metadata = {}
-        metadata['TIME'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
-        metadata['SAMPLE'] = (self.sample_name, 'sample name')
-        metadata['EXPOSURE'] = (self.exposure, 'exposure time (s)')
-        metadata['KINETIC'] = (self.ref['camera'].get_kinetic_time(), 'kinetic time (s)')
-        metadata['GAIN'] = (self.gain, 'gain')
-        metadata['TEMP'] = (self.ref['camera'].get_temperature(), 'sensor temperature (deg C)')
+        metadata = {'TIME': datetime.now().strftime('%m-%d-%Y, %H:%M:%S'), 'SAMPLE': (self.sample_name, 'sample name'),
+                    'EXPOSURE': (self.exposure, 'exposure time (s)'),
+                    'KINETIC': (self.ref['camera'].get_kinetic_time(), 'kinetic time (s)'), 'GAIN': (self.gain, 'gain'),
+                    'TEMP': (self.ref['camera'].get_temperature(), 'sensor temperature (deg C)')}
         filterpos = self.ref['filter'].get_position()
         filterdict = self.ref['filter'].get_filter_dict()
         label = 'filter{}'.format(filterpos)
@@ -419,12 +546,21 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # pixel size
         return metadata
 
-    def save_metadata_file(self, metadata, path):
-        """ Save a txt file containing the metadata dictionary
+    # def save_metadata_file(self, metadata, path):
+    #     """ Save a txt file containing the metadata dictionary
+    #
+    #     :param dict metadata: dictionary containing the metadata
+    #     :param str path: pathname
+    #     """
+    #     with open(path, 'w') as outfile:
+    #         self.yaml.safe_dump(metadata, outfile, default_flow_style=False)
+    #     self.log.info('Saved metadata to {}'.format(path))
 
-        :param dict metadata: dictionary containing the metadata
-        :param str path: pathname
+    def save_metadata_txt_file(self, metadata, path):
+        """ Save a txt file containing the metadata.
+        @param: (str) path : complete path for the metadata file
+        @param: (dict) metadata: dictionary containing the annotations
         """
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(metadata, outfile, default_flow_style=False)
+        with open(path, 'w') as file:
+            self.yaml.dump(metadata, file)
         self.log.info('Saved metadata to {}'.format(path))
