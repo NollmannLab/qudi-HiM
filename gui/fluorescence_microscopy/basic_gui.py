@@ -287,6 +287,7 @@ class BasicGUI(GUIBase):
     # flags that enable to reuse the save settings dialog for both save video and spooling
     _video = False
     _spooling = False
+    _aborted = False
 
     # flags for rotation settings
     rotation_cw = False
@@ -788,10 +789,12 @@ class BasicGUI(GUIBase):
 
         # Launch a worker thread that will monitor the saving procedures - this is required since having a while loop
         # waiting for the end of the acquisition is freezing the GUI...
+        self.disable_camera_toolbuttons()
         worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, 0, acq_method)
         worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
         self.threadpool.start(worker)
 
+    @decorator_print_function
     def monitor_acquisition(self, path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method):
         """ This method is used to monitor a current acquisition (block by block).
         @param path: (str) path to the folder where the data are saved
@@ -804,6 +807,12 @@ class BasicGUI(GUIBase):
         """
         if self._video or self._spooling:
             pass
+        elif self._aborted:
+            self.log.warn("Acquisition was aborted by user.")
+            self.enable_camera_toolbuttons()
+            self._mw.progress_label.setText('')
+            self._aborted = False
+            return
         else:
             n_block = n_block + 1
             if n_block < len(acquisition_blocks):
@@ -966,6 +975,7 @@ class BasicGUI(GUIBase):
         self.disable_camera_toolbuttons()
         self.imageitem.getViewBox().rbScaleBox.hide()  # hide the rubberband tool used for roi selection on sensor
 
+    @decorator_print_function
     @QtCore.Slot()
     def acquisition_finished(self):
         """ Callback of sigAcquisitionFinished. Resets all tool buttons to callable state.
@@ -1023,6 +1033,7 @@ class BasicGUI(GUIBase):
         its end.
         """
         self._camera_logic.acquisition_aborted = True
+        self._aborted = True
 
     @QtCore.Slot()
     def save_video_clicked(self):
@@ -1062,6 +1073,7 @@ class BasicGUI(GUIBase):
             self._video = True
         self.save_video_accepted()
 
+    @decorator_print_function
     @QtCore.Slot()
     def video_saving_finished(self):
         """ Callback of signal sigVideoSavingFinished or sigSpoolingFinished sent from logic.
@@ -1195,6 +1207,7 @@ class BasicGUI(GUIBase):
         self._mw.progress_label.setText('')
 
 # handle the state of toolbuttons / disable & enable user interface actions --------------------------------------------
+    @decorator_print_function
     def reset_toolbuttons(self):
         """ This slot is called when save dialog is canceled.
 
@@ -1202,6 +1215,7 @@ class BasicGUI(GUIBase):
         self.enable_camera_toolbuttons()
         self._mw.save_video_Action.setChecked(False)
 
+    @decorator_print_function
     def disable_camera_toolbuttons(self):
         """ Disables all toolbuttons of the camera toolbar. """
         self._mw.take_image_Action.setDisabled(True)
@@ -1217,6 +1231,7 @@ class BasicGUI(GUIBase):
         """ Disables the frame transfer checkbox. """
         self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
+    @decorator_print_function
     def enable_camera_toolbuttons(self):
         """
         Enables all toolbuttons of the camera toolbar. Serves also as callback of SigVideoFinished.
