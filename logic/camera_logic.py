@@ -563,7 +563,8 @@ class CameraLogic(GenericLogic):
         self._hardware.stop_acquisition()
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=False)
-        self.sigVideoFinished.emit()
+
+        # self.sigVideoFinished.emit()
 
 # Helper methods to interrupt/restart the camera live mode to give access to camera settings etc. ----------------------
 
@@ -826,7 +827,7 @@ class CameraLogic(GenericLogic):
         """
         ready = self._hardware.get_ready_state()
 
-        if not ready:
+        if (not ready) and (not self.acquisition_aborted):
             spoolprogress = self._hardware.get_progress()
             self.sigProgress.emit(spoolprogress)
 
@@ -838,6 +839,9 @@ class CameraLogic(GenericLogic):
             worker = SpoolProgressWorker(1 / self._fps, filenamestem, path, fileformat, is_display, metadata)
             worker.signals.sigSpoolingStepFinished.connect(self.spooling_loop)
             self.threadpool.start(worker)
+
+        elif self.acquisition_aborted:
+            self.abort_save_video()
 
         # finish the save procedure when hardware is ready
         else:
