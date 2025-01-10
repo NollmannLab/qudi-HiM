@@ -424,6 +424,7 @@ class BasicGUI(GUIBase):
             self._mw.exposure_Label.setText('Exposure time (s):')
 
         self._mw.gain_LineEdit.setText(str(self._camera_logic.get_gain()))
+
         if not self._camera_logic.has_temp:
             self._mw.temp_setpoint_LineEdit.setText('')
             self._mw.temp_setpoint_LineEdit.setEnabled(False)
@@ -638,11 +639,12 @@ class BasicGUI(GUIBase):
         """
         # Create the Camera settings window
         self._cam_sd = CameraSettingDialog()
+
         # Connect the action of the settings window with the code:
         self._cam_sd.accepted.connect(self.cam_update_settings)  # ok button
         self._cam_sd.rejected.connect(self.cam_keep_former_settings)  # cancel buttons
         
-        # frame transfer settings
+        # frame transfer settings and gain limits
         self._cam_sd.frame_transfer_CheckBox.toggled[bool].connect(self._camera_logic.set_frametransfer)
         
         if not self._camera_logic.has_temp:
@@ -650,7 +652,9 @@ class BasicGUI(GUIBase):
             self._cam_sd.label_3.setEnabled(False)
 
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            self._cam_sd.frame_transfer_CheckBox.setEnabled(True)
+            self._cam_sd.frame_transfer_CheckBox.setEnabled(False)
+            low, high = self._camera_logic.get_gain_range()
+            self._cam_sd.label_gain.setText(f"Gain [{low} - {high}]")
 
         # write the configuration to the settings window of the GUI.
         self.cam_keep_former_settings()
@@ -1024,7 +1028,7 @@ class BasicGUI(GUIBase):
         today = datetime.today().strftime('%Y_%m_%d')
         folder_name = self._mw.samplename_LineEdit.text()
         filenamestem = os.path.join(default_path, today, folder_name)
-        metadata = self._create_metadata_dict()
+        metadata = self._create_metadata_dict(1)
         self._camera_logic.save_last_image(filenamestem, metadata)
 
     @QtCore.Slot()

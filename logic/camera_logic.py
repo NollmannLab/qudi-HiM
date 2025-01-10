@@ -293,10 +293,7 @@ class CameraLogic(GenericLogic):
 
     def set_gain(self, gain):
         """ Set the gain of the camera. Inform the GUI that a new gain value was set.
-
-        :param: int gain: desired new gain.
-
-        :return: None
+        @param: (int) gain: desired new gain.
         """
         self._hardware.set_gain(gain)
         gain_value = self.get_gain()  # called to update the attribute self._gain
@@ -304,17 +301,22 @@ class CameraLogic(GenericLogic):
 
     def get_gain(self):
         """ Get the gain setting of the camera and update the class attribute _gain.
-
-        :return: int gain: current gain setting.
+        @return: (int) gain: current gain setting.
         """
         gain = self._hardware.get_gain()
         self._gain = gain
         return gain
 
+    def get_gain_range(self):
+        """ Get the limits for the gain.
+        @return: (int) low and high limits
+        """
+        low, high = self._hardware.get_gain_limits()
+        return low, high
+
     def get_progress(self):
         """ Retrieves the total number of acquired images by the camera (during a movie acquisition).
-
-        :return: int progress: total number of acquired images.
+        @return: (int) progress: total number of acquired images.
         """
         return self._hardware.get_progress()
 
