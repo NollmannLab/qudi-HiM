@@ -24,7 +24,7 @@
      <x>0</x>
      <y>0</y>
      <width>1238</width>
-     <height>20</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">
@@ -72,6 +72,7 @@
    <addaction name="save_last_image_Action"/>
    <addaction name="save_video_Action"/>
    <addaction name="video_quickstart_Action"/>
+   <addaction name="abort_video_Action"/>
    <addaction name="separator"/>
    <addaction name="set_sensor_Action"/>
   </widget>
@@ -737,6 +738,17 @@
   <action name="video_quickstart_Action">
    <property name="text">
     <string>Quickstart Video</string>
+   </property>
+  </action>
+  <action name="abort_video_Action">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Abort</string>
+   </property>
+   <property name="toolTip">
+    <string>abort acquisition of a video</string>
    </property>
   </action>
  </widget>
