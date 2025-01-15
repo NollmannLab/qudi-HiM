@@ -239,7 +239,7 @@ class IxonUltra(Base, CameraInterface):
     def set_exposure(self, exposure):
         """ Set the exposure time in seconds.
         @param: (float) exposure: desired new exposure time
-        @return: (bool) success ?
+        @return: (bool) return True if an error is detected
         """
         err = self._set_exposuretime(exposure)
         if not err:
@@ -270,7 +270,7 @@ class IxonUltra(Base, CameraInterface):
         return self._gain
 
     def get_gain_limits(self):
-        """ Get the electrion multiplying gain limits
+        """ Get the electron multiplying gain limits
         @return: (int) return the low and high limits
         """
         return self._get_em_gain_range()
@@ -359,7 +359,7 @@ class IxonUltra(Base, CameraInterface):
     # Methods for displaying images on the GUI -------------------------------------------------------------------------
     def start_single_acquisition(self):
         """ Start a single acquisition.
-        @return: (bool) Success ?
+        @return: (bool) return True if an error is detected
         """
         # if self._shutter == 'Closed':
         #     err = self._set_shutter(1, 0, 100, 100, 1)
@@ -374,15 +374,11 @@ class IxonUltra(Base, CameraInterface):
             # self._acquiring = True  # do we need this here?
             self._set_acquisition_mode('SINGLE_SCAN')
             err = self._start_acquisition()
-            if not err:
-                return False
-            # self._acquiring = False
-            else:
-                return True
+            return err
 
     def start_live_acquisition(self):
         """ Start a continuous acquisition.
-        @return: (bool) Success ?
+        @return: (bool) return True if an error is detected
         """
         # handle the variables indicating the status
         if self.support_live_acquisition():
@@ -399,10 +395,7 @@ class IxonUltra(Base, CameraInterface):
 
         self._set_acquisition_mode('RUN_TILL_ABORT')
         err = self._start_acquisition()
-        if not err:
-            return False
-        else:
-            return True
+        return err
 
     def stop_acquisition(self):
         """ Stop/abort live or single acquisition
@@ -423,7 +416,7 @@ class IxonUltra(Base, CameraInterface):
     def start_movie_acquisition(self, n_frames):
         """ Set the conditions to save a movie and start the acquisition (typically kinetic / fixed length mode).
         @param: (int) n_frames: number of frames
-        @return: (bool) Success ?
+        @return: (bool) Return True if an error is detected
         """
         # handle the variables indicating the status
         if self.support_live_acquisition():
@@ -448,7 +441,7 @@ class IxonUltra(Base, CameraInterface):
 
     def abort_movie_acquisition(self):
         """ Abort an acquisition.
-        @return: (bool) Success ?
+        @return: (bool) Error ?
         """
         err = self._abort_acquisition()
         self._set_acquisition_mode(self._default_acquisition_mode)
@@ -790,7 +783,7 @@ class IxonUltra(Base, CameraInterface):
         @param int hend: End column (inclusive)
         @param int vstart: Start row (inclusive)
         @param int vend: End row (inclusive).
-        @return (bool) success?
+        @return (bool) Return True if an error is detected
         """
         ret = self.sdk.SetImage(hbin, vbin, hstart, hend, vstart, vend)
         err = self.check_error(ret, "_set_image")
@@ -931,7 +924,7 @@ class IxonUltra(Base, CameraInterface):
     def _set_emccd_gain(self, gain):
         """ allows to change the gain value. The allowed range depends on the gain mode currently used.
         @param: (int) new gain value
-        @return: (bool) success?
+        @return: (bool) return True if an error is detected
         """
         ret = self.sdk.SetEMCCDGain(gain)
         err = self.check_error(ret, "_set_emccd_gain")
@@ -1011,7 +1004,8 @@ class IxonUltra(Base, CameraInterface):
     def _get_camera_serialnumber(self):
         """
         Gives serial number
-        @return: (int) return the camera serial number
+        @return: (int) serial : return the camera serial number
+                 (bool) err : return True if an error is detected
         """
         ret, serial = self.sdk.GetCameraSerialNumber()
         err = self.check_error(ret, "_get_camera_serialnumber")
