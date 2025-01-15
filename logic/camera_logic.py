@@ -53,7 +53,7 @@ def decorator_print_function(function):
 
     def new_function(*args, **kwargs):
         if verbose:
-            print(f'*** DEBUGGING *** Executing {function.__name__}')
+            print(f'*** DEBUGGING *** Executing {function.__name__} from camera_logic.py')
         return function(*args, **kwargs)
     return new_function
 
@@ -191,6 +191,7 @@ class CameraLogic(GenericLogic):
 
     has_temp = False
     has_shutter = False
+    has_gain = False
     _fps = 20
     _exposure = 1.
     _gain = 1.
@@ -221,9 +222,10 @@ class CameraLogic(GenericLogic):
         self.saving = False
         self.restart_live = False
         self.has_temp = self._hardware.has_temp()
-        if self.has_temp and (self.cam_type != "KinetixCam"):
+        if self.has_temp:
             self.temperature_setpoint = self._hardware._default_temperature
         self.has_shutter = self._hardware.has_shutter()
+        self.has_gain = self._hardware.has_gain()
 
         # update the private variables _exposure, _gain, _temperature
         self.get_exposure()
@@ -231,7 +233,12 @@ class CameraLogic(GenericLogic):
         self.get_temperature()
 
         # inquire the maximum number of images to acquire for movies acquisition
-        self._max_frames_movie, self._max_frames_spool = self._hardware.get_max_frames()
+        max_frames_dict = self._hardware.get_max_frames()
+        self._max_frames_movie = max_frames_dict['video']
+        if 'spool' in max_frames_dict:
+            self._max_frames_spool = max_frames_dict['spool']
+        else:
+            self._max_frames_spool = None
 
     def on_deactivate(self):
         """ Perform required deactivation. """
@@ -250,23 +257,19 @@ class CameraLogic(GenericLogic):
 
     def get_size(self):
         """ Retrieve size of the image in pixel.
-
-        :return: tuple (int, int): Size (width, height)
+        @return: tuple (int, int): Size (width, height)
         """
         return self._hardware.get_size()
 
     def get_max_size(self):
         """ Retrieve maximum size of the sensor in pixel.
-
-        :return tuple (int, int): Size (width, height)
+        @return tuple (int, int): Size (width, height)
         """
         return self._hardware._full_width, self._hardware._full_height
 
     def set_exposure(self, time):
         """ Set the exposure time of the camera. Inform the GUI that a new value was set.
-
         @param: time (float): desired new exposure time in seconds
-        @return: None
         """
         self._hardware.set_exposure(time)
         exp = self.get_exposure()  # updates also the attribute self._exposure and self._fps
@@ -422,45 +425,59 @@ class CameraLogic(GenericLogic):
 # Methods to set advanced configurations of the camera
 # ----------------------------------------------------------------------------------------------------------------------
 
-    def set_sensor_region(self, hbin, vbin, hstart, hend, vstart, vend):
+    @decorator_print_function
+    def set_sensor_region(self, hbin, vbin, hstart, hend, vstart, vend, exp):
         """ Defines a limited region on the sensor surface, hence accelerating the acquisition.
-
-        @param int hbin: number of pixels to bin horizontally
-        @param int vbin: number of pixels to bin vertically.
-        @param int hstart: Start column (inclusive)
-        @param int hend: End column (inclusive)
-        @param int vstart: Start row (inclusive)
-        @param int vend: End row (inclusive)
+        @param (int) hbin: number of pixels to bin horizontally
+        @param (int) vbin: number of pixels to bin vertically.
+        @param (int) hstart: Start column (inclusive)
+        @param (int) hend: End column (inclusive)
+        @param (int) vstart: Start row (inclusive)
+        @param (int) vend: End row (inclusive)
+        @param (float) exp: exposure time (in s)
         """
-        if self.live_enabled:  # live mode is on
-            self.interrupt_live()  # interrupt live to allow access to camera settings
+        # if self.live_enabled:  # live mode is on
+        #     # self.interrupt_live()  # interrupt live to allow access to camera settings
+        #     self.stop_loop()
+        #     sleep(1)
 
+        # update the new sensor limits
         err = self._hardware.set_image(hbin, vbin, hstart, hend, vstart, vend)
-        if err < 0:
+        if err:
             self.log.warn('Sensor region not set')
         else:
             self.log.info('Sensor region set to {} x {}'.format(vend - vstart + 1, hend - hstart + 1))
 
-        if self.live_enabled:
-            self.resume_live()  # restart live in case it was activated
+        # update the exposure time (required for certain camera since the time between two acquisition strongly depends
+        # on the sensor size (e.g emCCD)
+        self._hardware.set_exposure(exp)
 
-    def reset_sensor_region(self):
-        """ Reset to full sensor size. """
+        # if self.live_enabled:
+        #     # self.resume_live()  # restart live in case it was activated
+        #     self.start_loop()
 
-        if self.live_enabled:  # live mode is on
-            self.interrupt_live()
+    def reset_sensor_region(self, exp):
+        """ Reset to full sensor size.
+        @param (float) exp: exposure time (in s)
+        """
 
+        # if self.live_enabled:  # live mode is on
+        #     self.interrupt_live()
+
+        # reset the sensor to its default size
         width = self._hardware._full_width
         height = self._hardware._full_height
-
         err = self._hardware.set_image(1, 1, 1, width, 1, height)
-        if err < 0:
+        if err:
             self.log.warn('Sensor region not reset to default')
         else:
             self.log.info('Sensor region reset to default: {} x {}'.format(height, width))
 
-        if self.live_enabled:
-            self.resume_live()
+        # update the exposure time
+        self._hardware.set_exposure(exp)
+
+        # if self.live_enabled:
+        #     self.resume_live()
 
     @QtCore.Slot(bool)
     def set_frametransfer(self, activate):
@@ -568,16 +585,16 @@ class CameraLogic(GenericLogic):
 
         # self.sigVideoFinished.emit()
 
+## DEPRECATED - old version for handling sensor region handling but was creating bugs for KINETIX camera
 # Helper methods to interrupt/restart the camera live mode to give access to camera settings etc. ----------------------
-
-    def interrupt_live(self):
-        """ Interrupt the live display loop, for example to update camera settings. """
-        self._hardware.stop_acquisition()
-        # note that enabled attribute is not modified, to resume the state of the live display
-
-    def resume_live(self):
-        """ Restart the live display loop """
-        self._hardware.start_live_acquisition()
+#     def interrupt_live(self):
+#         """ Interrupt the live display loop, for example to update camera settings. """
+#         self._hardware.stop_acquisition()
+#         # note that enabled attribute is not modified, to resume the state of the live display
+#
+#     def resume_live(self):
+#         """ Restart the live display loop """
+#         self._hardware.start_live_acquisition()
 
 # Method invoked by save last image button on GUI ----------------------------------------------------------------------
     def save_last_image(self, path, metadata, fileformat='.tif'):
@@ -597,6 +614,7 @@ class CameraLogic(GenericLogic):
             self.save_metadata_txt_file(path, '_Image', metadata)
 
 # Methods invoked by start video button on GUI--------------------------------------------------------------------------
+    @decorator_print_function
     def start_save_video(self, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile=False,
                          emit_signal=True):
         """ Starts saving n_frames to disk as a stack (tiff of fits formats supported)

@@ -30,7 +30,6 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-import time
 from datetime import datetime
 import numpy as np
 from time import sleep
@@ -59,7 +58,7 @@ def decorator_print_function(function):
 
     def new_function(*args, **kwargs):
         if verbose:
-            print(f'*** DEBUGGING *** Executing {function.__name__}')
+            print(f'*** DEBUGGING *** Executing {function.__name__} from basic_gui.py')
         return function(*args, **kwargs)
     return new_function
 
@@ -258,8 +257,8 @@ class BasicGUI(GUIBase):
     sigInterruptLive = QtCore.Signal()
     sigResumeLive = QtCore.Signal()
     
-    sigSetSensor = QtCore.Signal(int, int, int, int, int, int)
-    sigResetSensor = QtCore.Signal()
+    sigSetSensor = QtCore.Signal(int, int, int, int, int, int, float)
+    sigResetSensor = QtCore.Signal(float)
     
     sigReadTemperature = QtCore.Signal()
 
@@ -466,8 +465,8 @@ class BasicGUI(GUIBase):
         self.sigVideoStop.connect(self._camera_logic.stop_loop)
         self.sigVideoSavingStart.connect(self._camera_logic.start_save_video)
         self.sigSpoolingStart.connect(self._camera_logic.start_spooling)
-        self.sigInterruptLive.connect(self._camera_logic.interrupt_live)
-        self.sigResumeLive.connect(self._camera_logic.resume_live)
+        # self.sigInterruptLive.connect(self._camera_logic.interrupt_live)
+        # self.sigResumeLive.connect(self._camera_logic.resume_live)
         self.sigSetSensor.connect(self._camera_logic.set_sensor_region)
         self.sigResetSensor.connect(self._camera_logic.reset_sensor_region)
         self.sigReadTemperature.connect(self._camera_logic.get_temperature)
@@ -504,6 +503,7 @@ class BasicGUI(GUIBase):
             self._mw.shutter_Label.setEnabled(False)
         else:
             self._mw.shutter_status_LineEdit.setText(self._camera_logic.get_shutter_state())
+
         if not self._camera_logic.has_temp:
             self._mw.cooler_status_LineEdit.setText('')
             self._mw.cooler_status_LineEdit.setEnabled(False)
@@ -649,7 +649,11 @@ class BasicGUI(GUIBase):
         
         if not self._camera_logic.has_temp:
             self._cam_sd.temp_spinBox.setEnabled(False)
-            self._cam_sd.label_3.setEnabled(False)
+            self._cam_sd.label_temperature.setEnabled(False)
+
+        if not self._camera_logic.has_gain:
+            self._cam_sd.gain_spinBox.setEnabled(False)
+            self._cam_sd.label_gain.setEnabled(False)
 
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._cam_sd.frame_transfer_CheckBox.setEnabled(False)
@@ -659,24 +663,31 @@ class BasicGUI(GUIBase):
         # write the configuration to the settings window of the GUI.
         self.cam_keep_former_settings()
 
+    @decorator_print_function
     def cam_update_settings(self):
         """ Write new settings from the gui to the logic module.
         """
-        # interrupt live display if it is on - a sleep time was added to make sure the live was stopped before the
-        # exposure time was updated. Else, it is executed too fast and is not taken into account because live seems not
-        # yet to be interrupted. This is why kinetic time indicator was not updated when live is on.
-        if self._camera_logic.live_enabled:  # camera is acquiring
-            self.sigInterruptLive.emit()
-            time.sleep(0.5)
+        # interrogate the acquisition status of the camera
+        live_enabled = self._camera_logic.live_enabled
 
+        # stop live display if it is on - a sleep delay is used to make sure the signal was properly emitted and the
+        # acquisition stopped before attempting to change the parameters
+        if live_enabled:  # camera is acquiring
+            # self.sigInterruptLive.emit()
+            self.sigVideoStop.emit()
+            sleep(1)
+
+        # update camera settings
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
-        # new_exposure = self._cam_sd.exposure_doubleSpinBox.value()
-        # self.sigSetExposure.emit(new_exposure)
         self._camera_logic.set_gain(self._cam_sd.gain_spinBox.value())
         self._camera_logic.set_temperature(int(self._cam_sd.temp_spinBox.value()))
         self._mw.temp_setpoint_LineEdit.setText(str(self._cam_sd.temp_spinBox.value()))
-        if self._camera_logic.live_enabled:
-            self.sigResumeLive.emit()
+
+        # if the camera was in live acquisition, re-launch it
+        #if self._camera_logic.live_enabled:
+        if live_enabled:
+            self.sigVideoStart.emit()
+            # self.sigResumeLive.emit()
 
     def cam_keep_former_settings(self):
         """ Keep the old settings and restores them in the gui. 
@@ -744,6 +755,7 @@ class BasicGUI(GUIBase):
             blocks.append(remainder)
         return blocks
 
+    @decorator_print_function
     def save_video_accepted(self):
         """ Callback of the ok button.
         Retrieves the information given by the user and transfers them by the signal which will start the physical
@@ -992,12 +1004,13 @@ class BasicGUI(GUIBase):
         """ Callback of start_video_Action. (start and display a continuous image from the camera, without saving)
         Handles the state of the start button and emits a signal (connected to logic) to start the live loop.
         """
-        self._mw.take_image_Action.setDisabled(True)  # snap and live are mutually exclusive
         if self._camera_logic.live_enabled:  # video already running
+            self._mw.take_image_Action.setDisabled(False)  # snap and live are mutually exclusive
             self._mw.start_video_Action.setText('Live')
             self._mw.start_video_Action.setToolTip('Start live video')
             self.sigVideoStop.emit()
         else:
+            self._mw.take_image_Action.setDisabled(True)  # snap and live are mutually exclusive
             self._mw.start_video_Action.setText('Stop Live')
             self._mw.start_video_Action.setToolTip('Stop live video')
             self.sigVideoStart.emit()
@@ -1093,6 +1106,7 @@ class BasicGUI(GUIBase):
         # self._mw.progress_label.setText('')
 
     @QtCore.Slot()
+    @decorator_print_function
     def select_sensor_region(self):
         """ Callback of set_sensor_Action.
         Enables or disables (according to initial state) the rubberband selection tool on the camera image. """
@@ -1103,23 +1117,43 @@ class BasicGUI(GUIBase):
             self._mw.set_sensor_Action.setText('Reset sensor to default size')
         else:  # area selection is initially on:
             self._mw.camera_ScanPlotWidget.toggle_selection(False)
+            self.reset_sensor_region()
             self.region_selector_enabled = False
-            #            self._camera_logic.reset_sensor_region()
-            self.sigResetSensor.emit()
             self._mw.set_sensor_Action.setText('Set sensor region')
 
-            # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
-            self.cam_update_settings()
+            # # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+            # self.cam_update_settings()
+
+    def reset_sensor_region(self):
+        """ Reset the sensor to its default size
+        """
+        exposure_time = self._cam_sd.exposure_doubleSpinBox.value()
+        live_enabled = self._camera_logic.live_enabled
+
+        # if live acquisition, stop the live in order to update the parameters
+        if live_enabled:
+            self.sigVideoStop.emit()
+            sleep(1)
+
+        # reset the sensor to its original size
+        self.sigResetSensor.emit(exposure_time)
+
+        # if the camera was in live mode, launch it again
+        if live_enabled:
+            self.sigVideoStart.emit()
+            self.imageitem.getViewBox().rbScaleBox.hide()
 
     @QtCore.Slot(QtCore.QRectF)
+    @decorator_print_function
     def mouse_area_selected(self, rect):
         """ This slot is called when the user has selected an area of the camera image using the rubberband tool.
         Allows to reduce the used area of the camera sensor.
-
         @param: (QRectF) rect: Qt object defining the corners of a rectangle selected in an image item.
         """
-        self.log.debug('selected an area')
-        self.log.debug(rect.getCoords())
+        exposure_time = self._cam_sd.exposure_doubleSpinBox.value()
+        live_enabled = self._camera_logic.live_enabled
+
+        # read the coordinates of the selected region
         hstart, vstart, hend, vend = rect.getCoords()
         hstart = round(hstart)
         vstart = round(vstart)
@@ -1130,20 +1164,28 @@ class BasicGUI(GUIBase):
         hend_ = max(hstart, hend)
         vstart_ = min(vstart, vend)
         vend_ = max(vstart, vend)
-        self.log.debug('hstart={}, hend={}, vstart={}, vend={}'.format(hstart_, hend_, vstart_, vend_))
+        self.log.info('hstart={}, hend={}, vstart={}, vend={}'.format(hstart_, hend_, vstart_, vend_))
         # inversion along the y axis:
         # it is needed to call the function set_sensor_region(hbin, vbin, hstart, hend, vstart, vend)
         # using the following arguments: set_sensor_region(hbin, vbin, start, hend, num_px_y - vend, num_px_y - vstart)
         # ('vstart' needs to be smaller than 'vend')
         num_px_y = self._camera_logic.get_max_size()[1]  # height is stored in the second return value of get_size
-        # self.log.debug(num_px_y)
 
-        self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_)
-        if self._camera_logic.live_enabled:  # if live mode is on hide rubberband selector directly
-            self.imageitem.getViewBox().rbScaleBox.hide()
+        # if live acquisition, stop the live in order to update the parameters
+        if live_enabled:
+            self.sigVideoStop.emit()
+            sleep(1)
 
-        # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
-        self.cam_update_settings()
+        # update the new sensor size
+        self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_, exposure_time)
+
+        # if the camera was in live mode, launch it
+        if live_enabled:
+            self.sigVideoStart.emit()
+            self.imageitem.getViewBox().rbScaleBox.hide() # hide rubberband selector directly
+
+        # # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+        # self.cam_update_settings()
 
 # menubar options belonging to camera image ---------------------------------------------------------------------------
     @QtCore.Slot()
