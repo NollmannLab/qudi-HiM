@@ -1,3 +1,5 @@
+NB: most of the packages are installed locally on the RAMM computer. However a backup is available on the PALM server : "Z:\Commun\Resources_RAMM_HiM_setup" 
+
 ## Cameras: 
 
 | **Model and SN**     | Hamamatsu ORCA-Flash4.0 (SN# 300385)                                                                                                             |
@@ -17,11 +19,11 @@
 | **Resources**        |                                                                         |
 
 
-| **Model and SN**     | Teledyn Kinetix (SN# A22H723042)                                                                                                                                                                             |
-| -------------------- |--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Drivers location** | Teledyne website (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                                                                                        |
-| **Software**         | The PVCAM software for test should be used and can be downloaded from the wabsite ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                        |
-| **Python**           | Same for the python software (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix). Note that PVCAM_SDK and Virtual C++ studio 14.0 are required for installation.            |
+| **Model and SN**     | Teledyn Kinetix (SN# A22H723042)                                                                                                                                                                         |
+| -------------------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Drivers location** | Teledyne website (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                                                                                    |
+| **Software**         | The PVCAM software for test should be used and can be downloaded from the website ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                    |
+| **Python**           | Same for the python software (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix). Note that PVCAM_SDK and Virtual C++ studio 14.0 are required for installation.        |
 | **Resources**        | For PVCAM python see here: https://github.com/Photometrics/PyVCAM <br/> The manual for PVCAM SDK is directly accessible on the computer : C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PVCam SDK |
 
 
