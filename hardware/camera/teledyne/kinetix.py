@@ -72,6 +72,7 @@ class KinetixCam(Base, CameraInterface):
     _has_gain = ConfigOption('gain_control', 'False')
     _support_live_acquisition = ConfigOption('support_live_acquisition', 'False')
     _camera_name = ConfigOption('camera_name', missing='error')
+    _frame_transfer = ConfigOption('frame_transfer', missing='error')
 
     # camera attributes
     _width = 0  # current width
@@ -278,6 +279,12 @@ class KinetixCam(Base, CameraInterface):
         @return: (bool): has gain ?
         """
         return self._has_gain
+
+    def support_frame_transfer(self):
+        """ Is frame transfer mode allowed?
+        @return: (bool) frame transfer possible?
+        """
+        return self._frame_transfer
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle camera acquisitions

@@ -719,6 +719,7 @@ class CameraLogic(GenericLogic):
         else:  # needed to clean up the info on statusbar when gui is opened without calling video_saving_finished
             self.sigCleanStatusbar.emit()
 
+    @decorator_print_function
     def finish_save_video(self, filenamestem, filename, fileformat, n_frames, metadata, addfile, emit_signal=True):
         """ This method finishes the saving procedure. Live mode of the camera is eventually restarted.
 
@@ -745,12 +746,6 @@ class CameraLogic(GenericLogic):
             self._security_shutter.camera_security(acquiring=False)
         self.saving = False
 
-        # restart live in case it was activated
-        if self.restart_live:
-            self.restart_live = False  # reset to default value
-            self.start_live_mode()
-            # self.start_loop()
-
         # data handling
         if image_data is not None:
             complete_path = self.create_generic_filename(filenamestem, '_Movie', filename, fileformat, addfile=addfile)
@@ -771,10 +766,17 @@ class CameraLogic(GenericLogic):
             else:
                 self.log.error(f'Your fileformat {fileformat} is currently not covered')
 
+        # send signal to GUI
         if emit_signal:
             self.sigVideoSavingFinished.emit()
         else:  # needed to clean up the info on statusbar when gui is opened without calling video_saving_finished
             self.sigCleanStatusbar.emit()
+
+        # # restart live in case it was activated
+        # if self.restart_live:
+        #     self.restart_live = False  # reset to default value
+        #     self.start_live_mode()
+        #     # self.start_loop()
 
     # methods specific for andor ixon ultra camera for video saving ----------------------------------------------------
     def start_spooling(self, filenamestem, filename, fileformat, n_frames, is_display, metadata, addfile=False):
@@ -788,11 +790,11 @@ class CameraLogic(GenericLogic):
                 fileformat, or in the header if fits format)
         @param: (bool) addfile: indicate if the images are saved in a new folder or appended to the last created
         """
-        if self.live_enabled:  # live mode is on
-            # store the state of live mode in a helper variable
-            self.restart_live = True
-            self.live_enabled = False  # live mode will stop then
-            self._hardware.stop_acquisition()
+        # if self.live_enabled:  # live mode is on
+        #     # store the state of live mode in a helper variable
+        #     self.restart_live = True
+        #     self.live_enabled = False  # live mode will stop then
+        #     self._hardware.stop_acquisition()
 
         self.saving = True
         if self._security_shutter is not None:
@@ -889,10 +891,10 @@ class CameraLogic(GenericLogic):
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=False)
 
-        # restart live in case it was activated
-        if self.restart_live:
-            self.restart_live = False  # reset to default value
-            self.start_loop()
+        # # restart live in case it was activated
+        # if self.restart_live:
+        #     self.restart_live = False  # reset to default value
+        #     self.start_loop()
 
         # send signal to the GUI to either stop the acquisition or start the following block
         self.sigSpoolingFinished.emit()
@@ -1203,11 +1205,11 @@ class CameraLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle the user interface state
 # ----------------------------------------------------------------------------------------------------------------------
-
     def start_live_mode(self):
         """ Allows to start the live mode programmatically.
         """
         if not self.live_enabled:
+            print('Launching live!')
             self.sigLiveStarted.emit()  # to inform the GUI that live mode has been started programmatically
 
     def stop_live_mode(self):
