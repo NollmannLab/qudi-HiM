@@ -107,11 +107,13 @@ class IxonUltra(Base, CameraInterface):
     _default_trigger_mode = ConfigOption('default_trigger_mode', 'INTERNAL')
     _max_frames_number_video = ConfigOption('max_N_images_movie', missing='error')
     _max_frames_number_spool = ConfigOption('max_N_images_spool', missing='error')
+    _has_temp = ConfigOption('temperature_control', 'False')
+    _has_shutter = ConfigOption('mechanical_shutter', 'False')
+    _has_gain = ConfigOption('gain_control', 'False')
+    _support_live_acquisition = ConfigOption('support_live_acquisition', 'False')
+    _camera_name = ConfigOption('camera_name', missing='error')
 
     # camera attributes
-    _has_temp = True
-    _support_live_acquisition = True
-    _has_shutter = True
     _exposure = _default_exposure
     _temperature = _default_temperature
     _cooler_on = _default_cooler_on
@@ -132,7 +134,6 @@ class IxonUltra(Base, CameraInterface):
     _full_height = 0  # for default sensor size
     # _last_acquisition_mode = None  # useful if config changes during acquisition
     _max_cooling = -80
-    _camera_name = 'iXon Ultra 888'
     _shutter = "Closed"
 
     _live = False

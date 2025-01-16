@@ -515,6 +515,12 @@ class BasicGUI(GUIBase):
             self._mw.cooler_status_LineEdit.setText(self._camera_logic.get_cooler_state())
             self._mw.temperature_LineEdit.setText(str(self._camera_logic.get_temperature()))
 
+        if not self._camera_logic.has_gain:
+            self._mw.gain_label.setEnabled(False)
+            self._mw.gain_LineEdit.setEnabled(False)
+        else:
+            self._mw.gain_LineEdit.setText(str(self._camera_logic.get_gain()))
+
         # signals
         # update the indicators when pushbutton is clicked
         self._mw.cam_status_pushButton.clicked.connect(self._camera_logic.update_camera_status)
@@ -770,8 +776,9 @@ class BasicGUI(GUIBase):
         display = self._save_sd.enable_display_CheckBox.isChecked()
         metadata = self._create_metadata_dict(n_frames)
 
-        # For the Andor camera 888, display does not work properly when the spooling mode is ON. Therefore, if display
-        # is ON, the acquisition mode is automatically switch to video.
+        # For Andor cameras, acquisition can be done in video or spool modes. For the Andor camera 888, display does not
+        # work properly when the spooling mode is ON. Therefore, if display is ON, the acquisition mode is automatically
+        # switch to video.
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             if not display and fileformat in ['.tif', '.fits']:
                 self._spooling = True
@@ -796,8 +803,6 @@ class BasicGUI(GUIBase):
 
         # Launch the first acquisition
         filename = f'movie_{"{:02d}".format(0)}'
-        print(f'path : {path} in save_video_accepted')
-        print(f'filename : {filename} in save_video_accepted')
         if self._video:
             self.sigVideoSavingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
         elif self._spooling:
@@ -1313,7 +1318,11 @@ class BasicGUI(GUIBase):
             parameters = self._camera_logic.get_non_interfaced_parameters()
             for key, value in parameters.items():
                 metadata = update_metadata(metadata, ['Camera', 'specific_parameters', key], value)
-        metadata = update_metadata(metadata, ['Acquisition', 'gain'], self._camera_logic.get_gain())
+
+        if self._camera_logic.has_gain:
+            metadata = update_metadata(metadata, ['Acquisition', 'gain'], self._camera_logic.get_gain())
+        else:
+            metadata = update_metadata(metadata, ['Acquisition', 'gain'], "Not available")
         if self._camera_logic.has_temp:
             self.sigReadTemperature.emit()  # short interruption of live mode to read temperature
             metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],

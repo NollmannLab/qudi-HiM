@@ -67,14 +67,13 @@ class KinetixCam(Base, CameraInterface):
     camera_id = ConfigOption('camera_id', 0)
     _max_frames_number_video = ConfigOption('max_N_images_movie', missing='error')
     _default_trigger_mode = ConfigOption('default_trigger_mode', 'INTERNAL')
+    _has_temp = ConfigOption('temperature_control', 'False')
+    _has_shutter = ConfigOption('mechanical_shutter', 'False')
+    _has_gain = ConfigOption('gain_control', 'False')
+    _support_live_acquisition = ConfigOption('support_live_acquisition', 'False')
+    _camera_name = ConfigOption('camera_name', missing='error')
 
     # camera attributes
-    _has_temp = False
-    _support_live_acquisition = True
-    _has_shutter = False
-    _has_gain = True
-    _has_gain_tunable = False
-
     _width = 0  # current width
     _height = 0  # current height
     _full_width = 0  # maximum width of the sensor
@@ -83,7 +82,6 @@ class KinetixCam(Base, CameraInterface):
     _trigger_mode = _default_trigger_mode
     _acquisition_mode = _default_acquisition_mode
     _gain = 0
-    _camera_name = 'Kinetix'
     n_frames = 1
 
     def __init__(self, config, **kwargs):
@@ -433,7 +431,7 @@ class KinetixCam(Base, CameraInterface):
             self.log.info(f'Loading {self.n_frames} frames ...')
             im_seq = np.zeros((self.n_frames, self._width, self._height), dtype=np.uint16)
             for frame in range(self.n_frames):
-                im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=True)
+                im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=False)
                 im_seq[frame, :, :] = im['pixel_data']
 
         elif (status == "READOUT_IN_PROGRESS") or (status == "EXPOSURE_IN_PROGRESS"):
