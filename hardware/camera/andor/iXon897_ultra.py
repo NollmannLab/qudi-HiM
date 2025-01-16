@@ -854,10 +854,9 @@ class IxonUltra(Base, CameraInterface):
     # kinetic mode however
     def _set_frame_transfer(self, transfer_mode):
         """ set the frame transfer mode
-
         @param: int tranfer_mode: 0: off, 1: on
-
-        @returns: int error code 0 = ok, -1 = error"""
+        @return: int error code 0 = ok, -1 = error
+        """
         acq_mode = self._acquisition_mode
 
         if (acq_mode == 'SINGLE_SCAN') | (acq_mode == 'FAST_KINETICS'):

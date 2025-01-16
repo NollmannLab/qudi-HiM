@@ -168,7 +168,7 @@ class CameraLogic(GenericLogic):
     sigVideoFinished = QtCore.Signal()
     sigVideoSavingFinished = QtCore.Signal()
     sigSpoolingFinished = QtCore.Signal()
-    sigExposureChanged = QtCore.Signal(float)
+    sigExposureChanged = QtCore.Signal()
     sigGainChanged = QtCore.Signal(float)
     sigTemperatureChanged = QtCore.Signal(float)
     sigProgress = QtCore.Signal(int)  # sends the number of already acquired images
@@ -192,6 +192,7 @@ class CameraLogic(GenericLogic):
     has_temp = False
     has_shutter = False
     has_gain = False
+    support_frame_transfer = False
     _fps = 20
     _exposure = 1.
     _gain = 1.
@@ -226,6 +227,7 @@ class CameraLogic(GenericLogic):
             self.temperature_setpoint = self._hardware._default_temperature
         self.has_shutter = self._hardware.has_shutter()
         self.has_gain = self._hardware.has_gain()
+        self.support_frame_transfer = self._hardware.support_frame_transfer()
 
         # update the private variables _exposure, _gain, _temperature
         self.get_exposure()
@@ -272,8 +274,8 @@ class CameraLogic(GenericLogic):
         @param: time (float): desired new exposure time in seconds
         """
         self._hardware.set_exposure(time)
-        exp = self.get_exposure()  # updates also the attribute self._exposure and self._fps
-        self.sigExposureChanged.emit(exp)
+        # self.get_exposure()  # updates also the attribute self._exposure and self._fps
+        self.sigExposureChanged.emit()
 
     def get_exposure(self):
         """ Get the exposure time of the camera and update the class attributes _exposure and _fps.
@@ -346,14 +348,8 @@ class CameraLogic(GenericLogic):
         if not self.has_temp:
             self.log.warn('Sensor temperature control not available')
         else:
-            if self.live_enabled:  # live mode on
-                self.interrupt_live()
-                
             temp = self._hardware.get_temperature()
             self._temperature = temp
-            
-            if self.live_enabled:  # restart live mode
-                self.resume_live()
             return temp
 
     def get_max_frames(self):
@@ -450,7 +446,7 @@ class CameraLogic(GenericLogic):
 
         # update the exposure time (required for certain camera since the time between two acquisition strongly depends
         # on the sensor size (e.g emCCD)
-        self._hardware.set_exposure(exp)
+        self.set_exposure(exp)
 
         # if self.live_enabled:
         #     # self.resume_live()  # restart live in case it was activated
@@ -474,7 +470,7 @@ class CameraLogic(GenericLogic):
             self.log.info('Sensor region reset to default: {} x {}'.format(height, width))
 
         # update the exposure time
-        self._hardware.set_exposure(exp)
+        self.set_exposure(exp)
 
         # if self.live_enabled:
         #     self.resume_live()
@@ -483,26 +479,16 @@ class CameraLogic(GenericLogic):
     def set_frametransfer(self, activate):
         """ Activate frametransfer mode for ixon ultra camera: the boolean activate is stored in a variable in the
         camera module. When an acquisition is started, frame transfer is set accordingly.
-
-        :params: bool activate ?
-
-        :return: None
+        @params: (bool) activate ?
         """
-        if self.get_name() == 'iXon Ultra 897':
-            if self.live_enabled:  # if live mode is on, interrupt to be able to access frame transfer setting
-                self.interrupt_live()
-            self._hardware._set_frame_transfer(int(activate))
-            if self.live_enabled:  # if live mode was interrupted, restart it
-                self.resume_live()
+        err = self._hardware._set_frame_transfer(int(activate))
+        if err:
+            self.log.warn(f'Frametransfer is disabled!')
+            self.disable_frame_transfer()
+        else:
             self.log.info(f'Frametransfer mode activated: {activate}')
             self.frame_transfer = bool(activate)
-            # we also need to update the indicator on the gui
-            exp = self.get_exposure()  # we just need to send the signal sigExposureChanged, but it must carry a float
-            # so we send exp as argument
-            self.sigExposureChanged.emit(exp)
-        # do nothing in case of cameras that do not support frame transfer
-        else:
-            pass
+            self.sigExposureChanged.emit()  # update exposure time
 
     def disable_frame_transfer(self):
         """ For specific tasks, the frame transfer mode should be disabled."""
@@ -631,15 +617,13 @@ class CameraLogic(GenericLogic):
                 for example when function is called from ipython console or in a task
                 #leave the default value True when function is called from gui
         """
-        # handle live mode variables
-        if self.live_enabled:  # live mode is on
-            self.restart_live = True  # store the state of live mode in a helper variable in order to restart it after
-            # self.live_enabled = False  # live mode will stop then
-            self.stop_live_mode()
+        # live is switched off from the GUI when an acquisition is launched. However, checked the camera is ready for an
+        # acquisition
+        status = self._hardware.get_ready_state()
+        while not status:
             status = self._hardware.get_ready_state()
-            while not status:
-                status = self._hardware.get_ready_state()
-                sleep(0.5)
+            sleep(0.25)
+            
         self.saving = True
 
         # handle IR laser shutter security

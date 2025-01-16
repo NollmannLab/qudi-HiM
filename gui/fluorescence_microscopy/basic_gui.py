@@ -650,8 +650,8 @@ class BasicGUI(GUIBase):
         self._cam_sd.accepted.connect(self.cam_update_settings)  # ok button
         self._cam_sd.rejected.connect(self.cam_keep_former_settings)  # cancel buttons
         
-        # frame transfer settings and gain limits
-        self._cam_sd.frame_transfer_CheckBox.toggled[bool].connect(self._camera_logic.set_frametransfer)
+        # # frame transfer settings and gain limits
+        # self._cam_sd.frame_transfer_CheckBox.toggled[bool].connect(self._camera_logic.set_frametransfer)
         
         if not self._camera_logic.has_temp:
             self._cam_sd.temp_spinBox.setEnabled(False)
@@ -660,11 +660,14 @@ class BasicGUI(GUIBase):
         if not self._camera_logic.has_gain:
             self._cam_sd.gain_spinBox.setEnabled(False)
             self._cam_sd.label_gain.setEnabled(False)
-
-        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            self._cam_sd.frame_transfer_CheckBox.setEnabled(False)
+        else:
             low, high = self._camera_logic.get_gain_range()
             self._cam_sd.label_gain.setText(f"Gain [{low} - {high}]")
+
+        if not self._camera_logic.support_frame_transfer:
+            self._cam_sd.frame_transfer_CheckBox.setEnabled(False)
+        else:
+            self._cam_sd.frame_transfer_CheckBox.setEnabled(True)
 
         # write the configuration to the settings window of the GUI.
         self.cam_keep_former_settings()
@@ -682,6 +685,10 @@ class BasicGUI(GUIBase):
             # self.sigInterruptLive.emit()
             self.sigVideoStop.emit()
             sleep(1)
+
+        # frame transfer
+        print(f"Frame transfer : {self._cam_sd.frame_transfer_CheckBox.isChecked()}")
+        self._camera_logic.set_frametransfer(self._cam_sd.frame_transfer_CheckBox.isChecked())
 
         # update camera settings
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
@@ -767,6 +774,17 @@ class BasicGUI(GUIBase):
         Retrieves the information given by the user and transfers them by the signal which will start the physical
         measurement.
         """
+        # if live mode is on, stop it (important to interrogate the camera parameters such as the temperature)
+        live_enabled = self._camera_logic.live_enabled
+        if live_enabled:
+            self.sigVideoStop.emit()
+            self.reset_start_video_button()
+            self._camera_logic.restart_live = True
+            sleep(1)
+        else:
+            self._camera_logic.restart_live = False
+
+        # define the parameters and metadata
         folder_name = self._save_sd.foldername_LineEdit.text()
         default_path = self._mw.save_path_LineEdit.text()
         today = datetime.today().strftime('%Y_%m_%d')
@@ -860,7 +878,7 @@ class BasicGUI(GUIBase):
                 return
 
         # Launch a worker thread that will monitor the saving procedures
-        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method)
+        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method,)
         worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
         self.threadpool.start(worker)
 
@@ -917,18 +935,17 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # updating elements on the camera dockwidget ---------------------------------------------------------------------------
-    @QtCore.Slot(float)
-    def update_exposure(self, exposure):
+    @QtCore.Slot()
+    def update_exposure(self):
         """ Updates the displayed value of exposure time in the corresponding read-only lineedit.
         Indicates the kinetic time instead of the user defined exposure time in case of andor camera.
-        @param: float exposure
         @return: None
         """
         # indicate the kinetic time instead of the exposure time for andor ixon camera
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_kinetic_time()))
         else:
-            self._mw.exposure_LineEdit.setText('{:0.5f}'.format(exposure))
+            self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_exposure()))
 
     @QtCore.Slot(float)
     def update_gain(self, gain):
@@ -1187,7 +1204,7 @@ class BasicGUI(GUIBase):
         # if the camera was in live mode, launch it
         if live_enabled:
             self.sigVideoStart.emit()
-            self.imageitem.getViewBox().rbScaleBox.hide() # hide rubberband selector directly
+            self.imageitem.getViewBox().rbScaleBox.hide()  # hide rubberband selector directly
 
         # # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
         # self.cam_update_settings()
@@ -1323,6 +1340,7 @@ class BasicGUI(GUIBase):
             metadata = update_metadata(metadata, ['Acquisition', 'gain'], self._camera_logic.get_gain())
         else:
             metadata = update_metadata(metadata, ['Acquisition', 'gain'], "Not available")
+
         if self._camera_logic.has_temp:
             self.sigReadTemperature.emit()  # short interruption of live mode to read temperature
             metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
@@ -1330,6 +1348,11 @@ class BasicGUI(GUIBase):
         else:
             metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
                                        "Not available")
+
+        if self._camera_logic.support_frame_transfer:
+            metadata = update_metadata(metadata, ['Acquisition', 'frame_transfer'], self._camera_logic.frame_transfer)
+        else:
+            metadata = update_metadata(metadata, ['Acquisition', 'frame_transfer'], "Not available")
 
         # ----filter------------------------------------------------------------------------------
         filterpos = self._filterwheel_logic.get_position()

@@ -112,6 +112,7 @@ class IxonUltra(Base, CameraInterface):
     _has_gain = ConfigOption('gain_control', 'False')
     _support_live_acquisition = ConfigOption('support_live_acquisition', 'False')
     _camera_name = ConfigOption('camera_name', missing='error')
+    _frame_transfer = ConfigOption('frame_transfer', missing='error')
 
     # camera attributes
     _exposure = _default_exposure
@@ -321,7 +322,9 @@ class IxonUltra(Base, CameraInterface):
             max frames video mode (int)
             max frames spool mode (int)
         """
-        return self._max_frames_number_video, self._max_frames_number_spool
+        max_frames_dict = {'video': self._max_frames_number_video,
+                           'spool': self._max_frames_number_spool}
+        return max_frames_dict
 
     def set_spool(self, active, method, path, buffer):
         """ Set the spool mode for the camera
@@ -352,6 +355,19 @@ class IxonUltra(Base, CameraInterface):
         @return: (bool) has shutter ?
         """
         return self._has_shutter
+
+    def has_gain(self):
+        """ Is the camera allowing gain control?
+        If this function returns true, the attribute _has_gain must also be defined in the hardware module
+        @return: (bool) has gain ?
+        """
+        return self._has_gain
+
+    def support_frame_transfer(self):
+        """ Is frame transfer mode allowed?
+        @return: (bool) frame transfer possible?
+        """
+        return self._frame_transfer
 
     # ------------------------------------------------------------------------------------------------------------------
     # Methods to handle camera acquisitions
@@ -888,28 +904,23 @@ class IxonUltra(Base, CameraInterface):
             ret = self.sdk.CoolerOFF()
         self.check_error(ret, "_set_cooler")
 
-    # # modified fb: frame transfer has no effect when acq mode is single scan or fast_kinetics. it has an effect for
-    # # kinetic mode however
-    # # modified jb : this mode was not accessible after modifications in 2024 due to artefacts in several experiments
-    # def _set_frame_transfer(self, transfer_mode):
-    #     """ set the frame transfer mode
-    #     @param: int tranfer_mode: 0: off, 1: on
-    #     @return: int error code 0 = ok, -1 = error
-    #     """
-    #     acq_mode = self._acquisition_mode
-    #
-    #     if (acq_mode == 'SINGLE_SCAN') | (acq_mode == 'FAST_KINETICS'):
-    #         self.log.debug('Setting of frame transfer mode has no effect in acquisition '
-    #                        'mode \'SINGLE_SCAN\' or \'FAST_KINETICs\'.')
-    #         return -1
-    #     else:
-    #         rtrn_val = self.dll.SetFrameTransferMode(transfer_mode)
-    #
-    #         if ERROR_DICT[rtrn_val] == 'DRV_SUCCESS':
-    #             return 0
-    #         else:
-    #             self.log.warning('Could not set frame transfer mode:{0}'.format(ERROR_DICT[rtrn_val]))
-    #             return -1
+    # modified jb : this mode was not accessible after modifications in 2024 due to artefacts in several experiments.
+    # Now it is control directly in the config file, using the "support_frame_transfer" variable.
+    def _set_frame_transfer(self, transfer_mode):
+        """ set the frame transfer mode.  If the acquisition mode is Single Scan or Fast Kinetics this call will have no
+        effect.
+        @param: (int) tranfer_mode: 0: off, 1: on
+        @return: (bool) error?
+        """
+        acq_mode = self._acquisition_mode
+        if (acq_mode == 'SINGLE_SCAN') | (acq_mode == 'FAST_KINETICS'):
+            self.log.warning('Setting of frame transfer mode has no effect in acquisition mode \'SINGLE_SCAN\' or '
+                             '\'FAST_KINETICs\'.')
+            return True
+        else:
+            ret = self.sdk.SetFrameTransferMode(transfer_mode)
+            err = self.check_error(ret, "_set_frame_transfer")
+            return err
 
     # def _set_em_gain_mode(self, mode):
     #     """ possible settings:
