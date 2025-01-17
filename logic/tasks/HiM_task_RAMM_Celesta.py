@@ -8,8 +8,6 @@ This module contains all the steps to run a Hi-M experiment for the RAMM setup.
 
 @todo: Save the injection data together with the log.
 @todo: Wash IB if experiment is aborted during acquisition
-@todo: In the parameter file - correct the imaging parameters (they are empty but an imaging sequence is indicated)
-@todo: In the parameter file - add the autofocus parameters
 
 @authors: JB.Fiche (based of F.Barho initial script)
 
@@ -34,7 +32,7 @@ Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
 -----------------------------------------------------------------------------------
 """
-import yaml
+# import yaml
 import numpy as np
 # import pandas as pd
 import os
@@ -54,10 +52,69 @@ from logic.generic_task import InterruptableTask
 from qtpy import QtCore
 from glob import glob
 from time import sleep, time
+from ruamel.yaml import YAML
 
 data_saved = True  # Global variable to follow data registration for each cycle (signal/slot communication is not
 
 
+# ======================================================================================================================
+# YAML file editor function for editing metadata
+# ======================================================================================================================
+def update_metadata(metadata, key_path, value, action="set"):
+    """
+    Generalized function to update nested metadata fields, including lists.
+    @param: metadata: The metadata structure (OrderedDict or dict).
+    @param: key_path: A list representing the nested path to the key.
+    @param: value: The value to set, append, or remove.
+    @param: action: The action to perform: "set", "append", or "remove".
+            - "set" (default): Replaces the value.
+            - "append": Adds to the list if it doesn't already exist.
+    @return: The updated metadata structure.
+    """
+    current = metadata
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if isinstance(current, list):
+            # Look for the key in a list of dictionaries or OrderedDicts
+            for item in current:
+                if key in item:
+                    current = item[key]
+                    break
+        else:
+            current = current[key]
+
+    # Perform the specified action on the target key
+    target_key = key_path[-1]
+    if isinstance(current, list):
+        # Handle lists of dictionaries
+        for item in current:
+            if target_key in item:
+                if action == "set":
+                    item[target_key] = value
+                elif action == "append":
+                    if isinstance(item[target_key], list):
+                        item[target_key].append(value)
+                break
+        else:
+            # If key not found in list, create it (for append action)
+            if action == "append":
+                current.append({target_key: [value]})
+    else:
+        # Handle direct dictionary updates
+        if action == "set":
+            current[target_key] = value
+        elif action == "append":
+            if target_key not in current:
+                current[target_key] = [value]
+            elif isinstance(current[target_key], list):
+                current[target_key].append(value)
+
+    return metadata
+
+
+# ======================================================================================================================
+# Function to upload data on server
+# ======================================================================================================================
 class UploadDataWorker(QtCore.QRunnable):
     """ Worker thread to parallelize data uploading to network during injections. Available with QRunnable - however,
     since qudi is using QThreadPool & QRunnable, I kept the same method for multi-threading (jb).
@@ -83,6 +140,9 @@ class UploadDataWorker(QtCore.QRunnable):
             print(f"An error occurred during data transfer : {e}")
 
 
+# ======================================================================================================================
+# TASK definition
+# ======================================================================================================================
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
     """ This task performs a Hi-M experiment on the RAMM setup.
 
@@ -127,12 +187,15 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # parameter for handling experiment configuration
         self.user_config_path = self.config['path_to_user_config']
+        self.metadata_template_path = self.config['path_to_metadata_template']
+        self.yaml = YAML()
         self.user_param_dict: dict = {}
 
         # parameters for logging
         self.file_handler: object = None
         self.email: str = ''
         self.log_file: str = 'HiM_task.log'
+        self.metadata: dict = {}
 
         # # parameters for bokeh - DEPRECATED -
         # self.bokeh: bool = False
@@ -152,6 +215,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.file_format: str = ""
         self.prefix: str = ""
         self.path_to_upload: list = []
+        self.single_tif_image_size: int = 19  # memory space in Mo for one single image
 
         # parameters for image acquisition
         self.default_exposure: float = 0.05
@@ -195,8 +259,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # initialize the logger for the task
         self.init_logger()
 
-        # save all the experiment parameters into a single file
-        self.save_parameters()
+        # # save all the experiment parameters into a single file
+        # self.save_parameters()
 
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
         self.celesta_laser_dict = self.ref['laser']._laser_dict
@@ -212,7 +276,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # issue was only happening for the very first acquisition.
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.timeout = self.num_laserlines * self.exposure + 0.1
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        max_frames, _ = self.ref['cam'].get_max_frames()
+        if self.num_frames <= max_frames:
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+        else:
+            self.log.error(f'The number of frames requested is higher than the maximum handled by the camera: '
+                           f'{max_frames} - the task is aborted!')
+            self.aborted = True
 
         # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line
         self.ref['laser'].lumencor_wakeup()
@@ -243,6 +313,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 logging.warning(f"Network connection is unavailable. The directory for transferring the data "
                                 f"({self.save_network_path}) cannot be created. The experiment is aborted.")
                 self.aborted = True
+
+        # load the metadata template
+        with open(self.metadata_template_path, "r", encoding='utf-8') as file:
+            self.metadata = self.yaml.load(file)
+        self.metadata = dict(self.metadata)
+        self._update_metadata_dict(self.num_frames)
 
         # initialize a counter to iterate over the number of probes to inject
         self.probe_counter = 0
@@ -333,7 +409,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     break
 
                 # create the save path for each roi
-                cur_save_path = self.get_complete_path(self.directory, item, self.probe_list[self.probe_counter - 1][1])
+                cur_save_path, cur_metadata_path = self.get_complete_path(self.directory, item,
+                                                                          self.probe_list[self.probe_counter - 1][1])
 
                 # move to roi
                 self.move_to_roi(item)
@@ -370,8 +447,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 # iterate over all planes in z
                 self.acquire_z_stack(item, reference_position, start_position)
 
-                # save data in the correct format
-                self.save_stack(cur_save_path)
+                # save data in the correct format as well as the metadata
+                self.metadata = update_metadata(self.metadata, ['Acquisition', 'roi_number'], item)
+                self.save_stack(cur_save_path, cur_metadata_path)
 
                 # stop the camera (and allow the shutter security to be removed)
                 self.ref['cam'].stop_acquisition()
@@ -628,7 +706,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.user_config_path, 'r') as stream:
-                self.user_param_dict = yaml.safe_load(stream)
+                self.user_param_dict = self.yaml.load(stream)
 
                 self.sample_name = self.user_param_dict['sample_name']
                 self.exposure = self.user_param_dict['exposure']
@@ -666,7 +744,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.injections_path, 'r') as stream:
-                documents = yaml.safe_load(stream)  # yaml.full_load when yaml package updated
+                documents = self.yaml.load(stream)  # yaml.full_load when yaml package updated
                 buffer_dict = documents['buffer']
                 self.probe_dict = documents['probes']
                 self.hybridization_list = documents['hybridization list']
@@ -681,33 +759,33 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         except Exception as e:
             self.log.warning(f'Could not load hybridization sequence for task {self.name}: {e}')
 
-    def save_parameters(self):
-        """ All the parameters are saved in the metadata folder as a yaml file.
-        """
-        param_filepath = os.path.join(self.directory, "HiM_parameters.yml")
-
-        # shape the ROIs into a dictionary
-        roi_pos = self.ref['roi'].roi_positions
-        roi_dict = {}
-        for roi in roi_pos.keys():
-            X = roi_pos[roi][0]
-            Y = roi_pos[roi][1]
-            Z = roi_pos[roi][2]
-            roi_dict[roi] = f"X={X} - Y={Y} - Z={Z}"
-
-        # save all parameters into a yaml file
-        param = {'1- global parameters': self.user_param_dict,
-                 '2- fluidic parameters': {'probes': self.probe_dict,
-                                           'hybridization list': self.hybridization_list,
-                                           'photobleaching list': self.photobleaching_list},
-                 '3- imaging parameters': {'number of laser lines': self.num_laserlines,
-                                           'celesta intensity dict': self.celesta_intensity_dict,
-                                           'FPGA sequence': self.FPGA_wavelength_channels},
-                 '4- ROIs': roi_dict
-                 }
-
-        with open(param_filepath, 'w') as outfile:
-            yaml.dump(param, outfile, default_flow_style=False)
+    # def save_parameters(self):
+    #     """ All the parameters are saved in the metadata folder as a yaml file.
+    #     """
+    #     param_filepath = os.path.join(self.directory, "HiM_parameters.yml")
+    #
+    #     # shape the ROIs into a dictionary
+    #     roi_pos = self.ref['roi'].roi_positions
+    #     roi_dict = {}
+    #     for roi in roi_pos.keys():
+    #         X = roi_pos[roi][0]
+    #         Y = roi_pos[roi][1]
+    #         Z = roi_pos[roi][2]
+    #         roi_dict[roi] = f"X={X} - Y={Y} - Z={Z}"
+    #
+    #     # save all parameters into a yaml file
+    #     param = {'1- global parameters': self.user_param_dict,
+    #              '2- fluidic parameters': {'probes': self.probe_dict,
+    #                                        'hybridization list': self.hybridization_list,
+    #                                        'photobleaching list': self.photobleaching_list},
+    #              '3- imaging parameters': {'number of laser lines': self.num_laserlines,
+    #                                        'celesta intensity dict': self.celesta_intensity_dict,
+    #                                        'FPGA sequence': self.FPGA_wavelength_channels},
+    #              '4- ROIs': roi_dict
+    #              }
+    #
+    #     with open(param_filepath, 'w') as outfile:
+    #         yaml.dump(param, outfile, default_flow_style=False)
 
     def upload_log(self):
         """ At the end of the experiment, upload the log file.
@@ -885,16 +963,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         return path
 
     def get_complete_path(self, directory, roi_number, probe_number):
-        """ Create the complete path for a file containing image data,
-        based on the directory for the experiment that was already created,
-        the ROI number and the probe number,
-        such as directory/ROI_007/RT2/scan_num_RT2_007_ROI.tif
-
-        :param: str directory
-        :param: str roi_number: identifier of the current ROI
-        :param: str probe_number: identifier of the current RT
-
-        :return: str complete path (as in the example above)
+        """ Create the complete path for a file containing image data, based on the directory for the experiment that
+        was already created, the ROI number and the probe number, such as directory/ROI_007/RT2/scan_num_RT2_007_ROI.tif
+        @param: (str) directory
+        @param: (str) roi_number: identifier of the current ROI
+        @param: (str) probe_number: identifier of the current RT
+        @return: (str) complete path (as in the example above)
+                 (str) complete path to save the metadata
         """
         path = os.path.join(directory, roi_number, probe_number)
 
@@ -905,39 +980,114 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.log.error('Error {0}'.format(e))
 
         roi_number_inv = roi_number.strip('ROI_') + '_ROI'  # for compatibility with analysis format
-
         file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}.{self.file_format}'
+        metadata_file_name = f'scan_{self.prefix}_{probe_number}_{roi_number_inv}_metadata.yaml.'
 
         complete_path = os.path.join(path, file_name)
-        return complete_path
+        metadata_path = os.path.join(path, metadata_file_name)
+        return complete_path, metadata_path
 
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
     # ------------------------------------------------------------------------------------------------------------------
+    # def get_metadata(self):
+    #     """ Get a dictionary containing the metadata in a plain text easy readable format.
+    #
+    #     :return: dict metadata
+    #     """
+    #     metadata = {'Sample name': self.sample_name, 'Exposure time (s)': float(np.round(self.exposure, 3)),
+    #                 'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
+    #                 'Number laserlines': self.num_laserlines}
+    #     for i in range(self.num_laserlines):
+    #         metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
+    #         metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
+    #
+    #     # add translation stage position
+    #     metadata['x position'] = float(self.ref['roi'].stage_position[0])
+    #     metadata['y position'] = float(self.ref['roi'].stage_position[1])
+    #
+    #     # add autofocus information :
+    #     metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
+    #     metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
+    #     metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
+    #     metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
+    #
+    #     return metadata
 
-    def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text easy readable format.
-
-        :return: dict metadata
+    def _update_metadata_dict(self, n_frames):
+        """ create a dictionary containing the metadata.
+        @param: (int) number of frames required for the acquisition
+        @return: (dict) metadata
         """
-        metadata = {'Sample name': self.sample_name, 'Exposure time (s)': float(np.round(self.exposure, 3)),
-                    'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
-                    'Number laserlines': self.num_laserlines}
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i + 1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i + 1} (%)'] = self.imaging_sequence[i][1]
+        # ----general----------------------------------------------------------------------------
+        self.metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
 
-        # add translation stage position
-        metadata['x position'] = float(self.ref['roi'].stage_position[0])
-        metadata['y position'] = float(self.ref['roi'].stage_position[1])
+        # ----camera-----------------------------------------------------------------------------
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_frames'], n_frames)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'sample_name'], self.sample_name)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'exposure_time_(s)'], self.exposure)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'kinetic_time_(s)'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'frame_transfer'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'gain'], 1)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_z_planes'], self.num_z_planes)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'distance_z_planes_(µm)'], self.z_step)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_frames_per_z_plane'],
+                                        len(self.imaging_sequence))
 
-        # add autofocus information :
-        metadata['Autofocus offset'] = float(self.ref['focus']._autofocus_logic._focus_offset)
-        metadata['Autofocus calibration precision'] = float(np.round(self.ref['focus']._precision, 2))
-        metadata['Autofocus calibration slope'] = float(np.round(self.ref['focus']._slope, 3))
-        metadata['Autofocus setpoint'] = float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3))
+        # ----autofocus---------------------------------------------------------------------------
+        self.metadata = update_metadata(self.metadata, ['Autofocus', 'offset_(µm)'],
+                                        float(self.ref['focus']._autofocus_logic._focus_offset))
+        self.metadata = update_metadata(self.metadata, ['Autofocus', 'calibration_precision_(nm)'],
+                                        float(np.round(self.ref['focus']._precision, 2)))
+        self.metadata = update_metadata(self.metadata, ['Autofocus', 'calibration_slope'],
+                                        float(np.round(self.ref['focus']._slope, 3)))
+        self.metadata = update_metadata(self.metadata, ['Autofocus', 'setpoint_(psd_reference)'],
+                                        float(np.round(self.ref['focus']._autofocus_logic._setpoint, 3)))
 
-        return metadata
+        # ----filter------------------------------------------------------------------------------
+        filterpos = self.ref['filter'].get_position()
+        filterdict = self.ref['filter'].get_filter_dict()
+        label = 'filter{}'.format(filterpos)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'filter'], filterdict[label]['name'])
+
+        # ----laser-------------------------------------------------------------------------------
+        for laser_lines in range(self.num_laserlines):
+            self.metadata = update_metadata(self.metadata, ['Acquisition', 'laser_lines'],
+                                            self.imaging_sequence[laser_lines][0], action="append")
+            self.metadata = update_metadata(self.metadata, ['Acquisition', 'laser_power_(%)'],
+                                            self.imaging_sequence[laser_lines][1], action="append")
+
+        # ----roi----------------------------------------------------------------------------------
+        for roi_name in self.ref['roi'].roi_names:
+            roi = self.ref['roi'].roi_positions[roi_name]
+            self.metadata = update_metadata(self.metadata, ['Acquisition', 'roi_list_(xyz)'],
+                                            f'{roi_name}: {str(roi)}', action="append")
+
+        # ----fluidics------------------------------------------------------------------------------
+        for step in range(len(self.hybridization_list)):
+            product = self.hybridization_list[step]['product']
+            flowrate = self.hybridization_list[step]['flowrate']
+            volume = self.hybridization_list[step]['volume']
+            incubation_time = self.hybridization_list[step]['time']
+            if incubation_time is not None:
+                step_action = f'step {step} : inject {volume}µl of {product} at {flowrate}µl/min'
+            else:
+                step_action = f'step {step} : {incubation_time}s of incubation'
+            self.metadata = update_metadata(self.metadata, ['Fluidics', 'hybridization'], step_action,
+                                            action="append")
+
+        for step in range(len(self.photobleaching_list)):
+            product = self.photobleaching_list[step]['product']
+            flowrate = self.photobleaching_list[step]['flowrate']
+            volume = self.photobleaching_list[step]['volume']
+            incubation_time = self.photobleaching_list[step]['time']
+            if incubation_time is not None:
+                step_action = f'step {step} : inject {volume}µl of {product} at {flowrate}µl/min'
+            else:
+                step_action = f'step {step} : {incubation_time}s of incubation'
+            self.metadata = update_metadata(self.metadata, ['Fluidics', 'photobleaching'], step_action,
+                                            action="append")
 
     def get_fits_metadata(self):
         """ Get a dictionary containing the metadata in a fits header compatible format.
@@ -984,15 +1134,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata[f'laser_intensity_{i + 1}'] = self.imaging_sequence[i][1]
         return metadata
 
-    def save_metadata_file(self, metadata, path):
-        """ Save a txt file containing the metadata dictionary.
-
-        :param dict metadata: dictionary containing the metadata
-        :param str path: pathname
+    def save_metadata_txt_file(self, metadata_path):
+        """ Save a txt file containing the metadata.
+        @param: metadata_path (str): path to save the metadata
         """
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(metadata, outfile, default_flow_style=False)
-        self.log.info('Saved metadata to {}'.format(path))
+        with open(metadata_path, 'w') as file:
+            self.yaml.dump(self.metadata, file)
+        self.log.info(f'Saved metadata to {metadata_path}')
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for the injections
@@ -1262,32 +1410,27 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # move the piezo back to its initial position
         self.ref['focus'].go_to_position(reference_position, direct=True)
 
-    def save_stack(self, cur_save_path):
+    def save_stack(self, data_path, metadata_path):
         """ Save the stack in the correct format.
-
-        @param cur_save_path: (str) ROI path where to the save the stack.
+        @param data_path: (str) ROI path where to the save the stack.
+        @param metadata_path: (str) path where to save the metadata file
         """
         image_data = self.ref['cam'].get_acquired_data()
 
         if self.file_format == 'fits':
             metadata = self.get_fits_metadata()
-            self.ref['cam'].save_to_fits(cur_save_path, image_data, metadata)
+            self.ref['cam'].save_to_fits(data_path, image_data, metadata)
         elif self.file_format == 'npy':
-            self.ref['cam'].save_to_npy(cur_save_path, image_data)
-            metadata = self.get_metadata()
-            file_path = cur_save_path.replace('npy', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
-            self.log.info(f'Data saved as {file_path}')
+            self.ref['cam'].save_to_npy(data_path, image_data)
+            self.save_metadata_txt_file(metadata_path)
+            self.log.info(f'Data saved as {data_path}')
         elif self.file_format == 'hdf5':
             metadata = self.get_hdf5_metadata()
-            self.ref['cam'].save_to_hdf5(cur_save_path, image_data, metadata)
+            self.ref['cam'].save_to_hdf5(data_path, image_data, metadata)
         else:  # use tiff as default format
-            # self.ref['cam'].save_to_tiff(self.num_frames, cur_save_path, image_data)
-            self.ref['cam'].save_to_tiff_separate(self.num_laserlines, cur_save_path, image_data)
-            metadata = self.get_metadata()
-            file_path = cur_save_path.replace('tif', 'yaml', 1)
-            self.save_metadata_file(metadata, file_path)
-            self.log.info(f'Data saved as {file_path}')
+            self.ref['cam'].save_to_tiff_separate(self.num_laserlines, data_path, image_data)
+            self.save_metadata_txt_file(metadata_path)
+            self.log.info(f'Data saved as {data_path}')
 
     # ------------------------------------------------------------------------------------------------------------------
     # helper functions for data online transferring
