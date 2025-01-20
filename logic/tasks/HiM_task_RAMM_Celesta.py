@@ -37,6 +37,7 @@ import numpy as np
 # import pandas as pd
 import os
 import shutil
+import win32file
 import logging
 import platform
 import subprocess
@@ -215,7 +216,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.file_format: str = ""
         self.prefix: str = ""
         self.path_to_upload: list = []
-        self.single_tif_image_size: int = 19  # memory space in Mo for one single image
+        self.image_weight: dict = {'hdf5': 13.71,
+                                   'tif': 19,
+                                   'npy': 20}
 
         # parameters for image acquisition
         self.default_exposure: float = 0.05
@@ -265,6 +268,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & FPGA)
         self.celesta_laser_dict = self.ref['laser']._laser_dict
         self.format_imaging_sequence()
+
+        # check if there is enough space on the disk to save the data
+        if not self.check_storage_space():
+            self.aborted = True
 
         # log file paths
         # Previous version was set for bokeh and required access to a directory on a distant server. Log file is now
@@ -824,6 +831,50 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                     self.log.err(f'Email to {self.email} could not be sent due to a reception error : {err}.')
                 except Exception as err:
                     self.log.err(f'Email to {self.email} could not be sent due to the following error : {err}.')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # storage space
+    # ------------------------------------------------------------------------------------------------------------------
+    def check_storage_space(self):
+        """ Compute the free space on the disk and check if there is enough space for saving the data.
+        @return: (float) free space available on the disk
+        """
+        # compute the total number of images that will be acquired
+        total_images = self.num_laserlines * self.num_z_planes * len(self.roi_names) * len(self.probe_list)
+        print(self.probe_list)
+
+        # based on the saving path, look for the disk where the data will be saved and compute the free space
+        abs_path = os.path.abspath(self.save_path)
+        while True:
+            parent = os.path.dirname(abs_path)
+            if parent == abs_path:  # If we reach the root
+                break
+            abs_path = parent
+
+        # based on the image type, return the weight for a single image
+        if self.file_format in self.image_weight:
+            im_weight = self.image_weight[self.file_format]
+        else:
+            self.log.error(f'In check_storage_space, the file {self.file_format} is not referenced!')
+            im_weight = None
+
+        # 370Go are always used on the disk. They are not taken into account by the function.
+        _, total, free = np.divide(win32file.GetDiskFreeSpaceEx(abs_path), 1e9) - 370
+        free = np.around(free, decimals=2)
+
+        # check if there is enough space on the disk
+        required_space = (total_images * im_weight) * 1.1 / 1000
+        required_space = np.around(required_space, decimals=2)
+        if free < required_space:
+            free_space = False
+            self.log.error(f"There is not enough free space ({free}Go) on the disk for this experiment "
+                           f"({required_space}Go) - task is aborted!")
+        else:
+            free_space = True
+            self.log.warn(f"There is {free}Go free space on the disk. {required_space}Go are required for this "
+                          f"experiment ")
+
+        return free_space
 
     # ------------------------------------------------------------------------------------------------------------------
     # methods for initializing piezo & laser

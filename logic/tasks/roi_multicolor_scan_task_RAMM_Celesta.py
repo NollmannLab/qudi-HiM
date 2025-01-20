@@ -33,7 +33,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 import logging
 import numpy as np
 import os
-import shutil
+import win32file
 # import yaml
 from time import sleep, time
 from datetime import datetime
@@ -834,10 +834,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             if parent == abs_path:  # If we reach the root
                 break
             abs_path = parent
-        total, used, free = np.divide(shutil.disk_usage(abs_path), 1e9)
+
+        # 370Go are always used on the disk. They are not taken into account by the function.
+        _, total, free = np.divide(win32file.GetDiskFreeSpaceEx(abs_path), 1e9) - 370
+        free = np.around(free, decimals=2)
 
         # check if there is enough space on the disk
-        required_space = (total_images * self.full_tif_image_weight) * 1.15 / 1000
+        required_space = (total_images * self.full_tif_image_weight) * 1.1 / 1000
         if free < required_space:
             free_space = False
             self.log.error(f"There is not enough free space ({free}Go) on the disk for this experiment "
