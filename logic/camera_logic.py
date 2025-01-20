@@ -41,6 +41,7 @@ from logic.generic_logic import GenericLogic
 from qtpy import QtCore
 from ome_types.model import OME, Image, Pixels, Channel, Plane
 from ruamel.yaml import YAML
+from threading import Lock
 
 verbose = True
 
@@ -64,7 +65,7 @@ def decorator_print_function(function):
 
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread """
-    sigFinished = QtCore.Signal()
+    sigFinished = QtCore.Signal(object)
     sigStepFinished = QtCore.Signal(str, str, str, int, bool, dict, bool, bool)
     sigSpoolingStepFinished = QtCore.Signal(str, str, str, bool, dict)
 
@@ -74,16 +75,25 @@ class LiveImageWorker(QtCore.QRunnable):
 
     The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators
     """
-    def __init__(self, time_constant):
+    def __init__(self, time_constant, worker_id, termination_flags, finished_conditions):
         super(LiveImageWorker, self).__init__()
         self.signals = WorkerSignals()
         self.time_constant = time_constant
+        self.worker_id = worker_id
+        self.termination_flags = termination_flags
+        self.finished_condition = finished_conditions
 
     @QtCore.Slot()
     def run(self):
         """ """
-        sleep(self.time_constant)
-        self.signals.sigFinished.emit()
+        try:
+            while not self.termination_flags.get(self.worker_id, False):
+                sleep(self.time_constant)  # Simulate work
+                self.signals.sigFinished.emit(self.worker_id)
+                break  # Exit after one iteration for live_worker
+        finally:
+            # Notify the stop condition that the worker has finished
+            self.finished_condition.wakeAll()
 
 
 class SaveProgressWorker(QtCore.QRunnable):
@@ -180,6 +190,12 @@ class CameraLogic(GenericLogic):
     sigDisableCameraActions = QtCore.Signal()
     sigEnableCameraActions = QtCore.Signal()
     sigDisableFrameTransfer = QtCore.Signal()
+
+    # worker lock to avoid race conditions
+    worker_locks = {}
+    termination_flags = {}  # Track termination states
+    stop_condition = QtCore.QWaitCondition()  # For waiting until the worker finishes
+    stop_mutex = QtCore.QMutex()  # Mutex for synchronization
 
     # attributes
     cam_type = None  # indicated the type of camera used
@@ -518,45 +534,160 @@ class CameraLogic(GenericLogic):
         self._hardware.stop_acquisition()  # this in needed to reset the acquisition mode to default
         self.sigAcquisitionFinished.emit()
 
+# Methods invoked to handle workers ------------------------------------------------------------------------------------
+    def worker_finished(self, worker_id):
+        """Handle worker completion."""
+        if worker_id in self.worker_locks:
+            lock = self.worker_locks[worker_id]
+            if lock.tryLock():  # Ensure the lock is actually locked
+                lock.unlock()
+            else:
+                print(f"Worker {worker_id} finished, but lock was not active.")
+        else:
+            print(f"Warning: Worker lock for {worker_id} not found.")
+
 # Methods invoked by live button on GUI --------------------------------------------------------------------------------
-    def start_loop(self):
+
+#     def start_loop(self):
+#         """ Start the live display mode.
+#         """
+#         self.live_enabled = True
+#         if self._security_shutter is not None:
+#             self._security_shutter.camera_security(acquiring=True)
+#
+#         worker = LiveImageWorker(1 / self._fps)
+#         worker.signals.sigFinished.connect(self.loop)
+#         self.threadpool.start(worker)
+#
+#         if self._hardware.support_live_acquisition():
+#             self._hardware.start_live_acquisition()
+#         else:
+#             self._hardware.start_single_acquisition()
+
+    # def loop(self):
+    #     """ Execute one step in the live display loop.
+    #     """
+    #     if self.live_enabled:
+    #         if self.cam_type == "KinetixCam":
+    #             self._last_image, _ = self._hardware.get_most_recent_image(copy=False)
+    #         else:
+    #             self._last_image = self._hardware.get_acquired_data()
+    #         self.sigUpdateDisplay.emit()
+    #
+    #         worker = LiveImageWorker(1 / self._fps)
+    #         worker.signals.sigFinished.connect(self.loop)
+    #         self.threadpool.start(worker)
+    #
+    #         # In case live mode does not exist, launch a new snap acquisition
+    #         if not self._hardware.support_live_acquisition():
+    #             self._hardware.start_single_acquisition()  # the hardware has to check it's not busy
+
+    def start_loop(self, worker_id="live_worker"):
         """ Start the live display mode.
         """
+        # Ensure a lock and a termination flag exist for this worker - note that the worker associated to live imaging
+        # will always have an id called live_worker
+        if worker_id not in self.worker_locks:
+            self.worker_locks[worker_id] = QtCore.QMutex()
+        self.termination_flags[worker_id] = False  # initialize the termination flag
+
+        # Indicate that a live acquisition is starting
         self.live_enabled = True
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
 
-        worker = LiveImageWorker(1 / self._fps)
-        worker.signals.sigFinished.connect(self.loop)
+        # start the worker - try to disconnect any previous workers
+        worker = LiveImageWorker(1 / self._fps, worker_id, self.termination_flags, self.stop_condition)
+        try:
+            worker.signals.sigFinished.disconnect(self.worker_finished)
+            worker.signals.sigFinished.disconnect(lambda: self.loop(worker_id))
+        except TypeError:
+            pass  # Ignore if no connections exist
+
+        worker.signals.sigFinished.connect(self.worker_finished)
+        worker.signals.sigFinished.connect(lambda: self.loop(worker_id))
         self.threadpool.start(worker)
 
+        # start the camera
         if self._hardware.support_live_acquisition():
             self._hardware.start_live_acquisition()
         else:
             self._hardware.start_single_acquisition()
 
-    def loop(self):
+    def loop(self, worker_id="live_worker"):
         """ Execute one step in the live display loop.
         """
-        if self.live_enabled:
+        # Ensure a lock exists for this worker
+        if worker_id not in self.worker_locks:
+            self.worker_locks[worker_id] = QtCore.QMutex()
+        if worker_id not in self.termination_flags:
+            self.termination_flags[worker_id] = False  # Add the worker to termination flags
+
+        worker_lock = self.worker_locks[worker_id]
+
+        # Skip if live mode is disabled or a worker is already running
+        if not self.live_enabled or not worker_lock.tryLock():
+            return
+
+        try:
+            # Get the latest image acquired by the camera
             if self.cam_type == "KinetixCam":
                 self._last_image, _ = self._hardware.get_most_recent_image(copy=False)
             else:
                 self._last_image = self._hardware.get_acquired_data()
+
             self.sigUpdateDisplay.emit()
 
-            worker = LiveImageWorker(1 / self._fps)
-            worker.signals.sigFinished.connect(self.loop)
+            # Launch a worker - Disconnect any existing connections to avoid duplicate handlers
+            worker = LiveImageWorker(1 / self._fps, worker_id, self.termination_flags, self.stop_condition)
+            try:
+                worker.signals.sigFinished.disconnect(self.worker_finished)
+                worker.signals.sigFinished.disconnect(lambda: self.loop(worker_id))
+            except TypeError:
+                pass  # Ignore if there are no connections
+
+            worker.signals.sigFinished.connect(self.worker_finished)
+            worker.signals.sigFinished.connect(lambda: self.loop(worker_id))  # Continue the loop
             self.threadpool.start(worker)
 
-            # In case live mode does not exist, launch a new snap acquisition
+            # Launch a new snap acquisition if live acquisition isn't supported
             if not self._hardware.support_live_acquisition():
-                self._hardware.start_single_acquisition()  # the hardware has to check it's not busy
+                self._hardware.start_single_acquisition()
 
-    def stop_loop(self):
+        except Exception as e:
+            print(f"Error in loop: {e}")
+            worker_lock.release()  # Ensure lock is released on error
+
+        finally:
+            worker_lock.unlock()  # Ensure lock is released even on errors
+
+    def stop_loop(self, worker_id="live_worker"):
         """ Stop the live display loop.
         """
+        # Turn live_enabled to False and stop the loop
         self.live_enabled = False
+
+        # check if the worker id was in the termination flag list
+        if worker_id not in self.termination_flags:
+            print(f"No active worker found for ID: {worker_id}")
+            return
+
+        # Signal the worker to stop
+        self.termination_flags[worker_id] = True
+
+        # Acquire the mutex and wait until the worker finishes
+        self.stop_mutex.lock()
+        print(f"Waiting for worker {worker_id} to finish...")
+        self.stop_condition.wait(self.stop_mutex)
+        self.stop_mutex.unlock()
+
+        # Clean up worker-related resources
+        if worker_id in self.worker_locks:
+            lock = self.worker_locks[worker_id]
+            if lock.tryLock():  # Ensure no thread is actively using the lock
+                lock.unlock()
+            del self.worker_locks[worker_id]
+            print(f"Lock for worker {worker_id} released.")
 
         # in the case of the Kinetix camera, no copy of the images is performed during live acquisition (to avoid
         # lagging). However, a copy is performed before stopping the camera and removing all the images from the buffer.
