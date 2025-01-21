@@ -190,7 +190,7 @@ class IxonUltra(Base, CameraInterface):
         """ Deinitialisation performed during deactivation of the module.
         """
         self.stop_acquisition()
-        self._set_shutter(1, 2, 100, 100, 2)
+        # self._set_shutter(1, 2, 100, 100, 2)  # Leave the shutter ON
         self._set_cooler(False)
         self._shut_down()
 
