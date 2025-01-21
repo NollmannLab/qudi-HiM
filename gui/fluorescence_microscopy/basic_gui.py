@@ -287,6 +287,7 @@ class BasicGUI(GUIBase):
     _video = False
     _spooling = False
     _aborted = False
+    _restart_live = False
 
     # flags for rotation settings
     rotation_cw = False
@@ -687,8 +688,8 @@ class BasicGUI(GUIBase):
             sleep(1)
 
         # frame transfer
-        print(f"Frame transfer : {self._cam_sd.frame_transfer_CheckBox.isChecked()}")
-        self._camera_logic.set_frametransfer(self._cam_sd.frame_transfer_CheckBox.isChecked())
+        if self._camera_logic.support_frame_transfer:
+            self._camera_logic.set_frametransfer(self._cam_sd.frame_transfer_CheckBox.isChecked())
 
         # update camera settings
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
@@ -779,10 +780,10 @@ class BasicGUI(GUIBase):
         if live_enabled:
             self.sigVideoStop.emit()
             self.reset_start_video_button()
-            self._camera_logic.restart_live = True
+            self._restart_live = True
             sleep(1)
         else:
-            self._camera_logic.restart_live = False
+            self._restart_live = False
 
         # define the parameters and metadata
         folder_name = self._save_sd.foldername_LineEdit.text()
@@ -833,7 +834,6 @@ class BasicGUI(GUIBase):
         worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
         self.threadpool.start(worker)
 
-    @decorator_print_function
     def monitor_acquisition(self, path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method):
         """ This method is used to monitor a current acquisition (block by block).
         @param path: (str) path to the folder where the data are saved
@@ -875,6 +875,8 @@ class BasicGUI(GUIBase):
                 self.enable_camera_toolbuttons()
                 self._mw.save_video_Action.setChecked(False)
                 self._mw.progress_label.setText('')
+                if self._restart_live:
+                    self.start_video_clicked()
                 return
 
         # Launch a worker thread that will monitor the saving procedures
@@ -1112,7 +1114,6 @@ class BasicGUI(GUIBase):
             self._video = True
         self.save_video_accepted()
 
-    @decorator_print_function
     @QtCore.Slot()
     def video_saving_finished(self):
         """ Callback of signal sigVideoSavingFinished or sigSpoolingFinished sent from logic.
@@ -1128,7 +1129,6 @@ class BasicGUI(GUIBase):
         # self._mw.progress_label.setText('')
 
     @QtCore.Slot()
-    @decorator_print_function
     def select_sensor_region(self):
         """ Callback of set_sensor_Action.
         Enables or disables (according to initial state) the rubberband selection tool on the camera image. """

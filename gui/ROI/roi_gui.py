@@ -379,9 +379,11 @@ class RoiGUI(GUIBase):
         # Initialize ROI width
         self._update_roi_width(self._roi_logic.roi_width)
 
-        # add the stage marker
+        # add the stage marker and update the ROI width according to the value indicated in the parameters
         stage_pos = self._roi_logic.stage_position[:2]
         self._add_stage_marker(stage_pos)
+        self._update_roi_width(self.stagemarker_width)
+        self._roi_logic.set_roi_width(self.stagemarker_width)
 
         # Distance Measurement:
         # Introducing a SignalProxy will limit the rate of signals that get fired.

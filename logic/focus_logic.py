@@ -132,6 +132,7 @@ class FocusLogic(GenericLogic):
     sigPositionChanged = QtCore.Signal(float)
     sigPiezoInitFinished = QtCore.Signal()
     sigUpdateTimetrace = QtCore.Signal(float)
+    sigResetCalibration = QtCore.Signal()
     sigPlotCalibration = QtCore.Signal(object, object, object, float, float)
     sigOffsetCalibration = QtCore.Signal(float)
     sigSetpointDefined = QtCore.Signal(float)
@@ -498,6 +499,7 @@ class FocusLogic(GenericLogic):
         # calibration is aborted. - For all other setup, nothing will happen.
         if self._shutter is not None:
             if self._shutter.open_shutter():
+                self.sigResetCalibration.emit()
                 return
 
         # Compute the piezo ramp parameters
