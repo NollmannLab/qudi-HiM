@@ -30,16 +30,15 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-from datetime import datetime
+import copy
+import pyqtgraph as pg
 import numpy as np
+from datetime import datetime
 from time import sleep
-
 from qtpy import QtCore
 # from qtpy import QtGui
 from qtpy import QtWidgets
 from qtpy import uic
-import pyqtgraph as pg
-
 from gui.guibase import GUIBase
 from core.connector import Connector
 from core.configoption import ConfigOption
@@ -1320,7 +1319,8 @@ class BasicGUI(GUIBase):
         @param: (int) number of frames required for the acquisition
         @return: (dict) metadata
         """
-        metadata = self.metadata_template
+        metadata = copy.deepcopy(self.metadata_template)
+
         # ----general----------------------------------------------------------------------------
         metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
 
