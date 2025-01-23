@@ -798,7 +798,7 @@ class BasicGUI(GUIBase):
         # work properly when the spooling mode is ON. Therefore, if display is ON, the acquisition mode is automatically
         # switch to video.
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            if not display and fileformat in ['.tif', '.fits']:
+            if not display and fileformat in ['.tif', '.fits', 'ome-tif']:
                 self._spooling = True
                 self._video = False
             else:
@@ -988,6 +988,10 @@ class BasicGUI(GUIBase):
         Get the image data from the logic and show it in the image item.
         """
         image_data = self._camera_logic.get_last_image()
+
+        # Convert to a safe type for processing (to avoid weird bugs with the display)
+        image_data = image_data.astype(np.float32)
+
         # handle the rotation that occurs due to the image formatting conventions
         # (see also https://github.com/pyqtgraph/pyqtgraph/issues/315)
         # this could be improved by another method ?! though reversing the y axis did not work.
