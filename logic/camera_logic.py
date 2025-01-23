@@ -87,10 +87,9 @@ class LiveImageWorker(QtCore.QRunnable):
     def run(self):
         """ """
         try:
-            while not self.termination_flags.get(self.worker_id, False):
+            if not self.termination_flags.get(self.worker_id, False):
                 sleep(self.time_constant)  # Simulate work
                 self.signals.sigFinished.emit(self.worker_id)
-                break  # Exit after one iteration for live_worker
         finally:
             # Notify the stop condition that the worker has finished
             self.finished_condition.wakeAll()
@@ -536,7 +535,8 @@ class CameraLogic(GenericLogic):
 
 # Methods invoked to handle workers ------------------------------------------------------------------------------------
     def worker_finished(self, worker_id):
-        """Handle worker completion."""
+        """Handle worker completion.
+        """
         if worker_id in self.worker_locks:
             lock = self.worker_locks[worker_id]
             if lock.tryLock():  # Ensure the lock is actually locked
@@ -544,7 +544,36 @@ class CameraLogic(GenericLogic):
             else:
                 print(f"Worker {worker_id} finished, but lock was not active.")
         else:
-            print(f"Warning: Worker lock for {worker_id} not found.")
+            print(f"Worker lock for {worker_id} not found.")
+
+    def wait_for_worker_lock(self, worker_id):
+        """ Based on the worker id, make sure that all workers with the same id are properly terminated.
+            @param worker_id: (obj) id of the worker
+        """
+        # check if the worker id was in the termination flag list
+        if worker_id not in self.termination_flags:
+            print(f"No active worker found for ID: {worker_id}")
+            return
+
+        # Signal the worker to stop
+        self.termination_flags[worker_id] = True
+
+        # Acquire the mutex and wait until the worker finishes
+        self.stop_mutex.lock()
+        print(f"Waiting for worker {worker_id} to finish...")
+        if not self.stop_condition.wait(self.stop_mutex, 500):
+            print(f"Timeout (0.5) reached while waiting for worker {worker_id} to finish.")
+        self.stop_mutex.unlock()
+
+        # Clean up worker-related resources - note it is possible in that case that the lock is realeased even before
+        # the worker finishes its task.
+        if worker_id in self.worker_locks:
+            lock = self.worker_locks[worker_id]
+            if lock.tryLock():  # Ensure no thread is actively using the lock
+                lock.unlock()
+            del self.worker_locks[worker_id]
+            del self.termination_flags[worker_id]
+            print(f"Lock for worker {worker_id} released in stop_loop.")
 
 # Methods invoked by live button on GUI --------------------------------------------------------------------------------
 
@@ -585,6 +614,11 @@ class CameraLogic(GenericLogic):
     def start_loop(self, worker_id="live_worker"):
         """ Start the live display mode.
         """
+        # For safety - make sure there is no multiple live being launched at the same time
+        if self.live_enabled:
+            self.log.warn('Live display is already running - skip start_loop in camera_logic!')
+            return
+
         # Ensure a lock and a termination flag exist for this worker - note that the worker associated to live imaging
         # will always have an id called live_worker
         if worker_id not in self.worker_locks:
@@ -596,8 +630,10 @@ class CameraLogic(GenericLogic):
         if self._security_shutter is not None:
             self._security_shutter.camera_security(acquiring=True)
 
-        # start the worker - try to disconnect any previous workers
+        # start the worker
         worker = LiveImageWorker(1 / self._fps, worker_id, self.termination_flags, self.stop_condition)
+
+        # safely disconnect any previous workers
         try:
             worker.signals.sigFinished.disconnect(self.worker_finished)
             worker.signals.sigFinished.disconnect(lambda: self.loop(worker_id))
@@ -617,16 +653,19 @@ class CameraLogic(GenericLogic):
     def loop(self, worker_id="live_worker"):
         """ Execute one step in the live display loop.
         """
-        # Ensure a lock exists for this worker
-        if worker_id not in self.worker_locks:
-            self.worker_locks[worker_id] = QtCore.QMutex()
-        if worker_id not in self.termination_flags:
-            self.termination_flags[worker_id] = False  # Add the worker to termination flags
+        # Skip if live mode is disabled
+        if not self.live_enabled:
+            return
 
+        # Ensure a lock exists for this worker - skip if it is not the case
+        if (worker_id not in self.worker_locks) or (worker_id not in self.termination_flags):
+            print(f"Warning: The worker {worker_id} is no longer active!")
+            return
         worker_lock = self.worker_locks[worker_id]
 
-        # Skip if live mode is disabled or a worker is already running
-        if not self.live_enabled or not worker_lock.tryLock():
+        # Skip if a worker is already running
+        if not worker_lock.tryLock():
+            print(f"Warning: A worker {worker_id} is already running!")
             return
 
         try:
@@ -664,30 +703,16 @@ class CameraLogic(GenericLogic):
     def stop_loop(self, worker_id="live_worker"):
         """ Stop the live display loop.
         """
+        # Safety - avoid trying finishing live loop multiple times
+        if not self.live_enabled:
+            print("Live display is already stopped.")
+            return
+
         # Turn live_enabled to False and stop the loop
         self.live_enabled = False
 
-        # check if the worker id was in the termination flag list
-        if worker_id not in self.termination_flags:
-            print(f"No active worker found for ID: {worker_id}")
-            return
-
-        # Signal the worker to stop
-        self.termination_flags[worker_id] = True
-
-        # Acquire the mutex and wait until the worker finishes
-        self.stop_mutex.lock()
-        print(f"Waiting for worker {worker_id} to finish...")
-        self.stop_condition.wait(self.stop_mutex)
-        self.stop_mutex.unlock()
-
-        # Clean up worker-related resources
-        if worker_id in self.worker_locks:
-            lock = self.worker_locks[worker_id]
-            if lock.tryLock():  # Ensure no thread is actively using the lock
-                lock.unlock()
-            del self.worker_locks[worker_id]
-            print(f"Lock for worker {worker_id} released.")
+        # Wait workers and terminate them
+        self.wait_for_worker_lock(worker_id)
 
         # in the case of the Kinetix camera, no copy of the images is performed during live acquisition (to avoid
         # lagging). However, a copy is performed before stopping the camera and removing all the images from the buffer.
