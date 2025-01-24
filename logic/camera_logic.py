@@ -917,7 +917,7 @@ class CameraLogic(GenericLogic):
             elif fileformat == '.hdf5':
                 hdf5_metadata = {'exposure': self._exposure, 'n_channels': 1}
                 self.save_to_hdf5(complete_path, image_data, hdf5_metadata)
-            elif fileformat == '.ome-tif':
+            elif fileformat == '.ome.tif':
                 self.save_to_ome_tif(complete_path, image_data, metadata)
             else:
                 self.log.error(f'Your fileformat {fileformat} is currently not covered')
