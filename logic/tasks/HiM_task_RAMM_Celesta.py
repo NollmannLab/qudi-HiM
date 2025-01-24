@@ -1531,20 +1531,19 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # check the network is available
         if self.check_local_network():
 
-            # look for all the tif/npy/yml files in the folder
+            # look for all the tif/npy/yml/hdf5 files in the folder
             path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
-            # print(f'Number of npy files found : {len(path_to_upload_npy)}')
             path_to_upload_yml = glob(self.directory + '/**/*.yml', recursive=True)
-            # print(f'Number of yaml files found : {len(path_to_upload_yml)}')
             path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
-            # print(f'Number of tif files found : {len(path_to_upload_tif)}')
-            path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif
+            path_to_upload_hdf5 = glob(self.directory + '/**/*.hdf5', recursive=True)
+            path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif + path_to_upload_hdf5
 
-            # look for all the tif/npy/yml files in the destination folder
+            # look for all the tif/npy/yml/hdf5 files in the destination folder
             uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
             uploaded_path_yml = glob(self.network_directory + '/**/*.yml', recursive=True)
             uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
-            uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif
+            uploaded_path_hdf5 = glob(self.network_directory + '/**/*.hdf5', recursive=True)
+            uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif + uploaded_path_hdf5
             uploaded_files = []
             for n, path in enumerate(uploaded_path):
                 uploaded_files.append(os.path.basename(path))
@@ -1561,19 +1560,23 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             idx_tif = []
             idx_npy = []
             idx_yaml = []
+            idx_hdf5 = []
 
             for n, path in enumerate(selected_path_to_upload):
                 if path.__contains__('.npy'):
                     idx_npy.append(n)
                 elif path.__contains__('.yaml'):
                     idx_yaml.append(n)
+                elif path.__contains__('.hdf5'):
+                    idx_hdf5.append(n)
                 else:
                     idx_tif.append(n)
 
             # build the final list of file to transfer
             path_to_upload_sorted = ([selected_path_to_upload[i] for i in idx_npy]
                                      + [selected_path_to_upload[i] for i in idx_yaml]
-                                     + [selected_path_to_upload[i] for i in idx_tif])
+                                     + [selected_path_to_upload[i] for i in idx_tif]
+                                     + [selected_path_to_upload[i] for i in idx_hdf5])
         else:
             path_to_upload_sorted = []
 
