@@ -798,7 +798,7 @@ class BasicGUI(GUIBase):
         # work properly when the spooling mode is ON. Therefore, if display is ON, the acquisition mode is automatically
         # switch to video.
         if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
-            if not display and fileformat in ['.tif', '.fits', 'ome-tif']:
+            if not display and fileformat in ['.tif', '.fits']:
                 self._spooling = True
                 self._video = False
             else:
