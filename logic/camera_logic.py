@@ -436,6 +436,14 @@ class CameraLogic(GenericLogic):
 # Methods to set advanced configurations of the camera
 # ----------------------------------------------------------------------------------------------------------------------
 
+    def get_sensor_region(self):
+        """
+        Get the size of the image (after setting an ROI for example)
+        @return: (tuple) height and width of the image
+        """
+        sensor_size = self._hardware.get_image_size()
+        return sensor_size
+
     @decorator_print_function
     def set_sensor_region(self, hbin, vbin, hstart, hend, vstart, vend, exp):
         """ Defines a limited region on the sensor surface, hence accelerating the acquisition.
@@ -917,7 +925,7 @@ class CameraLogic(GenericLogic):
             elif fileformat == '.hdf5':
                 hdf5_metadata = {'exposure': self._exposure, 'n_channels': 1}
                 self.save_to_hdf5(complete_path, image_data, hdf5_metadata)
-            elif fileformat == '.ome.tif':
+            elif fileformat == '.ome-tif':
                 self.save_to_ome_tif(complete_path, image_data, metadata)
             else:
                 self.log.error(f'Your fileformat {fileformat} is currently not covered')

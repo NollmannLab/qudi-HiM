@@ -35,6 +35,7 @@ import pyqtgraph as pg
 import numpy as np
 from datetime import datetime
 from time import sleep
+from math import prod
 from qtpy import QtCore
 # from qtpy import QtGui
 from qtpy import QtWidgets
@@ -750,15 +751,28 @@ class BasicGUI(GUIBase):
         self.set_default_values()
 
     @staticmethod
-    def calculate_blocks(N, b):
+    def calculate_blocks(N, b, ratio):
         """
-        Calculate the number of blocks and images in each block for acquiring N images.
+        Calculate the number of blocks and images in each block for acquiring N images. If an ROi was defined (meaning
+        the sensor region is now smaller) the maximum number of frames allowed per block is recalculated taking into
+        account the new size.
         @arguments:
             N (int): Total number of images to acquire.
             b (int): Number of images per block.
+            ratio (int): ratio of the number of pixels between the maximum size of the sensor and the actual size (for
+            example after defining an ROI)
         @returns:
             list: A list where each element is the number of images in that block.
         """
+        # based on the pixel ration, compute the allowed max number of frames
+        frames = b * ratio
+        if frames < 4000:
+            b = frames
+        else:
+            b = 4000
+        print(f'The maximum number of frames per block is set to {b}')
+
+        # compute the number of blocks with the new values for the number of frames
         num_full_blocks = N // b  # Number of full blocks
         remainder = N % b  # Remaining images after full blocks
         # Create a list with `b` images for each full block
@@ -809,11 +823,15 @@ class BasicGUI(GUIBase):
 
         # Depending on the number of images, several consecutive acquisitions will be required. Below, the acquisition
         # is divided in blocks, according to the maximum number of frames the camera & computer can handle.
+        N_full_sensor_pixels = prod(self._camera_logic.get_size())
+        N_image_pixels = prod(self._camera_logic.get_sensor_region())
+        N_pixels_ratio = np.floor(N_full_sensor_pixels / N_image_pixels).astype(int)
+        print(N_full_sensor_pixels, N_image_pixels, N_pixels_ratio)
         if self._video:
-            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_movie)
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_movie, N_pixels_ratio)
             acq_method = "video"
         elif self._spooling:
-            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_spool)
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_spool, N_pixels_ratio)
             acq_method = "spool"
         else:
             self.log.error('For some unknown reason, none of the two acquisition methods (video or spool) were properly'

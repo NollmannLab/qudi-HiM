@@ -103,9 +103,9 @@ class KinetixCam(Base, CameraInterface):
                 self.camera = next(Camera.detect_camera())  # Use generator to find first camera.
                 self.camera.open()  # Open the camera.
 
-                self.get_size()  # update the values _weight, _height
-                self._full_width = self._width
-                self._full_height = self._height
+                self.get_size()  # update the values _weight, _height of the full sensor when starting the cam
+                self._width = self._full_width
+                self._height = self._full_height
 
                 # set some default parameters value - note the camera is already set to 'Dynamic Range' in order to get
                 # the same intensity values for the displayed and saved data
@@ -146,12 +146,13 @@ class KinetixCam(Base, CameraInterface):
 
     def get_size(self):
         """
-        Retrieve size of the image in pixel.
-        @return: tuple (int, int): Size (width, height)
+        Retrieve size of the FULL sensor in pixel
+        @return: (array) all sensor size
         """
         sensor_size = self.camera.sensor_size
-        self._width = sensor_size[0]
-        self._height = sensor_size[1]
+        self._full_width = sensor_size[0]
+        self._full_height = sensor_size[1]
+        return sensor_size
 
     def set_exposure(self, exposure):
         """
@@ -231,6 +232,14 @@ class KinetixCam(Base, CameraInterface):
         except Exception as e:
             self.log.error(f"The following error was encountered in set_image : {e}")
             return True
+
+    def get_image_size(self):
+        """
+        Get the size of the image (after setting an ROI for example)
+        @return: (tuple) height and width of the image
+        """
+        im_size = self.camera.shape()
+        return im_size
 
     def get_progress(self):
         """
