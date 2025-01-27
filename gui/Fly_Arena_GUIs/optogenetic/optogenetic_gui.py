@@ -38,13 +38,38 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt5.uic.properties import QtWidgets
 from qtpy import uic
 from qtpy.QtCore import Signal
-
+from time import time, sleep
+from qtpy import QtCore, QtGui
 from core.configoption import ConfigOption
 from core.connector import Connector
 from gui.guibase import GUIBase
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
+class WorkerSignals(QtCore.QObject):
+    """ Defines the signals available from a running worker thread """
+    sigOptoStepFinished = QtCore.Signal(float, float, int, QtGui.QPixmap, QtGui.QPixmap)
+
+
+class OptoWorker(QtCore.QRunnable):
+    """ Worker thread to wait during an opto pule. The worker handles only the waiting time.
+    """
+    def __init__(self, dt, duration, n_step, im_off, im_on):
+        super(OptoWorker, self).__init__()
+        self.signals = WorkerSignals()
+        self.dt = dt
+        self.duration = duration
+        self.n_step = n_step
+        self.im_on = im_on
+        self.im_off = im_off
+
+    @QtCore.Slot()
+    def run(self):
+        """ """
+        sleep(self.dt)
+        self.signals.sigOptoStepFinished.emit(self.dt, self.duration, self.n_step, self.im_off, self.im_on)
 
 
 class ImageWindow(QMainWindow):
@@ -114,6 +139,7 @@ class OptogeneticGUI(GUIBase):
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.threadpool = QtCore.QThreadPool()
         self.p = False
         self._optogenetic_logic = None
 
@@ -145,7 +171,6 @@ class OptogeneticGUI(GUIBase):
         self.signoirClicked.connect(lambda: self.noirdisplay())
         self.sigquart1Clicked.connect(lambda: self.sigButton1Clicked.emit())
         self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
-        self._ow.checkBox.stateChanged.connect(self.infinite_time)
         self._ow.toggleButton.setCheckable(True)
         self._ow.toggleButton.toggled.connect(self.on_toggle)
 
@@ -189,12 +214,27 @@ class OptogeneticGUI(GUIBase):
         """
         im = self.quart1map.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
-        if self._ow.doubleSpinBox.value() == 0:
+        if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
             self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
 
         else:
-            self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
-            QTimer.singleShot(self._ow.doubleSpinBox.value() * 60 * 1000, self.noirdisplay)
+            im_off = self.noirmap.scaled(371, 271, Qt.KeepAspectRatio)
+            t_pulse = self._ow.doubleSpinBox_opto_pulse.value()
+            t_opto = self._ow.doubleSpinBox_opto_stimulation.value()
+            self.opto(t_pulse, t_opto, 0, im_off, im)
+
+    def opto(self, dt, duration, n_step, im_off, im_on):
+        if dt * n_step < duration:
+            if n_step / 2 == round(n_step / 2):
+                self._ow.retour_2.setPixmap(im_off)
+                self._optogenetic_logic.image_display(self.noirmapscaled, self._iw)
+            else:
+                self._ow.retour_2.setPixmap(im_on)
+                self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
+
+            worker = OptoWorker(dt, duration, n_step+1, im_off, im_on)
+            worker.signals.sigOptoStepFinished.connect(self.opto)
+            self.threadpool.start(worker)
 
     def quart2display(self):
         """

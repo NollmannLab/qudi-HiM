@@ -54,7 +54,7 @@
      <property name="geometry">
       <rect>
        <x>260</x>
-       <y>20</y>
+       <y>30</y>
        <width>281</width>
        <height>81</height>
       </rect>
@@ -73,7 +73,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Quart 1</string>
+      <string>Whole arena (red)</string>
      </property>
     </widget>
     <widget class="QToolButton" name="quart2">
@@ -86,27 +86,27 @@
       </rect>
      </property>
      <property name="text">
-      <string>Quart 2</string>
+      <string>Quarters (red)</string>
      </property>
     </widget>
     <widget class="QLabel" name="label">
      <property name="geometry">
       <rect>
-       <x>390</x>
-       <y>100</y>
-       <width>47</width>
-       <height>13</height>
+       <x>160</x>
+       <y>102</y>
+       <width>140</width>
+       <height>20</height>
       </rect>
      </property>
      <property name="text">
-      <string>min</string>
+      <string>opto stimulation duration (s)</string>
      </property>
     </widget>
-    <widget class="QDoubleSpinBox" name="doubleSpinBox">
+    <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_stimulation">
      <property name="geometry">
       <rect>
-       <x>320</x>
-       <y>90</y>
+       <x>300</x>
+       <y>100</y>
        <width>62</width>
        <height>22</height>
       </rect>
@@ -170,17 +170,33 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;Obturateur&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QCheckBox" name="checkBox">
+    <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse">
      <property name="geometry">
       <rect>
-       <x>420</x>
+       <x>460</x>
        <y>100</y>
-       <width>91</width>
-       <height>17</height>
+       <width>62</width>
+       <height>22</height>
+      </rect>
+     </property>
+     <property name="decimals">
+      <number>1</number>
+     </property>
+     <property name="minimum">
+      <double>0.000000000000000</double>
+     </property>
+    </widget>
+    <widget class="QLabel" name="label_4">
+     <property name="geometry">
+      <rect>
+       <x>380</x>
+       <y>100</y>
+       <width>80</width>
+       <height>20</height>
       </rect>
      </property>
      <property name="text">
-      <string>infinite time</string>
+      <string>pulse length (s)</string>
      </property>
     </widget>
    </widget>

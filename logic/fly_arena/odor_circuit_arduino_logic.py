@@ -107,9 +107,9 @@ class OdorCircuitArduinoLogic(GenericLogic):
     _MFC_3_purge = ConfigOption('MFC_purge', 2)
     _MFC_4 = ConfigOption('MFC_4', 3)
 
-    _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.4)
-    _MFC_1_flow = ConfigOption('MFC_1_flow', 0.04)
-    _MFC_2_flow = ConfigOption('MFC_2_flow', 0.36)
+    _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.5)
+    _MFC_1_flow = ConfigOption('MFC_1_flow', 0.25)
+    _MFC_2_flow = ConfigOption('MFC_2_flow', 0.25)
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
