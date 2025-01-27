@@ -44,7 +44,7 @@ from pyvcam.camera import Camera
 # ======================================================================================================================
 def decorator_print_function(function):
     def new_function(*args, **kwargs):
-        print(f'*** DEBUGGING *** Executing in hardware {function.__name__}')
+        print(f'*** DEBUGGING *** Executing in hardware {function.__name__} from kinetix.py')
         return function(*args, **kwargs)
     return new_function
 
@@ -63,8 +63,16 @@ class KinetixCam(Base, CameraInterface):
     """
     # config options
     _default_exposure = ConfigOption('default_exposure', 0.05)  # in seconds
-    _default_acquisition_mode = ConfigOption('default_acquisition_mode', 'run_till_abort')
+    _default_acquisition_mode = ConfigOption('default_acquisition_mode', missing='error')
     camera_id = ConfigOption('camera_id', 0)
+    _max_frames_number_video = ConfigOption('max_N_images_movie', missing='error')
+    _default_trigger_mode = ConfigOption('default_trigger_mode', 'INTERNAL')
+    _has_temp = ConfigOption('temperature_control', 'False')
+    _has_shutter = ConfigOption('mechanical_shutter', 'False')
+    _has_gain = ConfigOption('gain_control', 'False')
+    _support_live_acquisition = ConfigOption('support_live_acquisition', 'False')
+    _camera_name = ConfigOption('camera_name', missing='error')
+    _frame_transfer = ConfigOption('frame_transfer', missing='error')
 
     # camera attributes
     _width = 0  # current width
@@ -72,6 +80,8 @@ class KinetixCam(Base, CameraInterface):
     _full_width = 0  # maximum width of the sensor
     _full_height = 0  # maximum height of the sensor
     _exposure = _default_exposure
+    _trigger_mode = _default_trigger_mode
+    _acquisition_mode = _default_acquisition_mode
     _gain = 0
     n_frames = 1
 
@@ -93,15 +103,15 @@ class KinetixCam(Base, CameraInterface):
                 self.camera = next(Camera.detect_camera())  # Use generator to find first camera.
                 self.camera.open()  # Open the camera.
 
-                self.get_size()  # update the values _weight, _height
-                self._full_width = self._width
-                self._full_height = self._height
+                self.get_size()  # update the values _weight, _height of the full sensor when starting the cam
+                self._width = self._full_width
+                self._height = self._full_height
 
                 # set some default parameters value - note the camera is already set to 'Dynamic Range' in order to get
                 # the same intensity values for the displayed and saved data
                 self.set_exposure(self._exposure)
-                self._set_acquisition_mode('Dynamic Range')  # Set the camera in 'Dynamic Range' mode (16 bit)
-                self._set_trigger_source('INTERNAL')  # Set the camera in 'Internal Trigger' mode
+                self._set_acquisition_mode(str(self._acquisition_mode))  # Set the camera in 'Dynamic Range' mode
+                self._set_trigger_source(str(self._trigger_mode))  # Set the camera in 'Internal Trigger' mode
 
                 # initialize the default acquisition parameters by launching a brief live acquisition - this step is
                 # required to have access to the "check_frame_status" method without throwing an error
@@ -131,17 +141,18 @@ class KinetixCam(Base, CameraInterface):
         Retrieve an identifier of the camera that the GUI can print.
         @return: string: name for the camera
         """
-        camera_name = pvc.get_cam_name(0)
-        return camera_name
+        self._camera_name = pvc.get_cam_name(0)
+        return self._camera_name
 
     def get_size(self):
         """
-        Retrieve size of the image in pixel.
-        @return: tuple (int, int): Size (width, height)
+        Retrieve size of the FULL sensor in pixel
+        @return: (array) all sensor size
         """
         sensor_size = self.camera.sensor_size
-        self._width = sensor_size[0]
-        self._height = sensor_size[1]
+        self._full_width = sensor_size[0]
+        self._full_height = sensor_size[1]
+        return sensor_size
 
     def set_exposure(self, exposure):
         """
@@ -204,24 +215,31 @@ class KinetixCam(Base, CameraInterface):
     def set_image(self, hbin, vbin, hstart, hend, vstart, vend):
         """
         Sets a ROI on the sensor surface.
-
         @param: hbin: (int) number of pixels to bin horizontally
         @param: vbin: (int) number of pixels to bin vertically.
         @param: hstart: (int) Start column
         @param: hend: (int) End column
         @param: vstart: (int) Start row
         @param: vend: (int) End row
-        @return: int error code: ok = 0
+        @return: (bool) return True if an error was detected
         """
         try:
             self._width = int(vend - vstart)
             self._height = int(hend - hstart)
             self.camera.set_roi(vstart, hstart, self._height, self._width)
             self.log.info(f'Set subarray: {self._height} x {self._width} pixels (rows x cols)')
-            return 0
+            return False
         except Exception as e:
-            self.log.error(e)
-            return -1
+            self.log.error(f"The following error was encountered in set_image : {e}")
+            return True
+
+    def get_image_size(self):
+        """
+        Get the size of the image (after setting an ROI for example)
+        @return: (tuple) height and width of the image
+        """
+        im_size = self.camera.shape()
+        return im_size
 
     def get_progress(self):
         """
@@ -229,39 +247,60 @@ class KinetixCam(Base, CameraInterface):
         """
         pass
 
+    def get_max_frames(self):
+        """ Return the maximum number of frames that can be handled by the camera for a single movie acquisition.
+        Depending on the camera, multiple acquisition modes can be handled. A dictionary is used as output.
+        @return:
+            max_frames_dict (dict)
+        """
+        max_frames_dict = {'video': self._max_frames_number_video}
+        return max_frames_dict
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to query the camera properties
 # ----------------------------------------------------------------------------------------------------------------------
 
     def support_live_acquisition(self):
         """ Return whether the camera handle live acquisition.
-
         @return: (bool) True if supported, False if not
         """
-        return True
+        return self._support_live_acquisition
 
     def has_temp(self):
         """
         Does the camera support setting of the temperature?
-
-        @return: bool: has temperature ?
+        @return: (bool): has temperature ?
         """
-        return True
+        return self._has_temp
 
     def has_shutter(self):
         """
         Is the camera equipped with a mechanical shutter?
         If this function returns true, the attribute _shutter must also be defined in the hardware module
-
-        @return: bool: has shutter ?
+        @return: (bool): has shutter ?
         """
-        return False
+        return self._has_shutter
+
+    def has_gain(self):
+        """
+        Is the camera enabling electronic gain control?
+        If this function returns true, the attribute _gain must also be defined in the hardware module
+        @return: (bool): has gain ?
+        """
+        return self._has_gain
+
+    def support_frame_transfer(self):
+        """ Is frame transfer mode allowed?
+        @return: (bool) frame transfer possible?
+        """
+        return self._frame_transfer
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods to handle camera acquisitions
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Methods for displaying images on the GUI -----------------------------------------------------------------------------
+    @decorator_print_function
     def start_single_acquisition(self):
         """
         Start acquisition for a single frame (snap mode) and return the acquired frame
@@ -270,6 +309,7 @@ class KinetixCam(Base, CameraInterface):
         frame = self._start_acquisition(mode='Single image')
         return frame
 
+    @decorator_print_function
     def start_live_acquisition(self):
         """
         Start a continuous acquisition.
@@ -279,9 +319,10 @@ class KinetixCam(Base, CameraInterface):
             self._start_acquisition(mode='Live')
             return True
         except Exception as e:
-            self.log.error(e)
+            self.log.error(f'The following error was encountered in start_live_acquisition : {e}')
             return False
 
+    @decorator_print_function
     def stop_acquisition(self):
         """
         Stop/abort live or single acquisition
@@ -291,32 +332,33 @@ class KinetixCam(Base, CameraInterface):
             self.camera.finish()
             return True
         except Exception as e:
-            self.log.error(e)
+            self.log.error(f"The following error was encountered in stop_acquisition : {e}")
             return False
 
 # Methods for saving image data ----------------------------------------------------------------------------------------
+    @decorator_print_function
     def start_movie_acquisition(self, n_frames):
         """
         Set the conditions to save a movie and start the acquisition (fixed length mode).
 
         @param: (int) n_frames: number of frames
-        @return: bool: Success ?
+        @return: bool: Error ?
         """
         self.n_frames = n_frames  # needed to choose the correct case in get_acquired_data method
         try:
             self._start_acquisition(mode='Sequence')
-            return True
+            return False
         except Exception as e:
             if "PL_ERR_TOO_MANY_FRAMES" in str(e):
                 self.log.error(f"{e} - The number of images is too large for the memory. Try using a smaller ROI")
             else:
-                self.log.error(e)
-            return False
+                self.log.error(f"Error in start_movie_acquisition : {e}")
+            return True
 
+    @decorator_print_function
     def finish_movie_acquisition(self):
         """
         Reset the conditions used to save a movie to default.
-
         @return: bool: Success ?
         """
         try:
@@ -326,6 +368,13 @@ class KinetixCam(Base, CameraInterface):
         except Exception as e:
             self.log.error(e)
             return False
+
+    def abort_movie_acquisition(self):
+        """ Abort an acquisition.
+        @return: (bool) Error ?
+        """
+        self._abort_acquisition()
+        self._set_acquisition_mode(self._default_acquisition_mode)
 
     def wait_until_finished(self):
         """ Wait until an acquisition is finished.
@@ -380,7 +429,7 @@ class KinetixCam(Base, CameraInterface):
             frame, _, frame_count = self.camera.poll_frame(timeout_ms=1000, oldestFrame=False, copyData=copy)
             return frame['pixel_data'], frame_count
         except Exception as e:
-            self.log.error(e)
+            self.log.error(f"The following error was encountered in get_most_recent_image : {e}")
             return [], 0
 
     def get_acquired_data(self):
@@ -398,7 +447,7 @@ class KinetixCam(Base, CameraInterface):
             self.log.info(f'Loading {self.n_frames} frames ...')
             im_seq = np.zeros((self.n_frames, self._width, self._height), dtype=np.uint16)
             for frame in range(self.n_frames):
-                im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=True)
+                im, _, _ = self.camera.poll_frame(timeout_ms=1000, oldestFrame=True, copyData=False)
                 im_seq[frame, :, :] = im['pixel_data']
 
         elif (status == "READOUT_IN_PROGRESS") or (status == "EXPOSURE_IN_PROGRESS"):
@@ -458,23 +507,30 @@ class KinetixCam(Base, CameraInterface):
             else:
                 return -1
 
+    @decorator_print_function
     def _start_acquisition(self, mode='Live'):
         """
         Launch an acquisition according to the indicated mode.
-
         @param mode: (str) indicate the mode to use for acquiring the image
         @return: frame (numpy array): latest acquired frame - only for the 'Single image' mode
         """
         if mode == 'Live':
             self.camera.start_live(exp_time=int(self._exposure * 1000))
         elif mode == 'Sequence':
-            print(self.n_frames)
             self.camera.start_seq(exp_time=int(self._exposure * 1000), num_frames=self.n_frames)
         elif mode == 'Single image':
             frame = self.camera.get_frame(exp_time=int(self._exposure * 1000))
             return frame
         else:
             self.log.warning("The mode requested does not exist - Acquisition will not start")
+
+    def _abort_acquisition(self):
+        """ Abort an acquisition prior completion.
+        """
+        try:
+            self.camera.abort()
+        except Exception as e:
+            self.log.error(f"Error in _abort_acquisition : {e}")
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Trigger

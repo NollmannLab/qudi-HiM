@@ -227,7 +227,7 @@
           <number>1</number>
          </property>
          <property name="maximum">
-          <number>1000</number>
+          <number>5000</number>
          </property>
         </widget>
        </item>
@@ -714,7 +714,7 @@
      <x>0</x>
      <y>0</y>
      <width>961</width>
-     <height>20</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuMenu">

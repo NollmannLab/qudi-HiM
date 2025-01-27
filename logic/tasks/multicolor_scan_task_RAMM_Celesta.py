@@ -10,7 +10,7 @@ This module contains a task to perform a multicolor scan on the RAMM setup equip
 
 @author: JB. Fiche (from F. Barho original code)
 
-Created on Tue January 9, 2024 - last update Fri July 26, 2024
+Created on Tue January 9, 2024 - last update Fri Jan 17, 2025
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -31,14 +31,73 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-import yaml
+# import yaml
 import numpy as np
 from datetime import datetime
 from time import sleep, time
 from logic.generic_task import InterruptableTask
 from logic.task_helper_functions import save_z_positions_to_file
+from ruamel.yaml import YAML
 
 
+# ======================================================================================================================
+# YAML file editor function for editing metadata
+# ======================================================================================================================
+def update_metadata(metadata, key_path, value, action="set"):
+    """
+    Generalized function to update nested metadata fields, including lists.
+    @param: metadata: The metadata structure (OrderedDict or dict).
+    @param: key_path: A list representing the nested path to the key.
+    @param: value: The value to set, append, or remove.
+    @param: action: The action to perform: "set", "append", or "remove".
+            - "set" (default): Replaces the value.
+            - "append": Adds to the list if it doesn't already exist.
+    @return: The updated metadata structure.
+    """
+    current = metadata
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if isinstance(current, list):
+            # Look for the key in a list of dictionaries or OrderedDicts
+            for item in current:
+                if key in item:
+                    current = item[key]
+                    break
+        else:
+            current = current[key]
+
+    # Perform the specified action on the target key
+    target_key = key_path[-1]
+    if isinstance(current, list):
+        # Handle lists of dictionaries
+        for item in current:
+            if target_key in item:
+                if action == "set":
+                    item[target_key] = value
+                elif action == "append":
+                    if isinstance(item[target_key], list):
+                        item[target_key].append(value)
+                break
+        else:
+            # If key not found in list, create it (for append action)
+            if action == "append":
+                current.append({target_key: [value]})
+    else:
+        # Handle direct dictionary updates
+        if action == "set":
+            current[target_key] = value
+        elif action == "append":
+            if target_key not in current:
+                current[target_key] = [value]
+            elif isinstance(current[target_key], list):
+                current[target_key].append(value)
+
+    return metadata
+
+
+# ======================================================================================================================
+# TASK definition
+# ======================================================================================================================
 class Task(InterruptableTask):  # do not change the name of the class. it is always called Task !
     """ This task acquires a stack of images using a sequence of lightsources for each plane.
 
@@ -65,6 +124,8 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         super().__init__(**kwargs)
         print('Task {0} added!'.format(self.name))
         self.user_config_path: str = self.config['path_to_user_config']
+        self.metadata_template_path = self.config['path_to_metadata_template']
+        self.yaml = YAML()
         self.celesta_laser_dict: dict = {}
         self.celesta_intensity_dict: dict = {}
         self.FPGA_wavelength_channels: list = []
@@ -85,8 +146,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.save_path: str = ""
         self.file_format: str = ""
         self.complete_path: str = ""
+        self.metadata_path: str = ""
         self.start_position: float = 0
         self.focal_plane_position: float = 0
+        self.metadata: dict = {}
 
     def startTask(self):
         """ """
@@ -113,7 +176,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         # read all user parameters from config and define the path where the data will be saved
         self.load_user_parameters()
-        self.complete_path = self.get_complete_path(self.save_path)
+        self.complete_path, self.metadata_path = self.get_complete_path(self.save_path)
 
         # compute the starting position of the z-stack (for the piezo)
         self.start_position = self.calculate_start_position(self.centered_focal_plane)
@@ -126,8 +189,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         # from the DAQ or FPGA was detected)
         self.num_frames = self.num_z_planes * self.num_laserlines
         self.timeout = self.num_laserlines * self.exposure + 0.1
-        self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
-        self.ref['cam'].start_acquisition()
+        max_frames, _ = self.ref['cam'].get_max_frames()
+        if self.num_frames <= max_frames:
+            self.ref['cam'].prepare_camera_for_multichannel_imaging(self.num_frames, self.exposure, None, None, None)
+            self.ref['cam'].start_acquisition()
+        else:
+            self.log.error(f'The number of frames requested is higher than the maximum handled by the camera: '
+                           f'{max_frames} - the task is aborted!')
+            self.aborted = True
 
         # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line
         self.ref['laser'].lumencor_wakeup()
@@ -147,12 +216,18 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         self.ref['laser'].run_celesta_multicolor_imaging_task_session(self.num_z_planes, self.FPGA_wavelength_channels,
                                                                       self.num_laserlines, self.exposure)
 
+        # load the metadata template and update it according to the parameters
+        with open(self.metadata_template_path, "r", encoding='utf-8') as file:
+            self.metadata = self.yaml.load(file)
+        self.metadata = dict(self.metadata)
+        self._update_metadata_dict(self.num_frames)
+
         # initialize the counter (corresponding to the number of planes already acquired)
         self.step_counter = 0
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
-        :return bool: True if the task should continue running, False if it should finish.
+        @return (bool): True if the task should continue running, False if it should finish.
         """
         self.step_counter += 1
 
@@ -223,18 +298,13 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
                 self.ref['cam'].save_to_fits(self.complete_path, image_data, metadata)
             elif self.file_format == 'npy':
                 self.ref['cam'].save_to_npy(self.complete_path, image_data)
-                metadata = self.get_metadata()
-                file_path = self.complete_path.replace('npy', 'yaml', 1)
-                self.save_metadata_file(metadata, file_path)
+                self.save_metadata_txt_file()
             elif self.file_format == 'hdf5':
                 metadata = self.get_hdf5_metadata()
                 self.ref['cam'].save_to_hdf5(self.complete_path, image_data, metadata)
-            else:   # use tiff as default format
-                # self.ref['cam'].save_to_tiff(self.num_frames, self.complete_path, image_data)
+            else:
                 self.ref['cam'].save_to_tiff_separate(self.num_laserlines, self.complete_path, image_data)
-                metadata = self.get_metadata()
-                file_path = self.complete_path.replace('tif', 'yaml', 1)
-                self.save_metadata_file(metadata, file_path)
+                self.save_metadata_txt_file()
 
             # save file with z positions (same procedure for either file format)
             file_path = os.path.join(os.path.split(self.complete_path)[0], 'z_positions.yaml')
@@ -275,7 +345,7 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
         """
         try:
             with open(self.user_config_path, 'r') as stream:
-                user_param_dict = yaml.safe_load(stream)
+                user_param_dict = self.yaml.load(stream)
 
                 self.sample_name = user_param_dict['sample_name']
                 self.exposure = user_param_dict['exposure']
@@ -293,15 +363,12 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # file path handling
     # ------------------------------------------------------------------------------------------------------------------
     def get_complete_path(self, path_stem):
-        """ Create the complete path based on path_stem given as user parameter,
-        such as path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif
-        or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
-
-        :param: str path_stem such as E:/DATA
-        :return: str complete path (see examples above)
+        """ Create the complete path based on path_stem given as user parameter, such as
+        path_stem/YYYY_MM_DD/001_Scan_samplename/scan_001.tif or path_stem/YYYY_MM_DD/027_Scan_samplename/scan_027.fits
+        @param: (str) path_stem such as E:/DATA
+        @return: (str) complete path (see examples above)
         """
         cur_date = datetime.today().strftime('%Y_%m_%d')
-
         path_stem_with_date = os.path.join(path_stem, cur_date)
 
         # check if folder path_stem/cur_date exists, if not: create it
@@ -318,7 +385,6 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
         prefix = str(number_dirs + 1).zfill(3)
         foldername = f'{prefix}_Scan_{self.sample_name}'
-
         path = os.path.join(path_stem_with_date, foldername)
 
         # create the path  # no need to check if it already exists due to incremental prefix
@@ -328,8 +394,10 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             self.log.error('Error {0}'.format(e))
 
         file_name = f'scan_{prefix}.{self.file_format}'
+        metadata_file_name = f'scan_{prefix}_metadata.yaml'
         complete_path = os.path.join(path, file_name)
-        return complete_path
+        metadata_path = os.path.join(path, metadata_file_name)
+        return complete_path, metadata_path
 
     # ------------------------------------------------------------------------------------------------------------------
     # methods for initializing piezo & laser
@@ -406,18 +474,52 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
     # ------------------------------------------------------------------------------------------------------------------
     # metadata
     # ------------------------------------------------------------------------------------------------------------------
-    def get_metadata(self):
-        """ Get a dictionary containing the metadata in a plain text easy readable format.
+    # def get_metadata(self):
+    #     """ Get a dictionary containing the metadata in a plain text easy readable format.
+    #
+    #     :return: dict metadata
+    #     """
+    #     metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
+    #                 'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
+    #                 'Number laserlines': self.num_laserlines}
+    #     for i in range(self.num_laserlines):
+    #         metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
+    #         metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
+    #     return metadata
 
-        :return: dict metadata
+    def _update_metadata_dict(self, n_frames):
+        """ create a dictionary containing the metadata.
+        @param: (int) number of frames required for the acquisition
+        @return: (dict) metadata
         """
-        metadata = {'Sample name': self.sample_name, 'Exposure time (s)': self.exposure,
-                    'Scan step length (um)': self.z_step, 'Scan total length (um)': self.z_step * self.num_z_planes,
-                    'Number laserlines': self.num_laserlines}
-        for i in range(self.num_laserlines):
-            metadata[f'Laser line {i+1}'] = self.imaging_sequence[i][0]
-            metadata[f'Laser intensity {i+1} (%)'] = self.imaging_sequence[i][1]
-        return metadata
+        # ----general----------------------------------------------------------------------------
+        self.metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
+
+        # ----camera-----------------------------------------------------------------------------
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_frames'], n_frames)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'sample_name'], self.sample_name)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'exposure_time_(s)'], self.exposure)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'kinetic_time_(s)'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'frame_transfer'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'gain'], 1)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'], "NA")
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_z_planes'], self.num_z_planes)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'distance_z_planes_(µm)'], self.z_step)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'number_frames_per_z_plane'],
+                                        len(self.imaging_sequence))
+
+        # ----filter------------------------------------------------------------------------------
+        filterpos = self.ref['filter'].get_position()
+        filterdict = self.ref['filter'].get_filter_dict()
+        label = 'filter{}'.format(filterpos)
+        self.metadata = update_metadata(self.metadata, ['Acquisition', 'filter'], filterdict[label]['name'])
+
+        # ----laser-------------------------------------------------------------------------------
+        for laser_lines in range(self.num_laserlines):
+            self.metadata = update_metadata(self.metadata, ['Acquisition', 'laser_lines'],
+                                            self.imaging_sequence[laser_lines][0], action="append")
+            self.metadata = update_metadata(self.metadata, ['Acquisition', 'laser_power_(%)'],
+                                            self.imaging_sequence[laser_lines][1], action="append")
 
     def get_fits_metadata(self):
         """ Get a dictionary containing the metadata in a fits header compatible format. Note this format is also
@@ -448,12 +550,9 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
             metadata[f'laser_intensity_{i+1}'] = self.imaging_sequence[i][1]
         return metadata
 
-    def save_metadata_file(self, metadata, path):
-        """ Save a txt file containing the metadata dictionary.
-
-        :param dict metadata: dictionary containing the metadata
-        :param str path: pathname
+    def save_metadata_txt_file(self):
+        """ Save a txt file containing the metadata.
         """
-        with open(path, 'w') as outfile:
-            yaml.safe_dump(metadata, outfile, default_flow_style=False)
-        self.log.info('Saved metadata to {}'.format(path))
+        with open(self.metadata_path, 'w') as file:
+            self.yaml.dump(self.metadata, file)
+        self.log.info(f'Saved metadata to {self.metadata_path}')

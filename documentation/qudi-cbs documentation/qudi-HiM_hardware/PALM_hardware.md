@@ -8,6 +8,13 @@
 | **Resources**        | Andor SDK (paper version)                                    |
 
 
+| **Model and SN**     | ANDOR ULTRA-888 (SN# X-9986)                                                                                                                                                                                      |
+| -------------------- |-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Drivers location** | Latest version downloaded after granted acces from ANDOR. local version can be found "C:\Users\admin\Desktop\Programmes et drivers\ANDOR" and after installation "C:\Program Files\Andor SDK\Python\pyAndorSDK2". |
+| **Software**         | SOLIS - /mnt/PALM_dataserv/DATA/Qudi_documentation/qudi_cbs_hardware/PALM                                                                                                                                         |
+| **Python**           | Latest SDK is already written in python (see instructions at "C:\Program Files\Andor SDK\Python\pyAndorSDK2")                                                                                                     |
+| **Resources**        | pdf file in the same folder                                                                                                                                                                                       |
+
 
 | **Model and SN**     | Thorlabs Camera DCC1545M (SN# 4002843525)                    |
 | -------------------- | ------------------------------------------------------------ |
@@ -24,8 +31,8 @@
 | -------------------- | ------------------------------------------------------------ |
 | **Drivers location** | The drivers compatible with windows 10 can be found here : https://www.pifrance.fr/fr/produits/logiciels-dedies-au-positionnement/ |
 | **Software**         | PIMikroMove - part of PI software suite (https://www.pifrance.fr/fr/produits/logiciels-dedies-au-positionnement/) |
-| **Python**           | PIpython<br />Installation: <br />activate the conda environment (conda activate qudi) and navigate to the folder <br />/mnt/PALM_dataserv/DATA/Qudi_documentation/qudi_cbs_hardware/PALM/PI_piezo_python/PI_softwares_2020/PIPython-2.3.0.3 <br />Run python setup.py install.<br />Check the installation (conda list), pipython should appear now |
-| **Resources **       | Dll manual: SM151E Software Manual Windows GCS 2.0 DL Release: 2.10.1(PI_GCS2_DLL) Date: 2019-08-27<br />Examples contained in the PIPython-2.3.0.3 folder |
+| **Python**           | pip install PIPython |
+| **Resources **       | https://github.com/PI-PhysikInstrumente/PIPython|
 
 
 

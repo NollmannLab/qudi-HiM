@@ -261,6 +261,7 @@ class FocusGUI(GUIBase):
         self._focus_logic.sigPiezoInitFinished.connect(self.piezo_init_finished)
         self._focus_logic.sigUpdateTimetrace.connect(self.update_timetrace)
         self._focus_logic.sigPlotCalibration.connect(self.plot_calibration)
+        self._focus_logic.sigResetCalibration.connect(self.reset_focus_stabilitization)
         self._focus_logic.sigOffsetCalibration.connect(self.display_offset)
         self._focus_logic.sigDisplayImage.connect(self.live_display)
         self._focus_logic.sigDisplayImageAndMask.connect(self.live_display)
@@ -468,6 +469,11 @@ class FocusGUI(GUIBase):
         self._mw.calibration_PushButton.setChecked(True)
         self.sigCalibrateFocusStabilization.emit()
 
+    def reset_focus_stabilitization(self):
+        self._mw.calibration_PushButton.setEnabled(True)
+        self._mw.calibration_PushButton.setText('Launch calibration')
+        self._mw.calibration_PushButton.setChecked(False)
+
     def plot_calibration(self, piezo_position, qpd_signal, fit, slope, precision):
         """ Callback of sigPlotCalibration from focus_logic. Once the calibration finished, reset the pushbutton state
         and display the calibration results in the plotwidget and display also the calculated slope.
@@ -489,6 +495,7 @@ class FocusGUI(GUIBase):
         self._mw.calibration_PlotWidget.setLabel('left', 'autofocus signal')
         self._mw.slope_lineEdit.setText("{:.2f}".format(slope))
         self._mw.precision_lineEdit.setText("{:.2f}".format(precision))
+
         # enable the piezo position correction, focus stabilization and search focus toolbuttons
         if not self._laser_shutter:
             self._mw.autofocus_Action.setDisabled(False)

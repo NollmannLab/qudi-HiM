@@ -30,31 +30,127 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 import os
-# import sys
-import time
-from datetime import datetime
-# import re
+import copy
+import pyqtgraph as pg
 import numpy as np
+from datetime import datetime
 from time import sleep
-
+from math import prod
 from qtpy import QtCore
 # from qtpy import QtGui
 from qtpy import QtWidgets
 from qtpy import uic
-import pyqtgraph as pg
-# from functools import partial
-
 from gui.guibase import GUIBase
 from core.connector import Connector
 from core.configoption import ConfigOption
 # from qtwidgets.scan_plotwidget import ScanImageItem, ScanViewBox
 from gui.validators import NameValidator
+from ruamel.yaml import YAML
+
+verbose = True
+
+
+# ======================================================================================================================
+# Decorator (for debugging)
+# ======================================================================================================================
+def decorator_print_function(function):
+    global verbose
+
+    def new_function(*args, **kwargs):
+        if verbose:
+            print(f'*** DEBUGGING *** Executing {function.__name__} from basic_gui.py')
+        return function(*args, **kwargs)
+    return new_function
+
+
+# ======================================================================================================================
+# YAML file editor function for editing metadata
+# ======================================================================================================================
+def update_metadata(metadata, key_path, value, action="set"):
+    """
+    Generalized function to update nested metadata fields, including lists.
+    @param: metadata: The metadata structure (OrderedDict or dict).
+    @param: key_path: A list representing the nested path to the key.
+    @param: value: The value to set, append, or remove.
+    @param: action: The action to perform: "set", "append", or "remove".
+            - "set" (default): Replaces the value.
+            - "append": Adds to the list if it doesn't already exist.
+    @return: The updated metadata structure.
+    """
+    current = metadata
+    # Navigate to the parent of the target key
+    for key in key_path[:-1]:
+        if isinstance(current, list):
+            # Look for the key in a list of dictionaries or OrderedDicts
+            for item in current:
+                if key in item:
+                    current = item[key]
+                    break
+        else:
+            current = current[key]
+
+    # Perform the specified action on the target key
+    target_key = key_path[-1]
+    if isinstance(current, list):
+        # Handle lists of dictionaries
+        for item in current:
+            if target_key in item:
+                if action == "set":
+                    item[target_key] = value
+                elif action == "append":
+                    if isinstance(item[target_key], list):
+                        item[target_key].append(value)
+                break
+        else:
+            # If key not found in list, create it (for append action)
+            if action == "append":
+                current.append({target_key: [value]})
+    else:
+        # Handle direct dictionary updates
+        if action == "set":
+            current[target_key] = value
+        elif action == "append":
+            if target_key not in current:
+                current[target_key] = [value]
+            elif isinstance(current[target_key], list):
+                current[target_key].append(value)
+
+    return metadata
+
+
+# ======================================================================================================================
+# Classes for the workers
+# ======================================================================================================================
+class WorkerSignals(QtCore.QObject):
+    sigAcquisitionProgress = QtCore.Signal(str, str, list, bool, dict, int, str)
+
+
+class AcquisitionProgressWorker(QtCore.QRunnable):
+    """ Worker thread to monitor the acquisition process.
+    The worker handles only the waiting time, and emits a signal that serves to trigger the update indicators. """
+
+    def __init__(self, path, fileformat, acquisition_blocks, is_display, metadata, block, method):
+        super(AcquisitionProgressWorker, self).__init__()
+        self.signals = WorkerSignals()
+        self.path = path
+        self.fileformat = fileformat
+        self.is_display = is_display
+        self.metadata = metadata
+        self.block = block
+        self.acquisition_blocks = acquisition_blocks
+        self.method = method
+
+    @QtCore.Slot()
+    def run(self):
+        """ """
+        sleep(0.5)
+        self.signals.sigAcquisitionProgress.emit(self.path, self.fileformat, self.acquisition_blocks, self.is_display,
+                                                 self.metadata, self.block, self.method)
 
 
 # ======================================================================================================================
 # Classes for the dialog windows and main window
 # ======================================================================================================================
-
 class CameraSettingDialog(QtWidgets.QDialog):
     """ Create the SettingsDialog window, based on the corresponding *.ui file.
 
@@ -100,7 +196,6 @@ class BasicWindow(QtWidgets.QMainWindow):
         # this label is used to display the progress during spooling and video saving
         self.progress_label = QtWidgets.QLabel('')
         self.statusBar().addPermanentWidget(self.progress_label)
-
         self.show()
 
 
@@ -119,8 +214,6 @@ class BasicWindowCE(BasicWindow):
 # ======================================================================================================================
 # GUI class
 # ======================================================================================================================
-
-
 class BasicGUI(GUIBase):
     """ Main window containing the basic tools for the fluorescence microscopy setup
 
@@ -150,6 +243,7 @@ class BasicGUI(GUIBase):
     default_path = ConfigOption('default_path', missing='error')
     brightfield_control = ConfigOption('brightfield_control', False)
     setup = ConfigOption('Setup', False)
+    metadata_template_path = ConfigOption('metadata_template', missing='error')
 
     # signals
     # signals to camera logic
@@ -157,14 +251,14 @@ class BasicGUI(GUIBase):
     sigVideoStop = QtCore.Signal()
     sigImageStart = QtCore.Signal()
 
-    sigVideoSavingStart = QtCore.Signal(str, str, int, bool, dict)
-    sigSpoolingStart = QtCore.Signal(str, str, int, bool, dict)
+    sigVideoSavingStart = QtCore.Signal(str, str, str, int, bool, dict, bool)
+    sigSpoolingStart = QtCore.Signal(str, str, str, int, bool, dict, bool)
     
     sigInterruptLive = QtCore.Signal()
     sigResumeLive = QtCore.Signal()
     
-    sigSetSensor = QtCore.Signal(int, int, int, int, int, int)
-    sigResetSensor = QtCore.Signal()
+    sigSetSensor = QtCore.Signal(int, int, int, int, int, int, float)
+    sigResetSensor = QtCore.Signal(float)
     
     sigReadTemperature = QtCore.Signal()
 
@@ -192,6 +286,8 @@ class BasicGUI(GUIBase):
     # flags that enable to reuse the save settings dialog for both save video and spooling
     _video = False
     _spooling = False
+    _aborted = False
+    _restart_live = False
 
     # flags for rotation settings
     rotation_cw = False
@@ -207,6 +303,10 @@ class BasicGUI(GUIBase):
         self.brightfield_on_Action = None
         self._cam_sd = None
         self._save_sd = None
+        self._max_frames_movie = None
+        self._max_frames_spool = None
+        self.threadpool = QtCore.QThreadPool()
+        self.metadata_template = None
 
     def on_activate(self):
         """ Initializes all needed UI files and establishes the connectors.
@@ -218,9 +318,17 @@ class BasicGUI(GUIBase):
         if self.brightfield_control:
             self._brightfield_logic = self.brightfield_logic()
 
+        # Inquire the max number of images that the camera can handle for a single acquisition
+        self._max_frames_movie, self._max_frames_spool = self._camera_logic.get_max_frames()
+
+        # Load the metadata template
+        self.yaml = YAML()
+        with open(self.metadata_template_path, "r", encoding='utf-8') as file:
+            self.metadata_template = self.yaml.load(file)
+        self.metadata_template = dict(self.metadata_template)
+
         # Windows
         self._mw = BasicWindowCE(self.close_function)
-
         self._mw.centralwidget.hide()  # everything is in dockwidgets
         # self._mw.setDockNestingEnabled(True)
         self.init_camera_settings_ui()
@@ -308,7 +416,7 @@ class BasicGUI(GUIBase):
 
         # initialize the camera setting indicators on the GUI
         # use the kinetic time for andor camera, exposure time for all others
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_kinetic_time()))
             self._mw.exposure_Label.setText('Kinetic time (s):')
         else:
@@ -316,6 +424,7 @@ class BasicGUI(GUIBase):
             self._mw.exposure_Label.setText('Exposure time (s):')
 
         self._mw.gain_LineEdit.setText(str(self._camera_logic.get_gain()))
+
         if not self._camera_logic.has_temp:
             self._mw.temp_setpoint_LineEdit.setText('')
             self._mw.temp_setpoint_LineEdit.setEnabled(False)
@@ -341,6 +450,9 @@ class BasicGUI(GUIBase):
 
         self._mw.video_quickstart_Action.triggered.connect(self.video_quickstart_clicked)
 
+        self._mw.abort_video_Action.triggered.connect(self.abort_video_clicked)
+        self._mw.abort_video_Action.setEnabled(False)
+
         self._mw.set_sensor_Action.setEnabled(True)
         self._mw.set_sensor_Action.setChecked(self.region_selector_enabled)
         self._mw.set_sensor_Action.triggered.connect(self.select_sensor_region)
@@ -354,8 +466,8 @@ class BasicGUI(GUIBase):
         self.sigVideoStop.connect(self._camera_logic.stop_loop)
         self.sigVideoSavingStart.connect(self._camera_logic.start_save_video)
         self.sigSpoolingStart.connect(self._camera_logic.start_spooling)
-        self.sigInterruptLive.connect(self._camera_logic.interrupt_live)
-        self.sigResumeLive.connect(self._camera_logic.resume_live)
+        # self.sigInterruptLive.connect(self._camera_logic.interrupt_live)
+        # self.sigResumeLive.connect(self._camera_logic.resume_live)
         self.sigSetSensor.connect(self._camera_logic.set_sensor_region)
         self.sigResetSensor.connect(self._camera_logic.reset_sensor_region)
         self.sigReadTemperature.connect(self._camera_logic.get_temperature)
@@ -377,6 +489,7 @@ class BasicGUI(GUIBase):
 
         # control of the UI state by logic
         self._camera_logic.sigLiveStopped.connect(self.reset_start_video_button)
+        self._camera_logic.sigLiveStarted.connect(self.start_video_clicked)
         self._camera_logic.sigDisableCameraActions.connect(self.disable_camera_toolbuttons)
         self._camera_logic.sigEnableCameraActions.connect(self.enable_camera_toolbuttons)
 
@@ -391,6 +504,7 @@ class BasicGUI(GUIBase):
             self._mw.shutter_Label.setEnabled(False)
         else:
             self._mw.shutter_status_LineEdit.setText(self._camera_logic.get_shutter_state())
+
         if not self._camera_logic.has_temp:
             self._mw.cooler_status_LineEdit.setText('')
             self._mw.cooler_status_LineEdit.setEnabled(False)
@@ -401,6 +515,12 @@ class BasicGUI(GUIBase):
         else:
             self._mw.cooler_status_LineEdit.setText(self._camera_logic.get_cooler_state())
             self._mw.temperature_LineEdit.setText(str(self._camera_logic.get_temperature()))
+
+        if not self._camera_logic.has_gain:
+            self._mw.gain_label.setEnabled(False)
+            self._mw.gain_LineEdit.setEnabled(False)
+        else:
+            self._mw.gain_LineEdit.setText(str(self._camera_logic.get_gain()))
 
         # signals
         # update the indicators when pushbutton is clicked
@@ -521,47 +641,67 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods belonging to the camera settings window in the options menu
 # ----------------------------------------------------------------------------------------------------------------------
-
     def init_camera_settings_ui(self):
         """ Definition, configuration and initialisation of the camera settings GUI.
         """
         # Create the Camera settings window
         self._cam_sd = CameraSettingDialog()
+
         # Connect the action of the settings window with the code:
         self._cam_sd.accepted.connect(self.cam_update_settings)  # ok button
         self._cam_sd.rejected.connect(self.cam_keep_former_settings)  # cancel buttons
         
-        # frame transfer settings
-        self._cam_sd.frame_transfer_CheckBox.toggled[bool].connect(self._camera_logic.set_frametransfer)
+        # # frame transfer settings and gain limits
+        # self._cam_sd.frame_transfer_CheckBox.toggled[bool].connect(self._camera_logic.set_frametransfer)
         
         if not self._camera_logic.has_temp:
             self._cam_sd.temp_spinBox.setEnabled(False)
-            self._cam_sd.label_3.setEnabled(False)
+            self._cam_sd.label_temperature.setEnabled(False)
 
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if not self._camera_logic.has_gain:
+            self._cam_sd.gain_spinBox.setEnabled(False)
+            self._cam_sd.label_gain.setEnabled(False)
+        else:
+            low, high = self._camera_logic.get_gain_range()
+            self._cam_sd.label_gain.setText(f"Gain [{low} - {high}]")
+
+        if not self._camera_logic.support_frame_transfer:
+            self._cam_sd.frame_transfer_CheckBox.setEnabled(False)
+        else:
             self._cam_sd.frame_transfer_CheckBox.setEnabled(True)
 
         # write the configuration to the settings window of the GUI.
         self.cam_keep_former_settings()
 
+    @decorator_print_function
     def cam_update_settings(self):
         """ Write new settings from the gui to the logic module.
         """
-        # interrupt live display if it is on - a sleep time was added to make sure the live was stopped before the
-        # exposure time was updated. Else, it is executed too fast and is not taken into account because live seems not
-        # yet to be interrupted. This is why kinetic time indicator was not updated when live is on.
-        if self._camera_logic.live_enabled:  # camera is acquiring
-            self.sigInterruptLive.emit()
-            time.sleep(0.5)
+        # interrogate the acquisition status of the camera
+        live_enabled = self._camera_logic.live_enabled
 
+        # stop live display if it is on - a sleep delay is used to make sure the signal was properly emitted and the
+        # acquisition stopped before attempting to change the parameters
+        if live_enabled:  # camera is acquiring
+            # self.sigInterruptLive.emit()
+            self.sigVideoStop.emit()
+            sleep(1)
+
+        # frame transfer
+        if self._camera_logic.support_frame_transfer:
+            self._camera_logic.set_frametransfer(self._cam_sd.frame_transfer_CheckBox.isChecked())
+
+        # update camera settings
         self._camera_logic.set_exposure(self._cam_sd.exposure_doubleSpinBox.value())
-        # new_exposure = self._cam_sd.exposure_doubleSpinBox.value()
-        # self.sigSetExposure.emit(new_exposure)
         self._camera_logic.set_gain(self._cam_sd.gain_spinBox.value())
         self._camera_logic.set_temperature(int(self._cam_sd.temp_spinBox.value()))
         self._mw.temp_setpoint_LineEdit.setText(str(self._cam_sd.temp_spinBox.value()))
-        if self._camera_logic.live_enabled:
-            self.sigResumeLive.emit()
+
+        # if the camera was in live acquisition, re-launch it
+        #if self._camera_logic.live_enabled:
+        if live_enabled:
+            self.sigVideoStart.emit()
+            # self.sigResumeLive.emit()
 
     def cam_keep_former_settings(self):
         """ Keep the old settings and restores them in the gui. 
@@ -584,7 +724,6 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods belonging to the save settings window
 # ----------------------------------------------------------------------------------------------------------------------
-
     def init_save_settings_ui(self):
         """ Definition, configuration and initialisation of the dialog window which allows to configure the
         video saving.
@@ -611,31 +750,156 @@ class BasicGUI(GUIBase):
         # set default values on start
         self.set_default_values()
 
+    @staticmethod
+    def calculate_blocks(N, b, ratio):
+        """
+        Calculate the number of blocks and images in each block for acquiring N images. If an ROi was defined (meaning
+        the sensor region is now smaller) the maximum number of frames allowed per block is recalculated taking into
+        account the new size.
+        @arguments:
+            N (int): Total number of images to acquire.
+            b (int): Number of images per block.
+            ratio (int): ratio of the number of pixels between the maximum size of the sensor and the actual size (for
+            example after defining an ROI)
+        @returns:
+            list: A list where each element is the number of images in that block.
+        """
+        # based on the pixel ration, compute the allowed max number of frames
+        frames = b * ratio
+        if frames < 4000:
+            b = frames
+        else:
+            b = 4000
+        print(f'The maximum number of frames per block is set to {b}')
+
+        # compute the number of blocks with the new values for the number of frames
+        num_full_blocks = N // b  # Number of full blocks
+        remainder = N % b  # Remaining images after full blocks
+        # Create a list with `b` images for each full block
+        blocks = [b] * num_full_blocks
+        # If there's a remainder, add it as an additional block
+        if remainder > 0:
+            blocks.append(remainder)
+        return blocks
+
+    @decorator_print_function
     def save_video_accepted(self):
         """ Callback of the ok button.
         Retrieves the information given by the user and transfers them by the signal which will start the physical
         measurement.
         """
+        # if live mode is on, stop it (important to interrogate the camera parameters such as the temperature)
+        live_enabled = self._camera_logic.live_enabled
+        if live_enabled:
+            self.sigVideoStop.emit()
+            self.reset_start_video_button()
+            self._restart_live = True
+            sleep(1)
+        else:
+            self._restart_live = False
+
+        # define the parameters and metadata
         folder_name = self._save_sd.foldername_LineEdit.text()
         default_path = self._mw.save_path_LineEdit.text()
         today = datetime.today().strftime('%Y_%m_%d')
         path = os.path.join(default_path, today, folder_name)
         fileformat = '.'+str(self._save_sd.file_format_ComboBox.currentText())
-
         n_frames = self._save_sd.n_frames_SpinBox.value()
-
         display = self._save_sd.enable_display_CheckBox.isChecked()
+        metadata = self._create_metadata_dict(n_frames)
 
-        metadata = self._create_metadata_dict()
+        # For Andor cameras, acquisition can be done in video or spool modes. For the Andor camera 888, display does not
+        # work properly when the spooling mode is ON. Therefore, if display is ON, the acquisition mode is automatically
+        # switch to video.
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
+            if not display and fileformat in ['.tif', '.fits']:
+                self._spooling = True
+                self._video = False
+            else:
+                self._spooling = False
+                self._video = True
+        else:
+            self._video = True
 
-        # we need a case structure here: if the dialog was on a system with Andor iXon Ultra camera, sigSpoolingStart
-        # must be emitted, else, sigVideoSavingStart must be emitted.
+        # Depending on the number of images, several consecutive acquisitions will be required. Below, the acquisition
+        # is divided in blocks, according to the maximum number of frames the camera & computer can handle.
+        N_full_sensor_pixels = prod(self._camera_logic.get_size())
+        N_image_pixels = prod(self._camera_logic.get_sensor_region())
+        N_pixels_ratio = np.floor(N_full_sensor_pixels / N_image_pixels).astype(int)
+        print(N_full_sensor_pixels, N_image_pixels, N_pixels_ratio)
         if self._video:
-            self.sigVideoSavingStart.emit(path, fileformat, n_frames, display, metadata)
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_movie, N_pixels_ratio)
+            acq_method = "video"
         elif self._spooling:
-            self.sigSpoolingStart.emit(path, fileformat, n_frames, display, metadata)
-        else:  # to do: write an error message or something like this ???
+            acquisition_blocks = self.calculate_blocks(n_frames, self._max_frames_spool, N_pixels_ratio)
+            acq_method = "spool"
+        else:
+            self.log.error('For some unknown reason, none of the two acquisition methods (video or spool) were properly'
+                           ' set. The error was detected in the "save_video_accepted" in basic_gui.py')
+
+        # Launch the first acquisition
+        filename = f'movie_{"{:02d}".format(0)}'
+        if self._video:
+            self.sigVideoSavingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
+        elif self._spooling:
+            self.sigSpoolingStart.emit(path, filename, fileformat, acquisition_blocks[0], display, metadata, False)
+
+        # Launch a worker thread that will monitor the saving procedures - this is required since having a while loop
+        # waiting for the end of the acquisition is freezing the GUI...
+        self.disable_camera_toolbuttons()
+        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, 0, acq_method)
+        worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
+        self.threadpool.start(worker)
+
+    def monitor_acquisition(self, path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method):
+        """ This method is used to monitor a current acquisition (block by block).
+        @param path: (str) path to the folder where the data are saved
+        @param fileformat: (str) indicates the selected format for the images
+        @param acquisition_blocks: (list) contains the number of frames for each acquisition block
+        @param display: (bool) indicate whether the acquisition mode is spooling or video
+        @param metadata: (dic) contains the metadata
+        @param n_block: (int) indicate which block is being processed
+        @param acq_method: (int) indicated which acquisition method is used
+        """
+        if self._video or self._spooling:
             pass
+        elif self._aborted:
+            self.log.warn("Acquisition was aborted by user.")
+            self.enable_camera_toolbuttons()
+            self._mw.progress_label.setText('')
+            self._aborted = False
+            return
+        else:
+            n_block = n_block + 1
+            if n_block < len(acquisition_blocks):
+                n_frames_block = acquisition_blocks[n_block]
+
+                # Reset the variable indicating that an acquisition is being processed
+                if acq_method == "video":
+                    self._video = True
+                elif acq_method == "spool":
+                    self._spooling = True
+
+                # Launch the acquisition
+                filename = f'movie_{"{:02d}".format(n_block)}'
+                if self._video:
+                    self.sigVideoSavingStart.emit(path, filename, fileformat, n_frames_block, display, metadata, True)
+                elif self._spooling:
+                    self.sigSpoolingStart.emit(path, filename, fileformat, n_frames_block, display, metadata, True)
+            else:
+                self.log.info("Acquisition is finished!")
+                # reset the toolbuttons and clear the status bar
+                self.enable_camera_toolbuttons()
+                self._mw.save_video_Action.setChecked(False)
+                self._mw.progress_label.setText('')
+                if self._restart_live:
+                    self.start_video_clicked()
+                return
+
+        # Launch a worker thread that will monitor the saving procedures
+        worker = AcquisitionProgressWorker(path, fileformat, acquisition_blocks, display, metadata, n_block, acq_method,)
+        worker.signals.sigAcquisitionProgress.connect(self.monitor_acquisition)
+        self.threadpool.start(worker)
 
     def cancel_save(self):
         """ Callback of the cancel button of the video save settings dialog.
@@ -690,44 +954,39 @@ class BasicGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # updating elements on the camera dockwidget ---------------------------------------------------------------------------
-    @QtCore.Slot(float)
-    def update_exposure(self, exposure):
+    @QtCore.Slot()
+    def update_exposure(self):
         """ Updates the displayed value of exposure time in the corresponding read-only lineedit.
         Indicates the kinetic time instead of the user defined exposure time in case of andor camera.
-
-        :param: float exposure
-        :return: None
+        @return: None
         """
         # indicate the kinetic time instead of the exposure time for andor ixon camera
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_kinetic_time()))
         else:
-            self._mw.exposure_LineEdit.setText('{:0.5f}'.format(exposure))
+            self._mw.exposure_LineEdit.setText('{:0.5f}'.format(self._camera_logic.get_exposure()))
 
     @QtCore.Slot(float)
     def update_gain(self, gain):
         """ Updates the read-only lineedit showing the applied gain.
-
-        :param: float gain
-        :return: None
+        @param: float gain
+        @return: None
         """
         self._mw.gain_LineEdit.setText(str(gain))
 
     @QtCore.Slot(float)
     def update_temperature(self, temp):
         """ Updates the read-only lineedit showing the current sensor temperature.
-
-        :param: float temperature
-        :return: None
+        @param: float temperature
+        @return: None
         """
         self._mw.temperature_LineEdit.setText(str(temp))
 
     @QtCore.Slot(str)
     def update_sample_name(self, samplename):
         """ Updates the folder name lineedit in the save settings dialog when the sample name on the gui was modified.
-
-        :param: str samplename
-        :return: None
+        @param: str samplename
+        @return: None
         """
         self._save_sd.foldername_LineEdit.setText(samplename)
 
@@ -747,6 +1006,10 @@ class BasicGUI(GUIBase):
         Get the image data from the logic and show it in the image item.
         """
         image_data = self._camera_logic.get_last_image()
+
+        # Convert to a safe type for processing (to avoid weird bugs with the display)
+        image_data = image_data.astype(np.float32)
+
         # handle the rotation that occurs due to the image formatting conventions
         # (see also https://github.com/pyqtgraph/pyqtgraph/issues/315)
         # this could be improved by another method ?! though reversing the y axis did not work.
@@ -773,6 +1036,7 @@ class BasicGUI(GUIBase):
         self.disable_camera_toolbuttons()
         self.imageitem.getViewBox().rbScaleBox.hide()  # hide the rubberband tool used for roi selection on sensor
 
+    @decorator_print_function
     @QtCore.Slot()
     def acquisition_finished(self):
         """ Callback of sigAcquisitionFinished. Resets all tool buttons to callable state.
@@ -785,12 +1049,13 @@ class BasicGUI(GUIBase):
         """ Callback of start_video_Action. (start and display a continuous image from the camera, without saving)
         Handles the state of the start button and emits a signal (connected to logic) to start the live loop.
         """
-        self._mw.take_image_Action.setDisabled(True)  # snap and live are mutually exclusive
         if self._camera_logic.live_enabled:  # video already running
+            self._mw.take_image_Action.setDisabled(False)  # snap and live are mutually exclusive
             self._mw.start_video_Action.setText('Live')
             self._mw.start_video_Action.setToolTip('Start live video')
             self.sigVideoStop.emit()
         else:
+            self._mw.take_image_Action.setDisabled(True)  # snap and live are mutually exclusive
             self._mw.start_video_Action.setText('Stop Live')
             self._mw.start_video_Action.setToolTip('Stop live video')
             self.sigVideoStart.emit()
@@ -821,17 +1086,26 @@ class BasicGUI(GUIBase):
         today = datetime.today().strftime('%Y_%m_%d')
         folder_name = self._mw.samplename_LineEdit.text()
         filenamestem = os.path.join(default_path, today, folder_name)
-        metadata = self._create_metadata_dict()
+        metadata = self._create_metadata_dict(1)
         self._camera_logic.save_last_image(filenamestem, metadata)
 
     @QtCore.Slot()
+    def abort_video_clicked(self):
+        """ Callback of abort_video_Action. Handles toolbutton state and allow the use to stop an acquisition before
+        its end.
+        """
+        self._camera_logic.acquisition_aborted = True
+        self._aborted = True
+
+    @QtCore.Slot()
     def save_video_clicked(self):
-        """ Callback of save_video_Action. Handles toolbutton state, and opens the save settings dialog.
+        """ Callback of save_video_Action. Handles toolbutton state, and opens the save settings dialog. Note that two
+        acquisition modes are available, depending on the type of cameras. Spooling only exists for Andor.
         """
         # disable camera related toolbuttons
         self.disable_camera_toolbuttons()
         # set the flag to True so that the dialog knows that is was called from save video button
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
             self._spooling = True
         else:
             self._video = True
@@ -848,9 +1122,15 @@ class BasicGUI(GUIBase):
         # disable camera related toolbuttons
         self.disable_camera_toolbuttons()
         # decide depending on camera which signal has to be emitted in save_video_accepted method
-        # same approach can later be used to regroup save_video and save_long_video buttons into one action
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
-            self._spooling = True
+        # same approach can later be used to regroup save_video and save_long_video buttons into one action. Note that
+        # display does not work properly in spooling mode (at least for the 888 model). Therefore, when display is ON,
+        # the camera will acquire is video mode.
+        display = self._save_sd.enable_display_CheckBox.isChecked()
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
+            if display:
+                self._video = True
+            else:
+                self._spooling = True
         else:
             self._video = True
         self.save_video_accepted()
@@ -863,11 +1143,11 @@ class BasicGUI(GUIBase):
         # reset the flags
         self._video = False
         self._spooling = False
-        # toolbuttons
-        self.enable_camera_toolbuttons()
-        self._mw.save_video_Action.setChecked(False)
-        # clear the statusbar
-        self._mw.progress_label.setText('')
+        # # toolbuttons
+        # self.enable_camera_toolbuttons()
+        # self._mw.save_video_Action.setChecked(False)
+        # # clear the statusbar
+        # self._mw.progress_label.setText('')
 
     @QtCore.Slot()
     def select_sensor_region(self):
@@ -880,23 +1160,43 @@ class BasicGUI(GUIBase):
             self._mw.set_sensor_Action.setText('Reset sensor to default size')
         else:  # area selection is initially on:
             self._mw.camera_ScanPlotWidget.toggle_selection(False)
+            self.reset_sensor_region()
             self.region_selector_enabled = False
-            #            self._camera_logic.reset_sensor_region()
-            self.sigResetSensor.emit()
             self._mw.set_sensor_Action.setText('Set sensor region')
 
-            # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
-            self.cam_update_settings()
+            # # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+            # self.cam_update_settings()
+
+    def reset_sensor_region(self):
+        """ Reset the sensor to its default size
+        """
+        exposure_time = self._cam_sd.exposure_doubleSpinBox.value()
+        live_enabled = self._camera_logic.live_enabled
+
+        # if live acquisition, stop the live in order to update the parameters
+        if live_enabled:
+            self.sigVideoStop.emit()
+            sleep(1)
+
+        # reset the sensor to its original size
+        self.sigResetSensor.emit(exposure_time)
+
+        # if the camera was in live mode, launch it again
+        if live_enabled:
+            self.sigVideoStart.emit()
+            self.imageitem.getViewBox().rbScaleBox.hide()
 
     @QtCore.Slot(QtCore.QRectF)
+    @decorator_print_function
     def mouse_area_selected(self, rect):
         """ This slot is called when the user has selected an area of the camera image using the rubberband tool.
         Allows to reduce the used area of the camera sensor.
-
         @param: (QRectF) rect: Qt object defining the corners of a rectangle selected in an image item.
         """
-        self.log.debug('selected an area')
-        self.log.debug(rect.getCoords())
+        exposure_time = self._cam_sd.exposure_doubleSpinBox.value()
+        live_enabled = self._camera_logic.live_enabled
+
+        # read the coordinates of the selected region
         hstart, vstart, hend, vend = rect.getCoords()
         hstart = round(hstart)
         vstart = round(vstart)
@@ -907,20 +1207,28 @@ class BasicGUI(GUIBase):
         hend_ = max(hstart, hend)
         vstart_ = min(vstart, vend)
         vend_ = max(vstart, vend)
-        self.log.debug('hstart={}, hend={}, vstart={}, vend={}'.format(hstart_, hend_, vstart_, vend_))
+        self.log.info('hstart={}, hend={}, vstart={}, vend={}'.format(hstart_, hend_, vstart_, vend_))
         # inversion along the y axis:
         # it is needed to call the function set_sensor_region(hbin, vbin, hstart, hend, vstart, vend)
         # using the following arguments: set_sensor_region(hbin, vbin, start, hend, num_px_y - vend, num_px_y - vstart)
         # ('vstart' needs to be smaller than 'vend')
         num_px_y = self._camera_logic.get_max_size()[1]  # height is stored in the second return value of get_size
-        # self.log.debug(num_px_y)
 
-        self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_)
-        if self._camera_logic.live_enabled:  # if live mode is on hide rubberband selector directly
-            self.imageitem.getViewBox().rbScaleBox.hide()
+        # if live acquisition, stop the live in order to update the parameters
+        if live_enabled:
+            self.sigVideoStop.emit()
+            sleep(1)
 
-        # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
-        self.cam_update_settings()
+        # update the new sensor size
+        self.sigSetSensor.emit(1, 1, hstart_, hend_, num_px_y - vend_, num_px_y - vstart_, exposure_time)
+
+        # if the camera was in live mode, launch it
+        if live_enabled:
+            self.sigVideoStart.emit()
+            self.imageitem.getViewBox().rbScaleBox.hide()  # hide rubberband selector directly
+
+        # # Recalculate the camera settings (in particular the exposure time) according to the new size of the FoV
+        # self.cam_update_settings()
 
 # menubar options belonging to camera image ---------------------------------------------------------------------------
     @QtCore.Slot()
@@ -988,6 +1296,7 @@ class BasicGUI(GUIBase):
         self._mw.progress_label.setText('')
 
 # handle the state of toolbuttons / disable & enable user interface actions --------------------------------------------
+    @decorator_print_function
     def reset_toolbuttons(self):
         """ This slot is called when save dialog is canceled.
 
@@ -995,6 +1304,7 @@ class BasicGUI(GUIBase):
         self.enable_camera_toolbuttons()
         self._mw.save_video_Action.setChecked(False)
 
+    @decorator_print_function
     def disable_camera_toolbuttons(self):
         """ Disables all toolbuttons of the camera toolbar. """
         self._mw.take_image_Action.setDisabled(True)
@@ -1003,11 +1313,14 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(True)
         self._mw.video_quickstart_Action.setDisabled(True)
         self._mw.set_sensor_Action.setDisabled(True)
+        self._mw.abort_video_Action.setDisabled(False)
+        self._mw.abort_video_Action.setChecked(False)
 
     def disable_frame_transfer(self):
         """ Disables the frame transfer checkbox. """
         self._cam_sd.frame_transfer_CheckBox.setChecked(False)
 
+    @decorator_print_function
     def enable_camera_toolbuttons(self):
         """
         Enables all toolbuttons of the camera toolbar. Serves also as callback of SigVideoFinished.
@@ -1019,42 +1332,69 @@ class BasicGUI(GUIBase):
         self._mw.save_video_Action.setDisabled(False)
         self._mw.video_quickstart_Action.setDisabled(False)
         self._mw.set_sensor_Action.setDisabled(False)
+        self._mw.abort_video_Action.setDisabled(True)
+        self._mw.abort_video_Action.setChecked(False)
 
 # helper functions -----------------------------------------------------------------------------------------------------
-    def _create_metadata_dict(self):
+    def _create_metadata_dict(self, n_frames):
         """ create a dictionary containing the metadata.
-
-        :return: dict metadata
+        @param: (int) number of frames required for the acquisition
+        @return: (dict) metadata
         """
-        metadata = {}
+        metadata = copy.deepcopy(self.metadata_template)
+
         # ----general----------------------------------------------------------------------------
         metadata['Time'] = datetime.now().strftime('%m-%d-%Y, %H:%M:%S')
-        # sample name ?
+
         # ----camera-----------------------------------------------------------------------------
-        metadata['Exposure time (s)'] = self._camera_logic.get_exposure()
-        if self._camera_logic.get_name() == 'iXon Ultra 897':
-            metadata['Kinetic time (s)'] = self._camera_logic.get_kinetic_time()
-        metadata['Gain'] = self._camera_logic.get_gain()
+        metadata = update_metadata(metadata, ['Acquisition', 'number_frames'], n_frames)
+        folder_name = self._save_sd.foldername_LineEdit.text()
+        metadata = update_metadata(metadata, ['Acquisition', 'sample_name'], folder_name)
+        metadata = update_metadata(metadata, ['Acquisition', 'exposure_time_(s)'], self._camera_logic.get_exposure())
+        if (self._camera_logic.get_name() == 'iXon Ultra 897') or (self._camera_logic.get_name() == 'iXon Ultra 888'):
+            metadata = update_metadata(metadata, ['Acquisition', 'kinetic_time_(s)'],
+                                       self._camera_logic.get_kinetic_time())
+            parameters = self._camera_logic.get_non_interfaced_parameters()
+            for key, value in parameters.items():
+                metadata = update_metadata(metadata, ['Camera', 'specific_parameters', key], value)
+
+        if self._camera_logic.has_gain:
+            metadata = update_metadata(metadata, ['Acquisition', 'gain'], self._camera_logic.get_gain())
+        else:
+            metadata = update_metadata(metadata, ['Acquisition', 'gain'], "Not available")
+
         if self._camera_logic.has_temp:
             self.sigReadTemperature.emit()  # short interruption of live mode to read temperature
-            metadata['Sensor temperature (deg C)'] = self._camera_logic._temperature
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       self._camera_logic.get_temperature())
         else:
-            metadata['Sensor temperature (deg C)'] = 'Not available'
+            metadata = update_metadata(metadata, ['Acquisition', 'sensor_temperature_setpoint_(°C)'],
+                                       "Not available")
+
+        if self._camera_logic.support_frame_transfer:
+            metadata = update_metadata(metadata, ['Acquisition', 'frame_transfer'], self._camera_logic.frame_transfer)
+        else:
+            metadata = update_metadata(metadata, ['Acquisition', 'frame_transfer'], "Not available")
+
         # ----filter------------------------------------------------------------------------------
         filterpos = self._filterwheel_logic.get_position()
         filterdict = self._filterwheel_logic.get_filter_dict()
         label = 'filter{}'.format(filterpos)
-        metadata['Filter'] = filterdict[label]['name']
+        metadata = update_metadata(metadata, ['Acquisition', 'filter'], filterdict[label]['name'])
+
         # ----laser-------------------------------------------------------------------------------
         intensity_dict = self._laser_logic._intensity_dict
         keylist = [key for key in intensity_dict if intensity_dict[key] != 0]
         laser_dict = self._laser_logic.get_laser_dict()
-        metadata['Laser lines'] = [laser_dict[key]['wavelength'] for key in keylist]
-        if not metadata['Laser lines']:  # for compliance with fits header conventions ([] is forbidden)
-            metadata['Laser lines'] = None
-        metadata['Laser intensities (%)'] = [intensity_dict[key] for key in keylist]
-        if not metadata['Laser intensities (%)']:
-            metadata['Laser intensities (%)'] = None
+        for key in keylist:
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_lines'], laser_dict[key]['wavelength'],
+                                       action="append")
+            metadata = update_metadata(metadata, ['Acquisition', 'laser_power_(%)'], intensity_dict[key],
+                                       action="append")
+        # if not metadata['Acquisition']['laser_lines']:  # for compliance with fits header conventions ([] is forbidden)
+        #     metadata['Acquisition']['laser_lines'] = None
+        # if not metadata['Acquisition']['laser_power_(%)']:
+        #     metadata['Acquisition']['laser_power_(%)'] = None
 
         return metadata
 

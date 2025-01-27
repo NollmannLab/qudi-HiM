@@ -88,6 +88,9 @@ class LaserControlLogic(GenericLogic):
         self._laser_dict = self.get_laser_dict()
         self._intensity_dict = self.init_intensity_dict(0)
 
+        # Make sure all lasers are off at the start (necessary sometimes after a crash)
+        self.voltage_off()
+
     def on_deactivate(self):
         """ Perform required deactivation. """
         pass
@@ -206,8 +209,6 @@ class LaserControlLogic(GenericLogic):
     def voltage_off(self):
         """ Switch all lasers off.
         The intensity dictionary is not reset, to be able to restart laser output right away.
-
-        :return: None
         """
         self.enabled = False
         if (self.controllertype == 'daq') or (self.controllertype == 'fpga'):

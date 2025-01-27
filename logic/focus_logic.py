@@ -47,23 +47,36 @@ verbose = True
 # ======================================================================================================================
 
 class WorkerSignals(QtCore.QObject):
-    """ Defines the signals available from a running worker thread. """
+    """ Defines the signals available from a running worker thread.
+    """
     sigFinished = QtCore.Signal()
+    sigFinished_autofocus = QtCore.Signal(object)
 
 
 class AutofocusWorker(QtCore.QRunnable):
     """ Worker thread to monitor the autofocus signal (QPD or camera) and adjust the piezo position when autofocus in
-    ON.The worker handles only the waiting time between signal readout. """
-    def __init__(self, dt, *args, **kwargs):
-        super(AutofocusWorker, self).__init__(*args, **kwargs)
+    ON.The worker handles only the waiting time between signal readout.
+    """
+    def __init__(self, dt, worker_id, termination_flags, finished_conditions):
+        super(AutofocusWorker, self).__init__()
         self.signals = WorkerSignals()
         self.frequency = dt
+        self.worker_id = worker_id
+        self.termination_flags = termination_flags
+        self.finished_condition = finished_conditions
 
     @QtCore.Slot()
     def run(self):
         """ """
-        sleep(self.frequency)
-        self.signals.sigFinished.emit()
+        # sleep(self.frequency)
+        # self.signals.sigFinished.emit()
+        try:
+            if not self.termination_flags.get(self.worker_id, False):
+                sleep(self.frequency)
+                self.signals.sigFinished_autofocus.emit(self.worker_id)
+        finally:
+            # Notify the stop condition that the worker has finished
+            self.finished_condition.wakeAll()
 
 
 class Worker(QtCore.QRunnable):
@@ -132,6 +145,7 @@ class FocusLogic(GenericLogic):
     sigPositionChanged = QtCore.Signal(float)
     sigPiezoInitFinished = QtCore.Signal()
     sigUpdateTimetrace = QtCore.Signal(float)
+    sigResetCalibration = QtCore.Signal()
     sigPlotCalibration = QtCore.Signal(object, object, object, float, float)
     sigOffsetCalibration = QtCore.Signal(float)
     sigSetpointDefined = QtCore.Signal(float)
@@ -143,6 +157,12 @@ class FocusLogic(GenericLogic):
     sigFocusFound = QtCore.Signal()
     sigDisableFocusActions = QtCore.Signal()
     sigEnableFocusActions = QtCore.Signal()
+
+    # worker lock to avoid race conditions for the autofocus
+    worker_locks = {}
+    termination_flags = {}  # Track termination states
+    stop_condition = QtCore.QWaitCondition()  # For waiting until the worker finishes
+    stop_mutex = QtCore.QMutex()  # Mutex for synchronization
 
     # IR laser shutter attributes. If a shutter is associated to the setup, disable the focus stabilization function
     # (cannot be used while acquiring data)
@@ -498,6 +518,7 @@ class FocusLogic(GenericLogic):
         # calibration is aborted. - For all other setup, nothing will happen.
         if self._shutter is not None:
             if self._shutter.open_shutter():
+                self.sigResetCalibration.emit()
                 return
 
         # Compute the piezo ramp parameters
@@ -573,23 +594,259 @@ class FocusLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Autofocus
 # ----------------------------------------------------------------------------------------------------------------------
+
+    # def start_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False,
+    #                     worker_id="autofocus_worker"):
+    #     """ This method starts the autofocus. This can only be done if the piezo was calibrated and a setpoint defined.
+    #     A check is also performed in order to make sure there is enough signal detected.
+    #
+    #     @param (bool) stop_at_target: if True, the autofocus stops when close enough to the target setpoint
+    #     @param (bool) stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
+    #                                     (little variation during 10 iterations).
+    #                                     default is False: autofocus running continuously until stopped by user.
+    #     @param (bool) search_focus: boolean variable indicating that an advanced autofocus method using the reflection
+    #                             on the lower interface of the sample's glass slide called the start_autofocus routine.
+    #                             If True, it ensures that the focus is moved back to the sample surface after stabilizing
+    #                             the focus.
+    #                             Only use search_focus = True in combination with stop_when_stable = True,
+    #                             otherwise it has no effect.
+    #     """
+    #     # check if autofocus can be started
+    #     if not self._calibrated:
+    #         self.log.warning('Autofocus not calibrated.')
+    #         self.sigAutofocusError.emit()
+    #         return
+    #
+    #     if not self._setpoint_defined:
+    #         self.log.warning('Setpoint not defined.')
+    #         self.sigAutofocusError.emit()
+    #         return
+    #
+    #     if self._shutter is not None:
+    #         if self._shutter.open_shutter():
+    #             return
+    #
+    #     # autofocus can be started - check the signal is detected, meaning that the correction can be performed. If the
+    #     # IR signal is lost, a rescue is launched.
+    #     self.autofocus_enabled = True
+    #     self.check_autofocus()  # this updates self._autofocus_lost
+    #
+    #     if self._autofocus_lost:
+    #         self.log.warning('Autofocus lost! (in start_autofocus)')
+    #         if self.rescue:
+    #             success = self.rescue_autofocus()
+    #             if success:
+    #                 self.start_autofocus(stop_when_stable=stop_when_stable,
+    #                                      stop_at_target=stop_at_target,
+    #                                      search_focus=search_focus)
+    #                 return
+    #             else:
+    #                 self.autofocus_enabled = False
+    #                 self.log.warning('Autofocus signal not found during rescue autofocus (in start_autofocus)')
+    #                 self.sigAutofocusError.emit()
+    #                 # if the search focus option is True, move the offset back to its initial position
+    #                 if search_focus:
+    #                     offset = self._autofocus_logic._focus_offset
+    #                     self.stage_move_z_relative(-offset)
+    #                     timeout = self.stage_wait_for_idle()
+    #                     if timeout:
+    #                         self.log.warn("Timeout occured in start_autofocus")
+    #                     self.focus_search_running = False
+    #                     self.focus_search_aborted = True
+    #                 return
+    #         else:
+    #             self.autofocus_enabled = False
+    #             self.sigAutofocusError.emit()
+    #             return
+    #
+    #     # all prerequisites ok and signal found
+    #     if self._readout == 'camera' and not self.live_display_enabled:
+    #         self._autofocus_logic.start_camera_live()
+    #
+    #     self._autofocus_logic.init_pid()
+    #     self._z0 = self.get_position()
+    #     self._dt = self._autofocus_logic._pid_frequency
+    #
+    #     worker = AutofocusWorker(self._dt)
+    #     worker.signals.sigFinished_autofocus.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+    #                                                          stop_at_target=stop_at_target,
+    #                                                          search_focus=search_focus))
+    #     self.threadpool.start(worker)
+    #
+    # @decorator_print_function
+    # def run_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
+    #     """ Based on the pid output, the position of the piezo is corrected in real time. In order to avoid
+    #     unnecessary movement of the piezo, the corrections are only applied when an absolute displacement >100nm is
+    #     required.
+    #
+    #     @param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
+    #                                     (little variation during 10 iterations).
+    #                                     default is False: autofocus running continuously until stopped by user.
+    #     @param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
+    #                             on the lower interface of the sample's glass slide called the start_autofocus routine.
+    #                             If True, it ensures that the focus is moved back to the sample surface after stabilizing
+    #                             the focus.
+    #                             Only use search_focus = True in combination with stop_when_stable = True,
+    #                             otherwise it has no effect.
+    #     @param stop_at_target: if True, the autofocus stops when close enough to the target setpoint
+    #     """
+    #     self.check_autofocus()  # updates self._autofocus_lost
+    #
+    #     if self.autofocus_enabled:
+    #
+    #         if self._autofocus_lost:
+    #             self.log.warning('autofocus lost! (in run_autofocus)')
+    #             if self.rescue:
+    #                 # to verify: add here stop autofocus ?
+    #                 success = self.rescue_autofocus()
+    #                 if success:
+    #                     self.start_autofocus(stop_when_stable=stop_when_stable,
+    #                                          stop_at_target=stop_at_target,
+    #                                          search_focus=search_focus)
+    #                     return
+    #                 else:
+    #                     self.autofocus_enabled = False
+    #                     self.log.warning('autofocus signal not found during rescue autofocus')
+    #                     self.sigAutofocusError.emit()
+    #                     # if the search focus option is True, move the offset back to its initial position
+    #                     if search_focus:
+    #                         offset = self._autofocus_logic._focus_offset
+    #                         self.stage_move_z_relative(-offset)
+    #                         timeout = self.stage_wait_for_idle()
+    #                         if timeout:
+    #                             self.log.warn("Timeout occurred in run_autofocus")
+    #                         self.focus_search_running = False
+    #                         self.focus_search_aborted = True
+    #                     return
+    #             else:
+    #                 self.autofocus_enabled = False
+    #                 self.sigAutofocusError.emit()
+    #                 return
+    #
+    #         if stop_when_stable:
+    #             pid, stop_autofocus = self._autofocus_logic.read_pid_output(True, False)
+    #             if stop_autofocus:
+    #                 self.log.info('focus is stable')
+    #                 self.autofocus_enabled = False
+    #                 self.sigAutofocusStopped.emit()
+    #                 if search_focus:
+    #                     self.search_focus_finished()
+    #                 return
+    #         if stop_at_target:
+    #             pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, True)
+    #             if stop_autofocus:
+    #                 self.log.info('target position found')
+    #                 self.autofocus_enabled = False
+    #                 self.sigAutofocusStopped.emit()
+    #                 if search_focus:
+    #                     self.search_focus_finished()
+    #                 return
+    #         else:
+    #             pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, False)
+    #
+    #         # calculate the necessary movement of piezo dz
+    #         z = self._z0 + pid / self._slope
+    #         dz = np.absolute(self.get_position() - z)
+    #         # print(f'z is {z}, dz is {dz}')
+    #
+    #         if self._min_z + 1 < z < self._max_z - 1:
+    #             if dz > self._min_piezo_step and not stop_autofocus:
+    #                 self.go_to_position(z, direct=True)
+    #         else:
+    #             self.log.warning('piezo target position out of constraints')
+    #             self.autofocus_enabled = False
+    #             self.sigAutofocusError.emit()
+    #             if search_focus:
+    #                 self.search_focus_finished()
+    #             return
+    #
+    #         worker = AutofocusWorker(self._dt)
+    #         worker.signals.sigFinished_autofocus.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
+    #                                                              stop_at_target=stop_at_target,
+    #                                                              search_focus=search_focus))
+    #         self.threadpool.start(worker)
+    #
+    # @decorator_print_function
+    # def stop_autofocus(self):
+    #     """ Stop the autofocus loop.
+    #     """
+    #     self.autofocus_enabled = False
+    #     if self._readout == 'camera' and not self.live_display_enabled:
+    #         self._autofocus_logic.stop_camera_live()
+    #
+    #     # Close the shutter if the live display mode is off
+    #     if (not self.live_display_enabled) and (self._shutter is not None):
+    #         self._shutter.close_shutter()
+    #
+    #     self.sigAutofocusStopped.emit()
+
+    def worker_finished(self, worker_id):
+        """Handle worker completion.
+        """
+        if worker_id in self.worker_locks:
+            lock = self.worker_locks[worker_id]
+            if lock.tryLock():  # Ensure the lock is actually locked
+                lock.unlock()
+            else:
+                print(f"Worker {worker_id} finished, but lock was not active.")
+        else:
+            print(f"Warning: Worker lock for {worker_id} not found.")
+
+    def wait_for_worker_lock(self, worker_id):
+        """ Based on the worker id, make sure that all workers with the same id are properly terminated.
+        @param worker_id: (obj) id of the worker
+        """
+        # check if the worker id was in the termination flag list
+        if worker_id not in self.termination_flags:
+            print(f"No active worker found for ID: {worker_id}")
+            return
+
+        # Signal the worker to stop
+        self.termination_flags[worker_id] = True
+
+        # Acquire the mutex and wait until the worker finishes
+        self.stop_mutex.lock()
+        print(f"Waiting for worker {worker_id} to finish...")
+        if not self.stop_condition.wait(self.stop_mutex, 500):
+            print(f"Timeout (0.5) reached while waiting for worker {worker_id} to finish.")
+        self.stop_mutex.unlock()
+
+        # Clean up worker-related resources
+        if worker_id in self.worker_locks:
+            lock = self.worker_locks[worker_id]
+            if lock.tryLock():  # Ensure no thread is actively using the lock
+                lock.unlock()
+            del self.worker_locks[worker_id]
+            print(f"Lock for worker {worker_id} released.")
+
     @decorator_print_function
-    def start_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
+    def start_autofocus(self, worker_id="autofocus_worker",
+                        stop_when_stable=False, stop_at_target=False, search_focus=False):
         """ This method starts the autofocus. This can only be done if the piezo was calibrated and a setpoint defined.
         A check is also performed in order to make sure there is enough signal detected.
 
-        @param stop_at_target: if True, the autofocus stops when close enough to the target setpoint
-        @param bool stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
+        @param (bool) stop_at_target: if True, the autofocus stops when close enough to the target setpoint
+        @param (bool) stop_when_stable: if True, the autofocus stops automatically when the signal is stabilized.
                                         (little variation during 10 iterations).
                                         default is False: autofocus running continuously until stopped by user.
-        @param bool search_focus: boolean variable indicating that an advanced autofocus method using the reflection
+        @param (bool) search_focus: boolean variable indicating that an advanced autofocus method using the reflection
                                 on the lower interface of the sample's glass slide called the start_autofocus routine.
                                 If True, it ensures that the focus is moved back to the sample surface after stabilizing
                                 the focus.
                                 Only use search_focus = True in combination with stop_when_stable = True,
                                 otherwise it has no effect.
-        @return: None
+        @param: (object) worker_id, specify an id for the worker to monitor its activity
         """
+        # For safety - make sure there is no multiple autofocus being launched at the same time
+        if self.autofocus_enabled:
+            self.log.warn('Autofocus is already active - skip start_autofocus in focus_logic!')
+            return
+
+        # Ensure a lock and a termination flag exist for this worker - initialize the termination flag to False
+        if worker_id not in self.worker_locks:
+            self.worker_locks[worker_id] = QtCore.QMutex()
+        self.termination_flags[worker_id] = False
+
         # check if autofocus can be started
         if not self._calibrated:
             self.log.warning('Autofocus not calibrated.')
@@ -607,7 +864,7 @@ class FocusLogic(GenericLogic):
 
         # autofocus can be started - check the signal is detected, meaning that the correction can be performed. If the
         # IR signal is lost, a rescue is launched.
-        self.autofocus_enabled = True
+        # self.autofocus_enabled = True
         self.check_autofocus()  # this updates self._autofocus_lost
 
         if self._autofocus_lost:
@@ -620,22 +877,26 @@ class FocusLogic(GenericLogic):
                                          search_focus=search_focus)
                     return
                 else:
-                    self.autofocus_enabled = False
-                    self.log.warning('autofocus signal not found during rescue autofocus')
+                    # self.autofocus_enabled = False
+                    self.log.warning('Autofocus signal not found during rescue autofocus (in start_autofocus)')
                     self.sigAutofocusError.emit()
                     # if the search focus option is True, move the offset back to its initial position
                     if search_focus:
                         offset = self._autofocus_logic._focus_offset
                         self.stage_move_z_relative(-offset)
+                        timeout = self.stage_wait_for_idle()
+                        if timeout:
+                            self.log.warn("Timeout occured in start_autofocus")
                         self.focus_search_running = False
                         self.focus_search_aborted = True
                     return
             else:
-                self.autofocus_enabled = False
+                # self.autofocus_enabled = False
                 self.sigAutofocusError.emit()
                 return
 
         # all prerequisites ok and signal found
+        self.autofocus_enabled = True
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.start_camera_live()
 
@@ -643,14 +904,22 @@ class FocusLogic(GenericLogic):
         self._z0 = self.get_position()
         self._dt = self._autofocus_logic._pid_frequency
 
-        worker = AutofocusWorker(self._dt)
-        worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
-                                                   stop_at_target=stop_at_target,
-                                                   search_focus=search_focus))
+        worker = AutofocusWorker(self._dt, worker_id, self.termination_flags, self.stop_condition)
+        try:
+            worker.signals.sigFinished_autofocus.disconnect(self.worker_finished)
+            worker.signals.sigFinished_autofocus.disconnect(lambda: self.run_autofocus)
+        except TypeError:
+            pass  # Ignore if no connections exist
+        worker.signals.sigFinished_autofocus.connect(self.worker_finished)
+        worker.signals.sigFinished_autofocus.connect(partial(self.run_autofocus,
+                                                             stop_when_stable=stop_when_stable,
+                                                             stop_at_target=stop_at_target,
+                                                             search_focus=search_focus))
         self.threadpool.start(worker)
 
     @decorator_print_function
-    def run_autofocus(self, stop_when_stable=False, stop_at_target=False, search_focus=False):
+    def run_autofocus(self, worker_id="autofocus_worker", stop_when_stable=False, stop_at_target=False,
+                      search_focus=False):
         """ Based on the pid output, the position of the piezo is corrected in real time. In order to avoid
         unnecessary movement of the piezo, the corrections are only applied when an absolute displacement >100nm is
         required.
@@ -665,87 +934,126 @@ class FocusLogic(GenericLogic):
                                 Only use search_focus = True in combination with stop_when_stable = True,
                                 otherwise it has no effect.
         @param stop_at_target: if True, the autofocus stops when close enough to the target setpoint
-        @return: None
-
+        @param: (object) worker_id, specify an id for the worker to monitor its activity
         """
-        self.check_autofocus()  # updates self._autofocus_lost
+        # Skip if autofocus is disabled
+        if not self.autofocus_enabled:
+            self.log.warn('The autofocus was already disabled!')
+            return
 
-        if self.autofocus_enabled:
+        # Ensure a lock exists for this worker
+        if (worker_id not in self.worker_locks) or (worker_id not in self.termination_flags):
+            print(f"Warning: The worker {worker_id} is no longer active!")
+            return
+        worker_lock = self.worker_locks[worker_id]
 
-            if self._autofocus_lost:
-                self.log.warning('autofocus lost! (in run_autofocus)')
-                if self.rescue:
-                    # to verify: add here stop autofocus ?
-                    success = self.rescue_autofocus()
-                    if success:
-                        self.start_autofocus(stop_when_stable=stop_when_stable,
-                                             stop_at_target=stop_at_target,
-                                             search_focus=search_focus)
-                        return
+        # Skip if a worker is already running
+        if not worker_lock.tryLock():
+            print(f"Warning: A worker {worker_id} is already running!")
+            return
+
+        try:
+            # Check autofocus signal is detected and no worker with the same id is running
+            self.check_autofocus()  # updates self._autofocus_lost
+            if self.autofocus_enabled:
+
+                if self._autofocus_lost:
+                    self.log.warning('autofocus lost! (in run_autofocus)')
+                    if self.rescue:
+                        # to verify: add here stop autofocus ?
+                        success = self.rescue_autofocus()
+                        if success:
+                            self.start_autofocus(stop_when_stable=stop_when_stable,
+                                                 stop_at_target=stop_at_target,
+                                                 search_focus=search_focus)
+                            return
+                        else:
+                            self.autofocus_enabled = False
+                            self.log.warning('autofocus signal not found during rescue autofocus')
+                            self.sigAutofocusError.emit()
+                            # if the search focus option is True, move the offset back to its initial position
+                            if search_focus:
+                                offset = self._autofocus_logic._focus_offset
+                                self.stage_move_z_relative(-offset)
+                                timeout = self.stage_wait_for_idle()
+                                if timeout:
+                                    self.log.warn("Timeout occurred in run_autofocus")
+                                self.focus_search_running = False
+                                self.focus_search_aborted = True
+                            return
                     else:
                         self.autofocus_enabled = False
-                        self.log.warning('autofocus signal not found during rescue autofocus')
                         self.sigAutofocusError.emit()
-                        # if the search focus option is True, move the offset back to its initial position
+                        return
+
+                if stop_when_stable:
+                    pid, stop_autofocus = self._autofocus_logic.read_pid_output(True, False)
+                    if stop_autofocus:
+                        self.log.info('focus is stable')
+                        self.autofocus_enabled = False
+                        self.sigAutofocusStopped.emit()
                         if search_focus:
-                            offset = self._autofocus_logic._focus_offset
-                            self.stage_move_z_relative(-offset)
-                            self.focus_search_running = False
-                            self.focus_search_aborted = True
+                            self.search_focus_finished(worker_id)
+                        return
+
+                if stop_at_target:
+                    pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, True)
+                    if stop_autofocus:
+                        self.log.info('target position found')
+                        self.autofocus_enabled = False
+                        self.sigAutofocusStopped.emit()
+                        if search_focus:
+                            self.search_focus_finished(worker_id)
                         return
                 else:
+                    pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, False)
+
+                # calculate the necessary movement of piezo dz
+                z = self._z0 + pid / self._slope
+                dz = np.absolute(self.get_position() - z)
+                # print(f'z is {z}, dz is {dz}')
+
+                if self._min_z + 1 < z < self._max_z - 1:
+                    if dz > self._min_piezo_step and not stop_autofocus:
+                        self.go_to_position(z, direct=True)
+                else:
+                    self.log.warning('piezo target position out of constraints')
                     self.autofocus_enabled = False
                     self.sigAutofocusError.emit()
-                    return
-
-            if stop_when_stable:
-                pid, stop_autofocus = self._autofocus_logic.read_pid_output(True, False)
-                if stop_autofocus:
-                    self.log.info('focus is stable')
-                    self.autofocus_enabled = False
-                    self.sigAutofocusStopped.emit()
                     if search_focus:
-                        self.search_focus_finished()
+                        self.search_focus_finished(worker_id)
                     return
-            if stop_at_target:
-                pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, True)
-                if stop_autofocus:
-                    self.log.info('target position found')
-                    self.autofocus_enabled = False
-                    self.sigAutofocusStopped.emit()
-                    if search_focus:
-                        self.search_focus_finished()
-                    return
-            else:
-                pid, stop_autofocus = self._autofocus_logic.read_pid_output(False, False)
 
-            # calculate the necessary movement of piezo dz
-            z = self._z0 + pid / self._slope
-            dz = np.absolute(self.get_position() - z)
-            # print(f'z is {z}, dz is {dz}')
+                worker = AutofocusWorker(self._dt, worker_id, self.termination_flags, self.stop_condition)
+                try:
+                    worker.signals.sigFinished_autofocus.disconnect(self.worker_finished)
+                    worker.signals.sigFinished_autofocus.disconnect(lambda: self.run_autofocus)
+                except TypeError:
+                    pass  # Ignore if no connections exist
+                worker.signals.sigFinished_autofocus.connect(self.worker_finished)
+                worker.signals.sigFinished_autofocus.connect(partial(self.run_autofocus,
+                                                                     stop_when_stable=stop_when_stable,
+                                                                     stop_at_target=stop_at_target,
+                                                                     search_focus=search_focus))
+                self.threadpool.start(worker)
 
-            if self._min_z + 1 < z < self._max_z - 1:
-                if dz > self._min_piezo_step and not stop_autofocus:
-                    self.go_to_position(z, direct=True)
-            else:
-                self.log.warning('piezo target position out of constraints')
-                self.autofocus_enabled = False
-                self.sigAutofocusError.emit()
-                if search_focus:
-                    self.search_focus_finished()
-                return
+        except Exception as e:
+            print(f"Error in loop: {e}")
+            worker_lock.release()  # Ensure lock is released on error
 
-            worker = AutofocusWorker(self._dt)
-            worker.signals.sigFinished.connect(partial(self.run_autofocus, stop_when_stable=stop_when_stable,
-                                                       stop_at_target=stop_at_target,
-                                                       search_focus=search_focus))
-            self.threadpool.start(worker)
+        finally:
+            worker_lock.unlock()  # Ensure lock is released even on errors
 
     @decorator_print_function
-    def stop_autofocus(self):
+    def stop_autofocus(self, worker_id="autofocus_worker"):
         """ Stop the autofocus loop.
         """
         self.autofocus_enabled = False
+
+        # Make sure the autofocus worker are properly terminated
+        self.wait_for_worker_lock(worker_id)
+
+        # If the camera is used as detector, close it if it was not ON before
         if self._readout == 'camera' and not self.live_display_enabled:
             self._autofocus_logic.stop_camera_live()
 
@@ -754,7 +1062,6 @@ class FocusLogic(GenericLogic):
             self._shutter.close_shutter()
 
         self.sigAutofocusStopped.emit()
-
 # ----------------------------------------------------------------------------------------------------------------------
 # Advanced methods for autofocus available only with a 3 axes translation stage (here: autofocus_logic_fpga).
 # autofocus_logic_camera contains only warning messages that these methods are not available
@@ -830,7 +1137,11 @@ class FocusLogic(GenericLogic):
             # move to the reference plane
             offset = self._autofocus_logic._focus_offset
             self.stage_move_z_relative(offset)
-            self.stage_wait_for_idle()
+            timeout = self.stage_wait_for_idle()
+            if timeout:
+                self.log.warn("Timeout occured in do_piezo_position_correction")
+            else:
+                sleep(1)
 
             # check if there is enough signal to perform the piezo position correction
             if not self._autofocus_logic.autofocus_check_signal():
@@ -845,7 +1156,9 @@ class FocusLogic(GenericLogic):
             else:  # no signal found
                 self.log.warning('Position correction could not be done because autofocus signal not found!')
                 self.stage_move_z_relative(-offset)
-                self.stage_wait_for_idle()
+                timeout = self.stage_wait_for_idle()
+                if timeout:
+                    self.log.warn("Timeout occured in do_piezo_position_correction")
                 self.piezo_correction_running = False
 
         else:  # position does not need to be corrected
@@ -862,7 +1175,9 @@ class FocusLogic(GenericLogic):
         # move stage back to surface plane
         offset = self._autofocus_logic._focus_offset
         self.stage_move_z_relative(-offset)
-        self.stage_wait_for_idle()
+        timeout = self.stage_wait_for_idle()
+        if timeout:
+            self.log.warn("Timeout occured in finish_piezo_position_correction")
         self.piezo_correction_running = False
 
     @decorator_print_function
@@ -887,32 +1202,41 @@ class FocusLogic(GenericLogic):
             offset = self._autofocus_logic._focus_offset
             if offset != 0:
                 self.stage_move_z_relative(offset)
-                self.stage_wait_for_idle()
-                sleep(1)
+                timeout = self.stage_wait_for_idle()
+                if timeout:
+                    self.log.warn("Timeout occured in start_search_focus")
+                else:
+                    sleep(1)
             self.start_autofocus(stop_when_stable=True, stop_at_target=False, search_focus=True)
         else:
             self.log.warn('Search focus can not be used. Calibration or setpoint missing.')
             self.sigFocusFound.emit()  # signal is sent although focus not found, just to reset toolbutton state
 
     @decorator_print_function
-    def search_focus_finished(self):
+    def search_focus_finished(self, worker_id):
         """ Ensure the return of the 3-axes stage to the surface plane after finding focus based on the signal on
         a reference plane.
+        @param (str) indicate the id of the worker used to run the autofocus
         """
-        # security : make sure the autofocus is properly stopped before proceeding
-        t0 = time()
-        while self.autofocus_enabled:
-            sleep(0.5)
-            t1 = time()
-            if t1 - t0 > 30:
-                logging.warning("Timeout : the autofocus did not stop properly - finishing the search focus anyway!")
-                break
+        # Make sure the autofocus worker are properly terminated
+        self.wait_for_worker_lock(worker_id)
+
+        # # security : make sure the autofocus is properly stopped before proceeding
+        # t0 = time()
+        # while self.autofocus_enabled:
+        #     sleep(0.5)
+        #     t1 = time()
+        #     if t1 - t0 > 30:
+        #         logging.warning("Timeout : the autofocus did not stop properly - finishing the search focus anyway!")
+        #         break
 
         # move the z-stage by the offset
         offset = self._autofocus_logic._focus_offset
         if offset != 0:
             self.stage_move_z_relative(-offset)
-            self.stage_wait_for_idle()
+            timeout = self.stage_wait_for_idle()
+            if timeout:
+                self.log.warn("Timeout occured in search_focus_finished")
         self._stage_is_positioned = True
         self.focus_search_running = False
         self.sigFocusFound.emit()

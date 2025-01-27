@@ -318,10 +318,8 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
     def set_velocity(self, param_dict):
         """ Sets the velocity at which the stage moves. 
         Velocity is set in millimeters per second. Maximum speed is 7.5 mm/s for standard 6.5 mm pitch leadscrews.
-        
-        :param dict param_dict: Dictionary with axis name and target velocity in mm/s
-        
-        :return int: error code (0:OK, -1:error)
+        @param (dict) param_dict: Dictionary with axis name and target velocity in mm/s
+        @return (int) error code (0:OK, -1:error)
         """
         err = -1
 
@@ -333,9 +331,9 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
                     self.write(cmd)
                     err = 0
                 else:
-                    self.log.warn("specified axis {axis_label} not available")
-        except Exception:
-            self.log.error("could not set new velocity")
+                    self.log.warn(f"specified axis {axis_label} not available")
+        except Exception as e:
+            self.log.error(f"Could not set new velocity due to the following error {e}")
 
         return err
 
@@ -352,7 +350,7 @@ class MS2000(Base, MotorInterface, BrightfieldInterface):
             waiting_time = time() - t0
             status = self.get_status()
             if waiting_time >= self._timeout:
-                self.log.error("ASI MS2000 translation stage timeout occurred")
+                self.log.error(f"ASI MS2000 translation stage timeout occurred after {waiting_time}s")
                 timeout = True
                 break
 

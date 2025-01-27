@@ -34,12 +34,12 @@
     <rect>
      <x>50</x>
      <y>190</y>
-     <width>161</width>
+     <width>231</width>
      <height>23</height>
     </rect>
    </property>
    <property name="text">
-    <string>Enable display</string>
+    <string>Enable display (slow for long acquisition!)</string>
    </property>
   </widget>
   <widget class="QWidget" name="layoutWidget">

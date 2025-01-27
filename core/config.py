@@ -174,7 +174,8 @@ def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
         """
         Representer for numpy float dtypes
         """
-        return dumper.represent_float(numpy.asscalar(float_data))
+        # return dumper.represent_float(numpy.asscalar(float_data))
+        return dumper.represent_float(float_data.item())  ## change by jb 17-01-2025
 
     def represent_frozenset(dumper, set_data):
         """

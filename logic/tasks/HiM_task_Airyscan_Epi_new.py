@@ -214,74 +214,74 @@ class Task(InterruptableTask):
     def startTask(self):
         """ """
         self.aborted = self.task_initialization()
+        if not self.aborted:
+            # read all user parameters from the config file and create the directory where the metadata will be saved (all
+            # the acquisition parameters as well as a small txt file with the name of each stack, according to the ROI and
+            # RT being processed)
+            self.load_user_parameters()
+            # self.directory = self.create_directory(self.save_path)
 
-        # read all user parameters from the config file and create the directory where the metadata will be saved (all
-        # the acquisition parameters as well as a small txt file with the name of each stack, according to the ROI and
-        # RT being processed)
-        self.load_user_parameters()
-        # self.directory = self.create_directory(self.save_path)
+            # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & DAQ).
+            self.celesta_laser_dict = self.ref['laser']._laser_dict
+            self.format_imaging_sequence()
 
-        # retrieve the list of sources from the laser logic and format the imaging sequence (for Lumencor & DAQ).
-        self.celesta_laser_dict = self.ref['laser']._laser_dict
-        self.format_imaging_sequence()
+            # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line - same for the daq
+            self.ref['laser'].lumencor_wakeup()
+            self.ref['daq'].initialize_ao_channels()
+            self.ref['laser'].lumencor_set_ttl(True)
+            self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
+            print(f'Celesta dict {self.celesta_intensity_dict}')
 
-        # prepare the Lumencor celesta laser source and pre-set the intensity of each laser line - same for the daq
-        self.ref['laser'].lumencor_wakeup()
-        self.ref['daq'].initialize_ao_channels()
-        self.ref['laser'].lumencor_set_ttl(True)
-        self.ref['laser'].lumencor_set_laser_line_intensities(self.celesta_intensity_dict)
-        print(f'Celesta dict {self.celesta_intensity_dict}')
+            # return the list of immediate subdirectories in self.zen_saving_path (this is important since ZEN will
+            # automatically create a folder at the start of a new acquisition)
+            zen_folder_list_before = glob(os.path.join(self.zen_saving_path, '*'))
 
-        # return the list of immediate subdirectories in self.zen_saving_path (this is important since ZEN will
-        # automatically create a folder at the start of a new acquisition)
-        zen_folder_list_before = glob(os.path.join(self.zen_saving_path, '*'))
+            # indicate to the user that QUDI is ready and the acquisition can be launched for ZEN
+            self.launch_zen_acquisition()
 
-        # indicate to the user that QUDI is ready and the acquisition can be launched for ZEN
-        self.launch_zen_acquisition()
+            # return the list of immediate subdirectories in self.zen_saving_path and compare it to the previous list. When
+            # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
+            # folder where the czi data will be saved is defined.
+            self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
+            self.metadata_dir = os.path.join(self.zen_directory, "metadata")
+            os.makedirs(self.metadata_dir)
 
-        # return the list of immediate subdirectories in self.zen_saving_path and compare it to the previous list. When
-        # ZEN starts the experiment, it automatically creates a new data folder. The two lists are compared and the
-        # folder where the czi data will be saved is defined.
-        self.zen_directory = self.find_new_zen_data_directory(zen_folder_list_before)
-        self.metadata_dir = os.path.join(self.zen_directory, "metadata")
-        os.makedirs(self.metadata_dir)
+            # save all the experiment parameters into a single file
+            self.save_parameters()
 
-        # save all the experiment parameters into a single file
-        self.save_parameters()
+            # initialize the parameters required for the autofocus safety (where to locate the reference images, the
+            # correlation, etc.)
+            self.init_autofocus_safety()
 
-        # initialize the parameters required for the autofocus safety (where to locate the reference images, the
-        # correlation, etc.)
-        self.init_autofocus_safety()
+            # initialize the logger for the task
+            self.init_logger()
 
-        # initialize the logger for the task
-        self.init_logger()
+            # initialize the list containing the name of all the in-focus images. During an experiment, ZEN will acquire a
+            # single brightfield image before launching the acquisition of the stack. This image will be acquired at the end
+            # of the focus search procedure and will be used to check the sample is still in-focus.
+            self.focus_folder_content = []
 
-        # initialize the list containing the name of all the in-focus images. During an experiment, ZEN will acquire a
-        # single brightfield image before launching the acquisition of the stack. This image will be acquired at the end
-        # of the focus search procedure and will be used to check the sample is still in-focus.
-        self.focus_folder_content = []
+            # if the transfer_data option was selected, create the network directory as well
+            if (self.save_network_path is not None) and self.transfer_data:
+                if self.check_local_network():
+                    self.network_directory = self.create_directory(self.save_network_path)
+                else:
+                    logging.warning(f"Network connection is unavailable. The directory for transferring the data "
+                                    f"({self.save_network_path}) cannot be created. The experiment is aborted.")
+                    self.aborted = True
+                    return
 
-        # if the transfer_data option was selected, create the network directory as well
-        if (self.save_network_path is not None) and self.transfer_data:
-            if self.check_local_network():
-                self.network_directory = self.create_directory(self.save_network_path)
-            else:
-                logging.warning(f"Network connection is unavailable. The directory for transferring the data "
-                                f"({self.save_network_path}) cannot be created. The experiment is aborted.")
-                self.aborted = True
-                return
+            # # save the acquisition parameters
+            # metadata = self.get_metadata()
+            # self.save_metadata_file(metadata, os.path.join(self.zen_directory, "parameters.yml"))
 
-        # # save the acquisition parameters
-        # metadata = self.get_metadata()
-        # self.save_metadata_file(metadata, os.path.join(self.zen_directory, "parameters.yml"))
+            # log file paths
+            # Previous version was set for bokeh and required access to a directory on a distant server. Log file is now
+            # saved in the same folder that the data
+            # self.init_bokeh()
 
-        # log file paths
-        # Previous version was set for bokeh and required access to a directory on a distant server. Log file is now
-        # saved in the same folder that the data
-        # self.init_bokeh()
-
-        # initialize a counter to iterate over the number of probes to inject
-        self.probe_counter = 0
+            # initialize a counter to iterate over the number of probes to inject
+            self.probe_counter = 0
 
     def runTaskStep(self):
         """ Implement one work step of your task here.
@@ -465,7 +465,7 @@ class Task(InterruptableTask):
                     self.ref['valves'].set_valve_position('a', valve_pos)
                     self.ref['valves'].wait_for_idle()
 
-                    # pressure regulation
+                    needle_pos, needle_injection = self.set_valves_and_needle(product, needle_injection, needle_pos)
                     self.perform_injection(flowrate, volume, transfer=self.transfer_data)
 
                 else:  # an incubation step
@@ -927,20 +927,46 @@ class Task(InterruptableTask):
 
     def wait_for_camera_trigger(self, value):
         """ This method contains a loop to wait for the camera exposure starts or stops.
-
-        :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+        @return: (bool) ready: True=trigger was received, False=experiment cannot be started because ZEN is not ready
         """
         bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
         counter = 0
         error = False
 
-        while (bit_value != value) and (error is False) and (not self.aborted):
+        while bit_value != value and error is False and not self.aborted:
             counter += 1
             bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+
+            # This step was added as security. Sometimes, the camera is sending a short false-positive pulse that should
+            # not be interpreted as an "acquiring" signal. Therefore, after a delay of 5ms, we are double-checking that
+            # the camera is actually acquiring.
+            if bit_value == value:
+                sleep(0.005)
+                bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+
             if counter > 10000:
+                self.log.warning(
+                    'No trigger was detected during the past 60s... experiment is aborted')
                 error = True
 
         return error
+
+    # def wait_for_camera_trigger(self, value):
+    #     """ This method contains a loop to wait for the camera exposure starts or stops.
+    #
+    #     :return: bool ready: True: trigger was received, False: experiment cannot be started because ZEN is not ready
+    #     """
+    #     bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+    #     counter = 0
+    #     error = False
+    #
+    #     while (bit_value != value) and (error is False) and (not self.aborted):
+    #         counter += 1
+    #         bit_value = self.ref['daq'].read_di_channel(self.camera_global_exposure, 1)
+    #         if counter > 10000:
+    #             error = True
+    #
+    #     return error
 
     def launch_zen_focus_search(self):
         """ Send trigger to ZEN to launch the focus search procedure. Wait for a trigger from ZEN to confirm the
