@@ -8,7 +8,7 @@ An extension to Qudi.
 
 @author: D. Guerin, JB. Fiche
 
-Created on Mon july 15, 2024
+Created on Mon Jul 15, 2024.
 -----------------------------------------------------------------------------------
 
 Qudi is free software: you can redistribute it and/or modify
@@ -92,7 +92,7 @@ class MFC(Base):
                 sleep(0.3)
                 print(Z)
             else:
-                print(f'There is only {self.MFC_number} MFCs')
+                self.log.error(f'There is only {self.MFC_number} MFCs - the MFC #{mfc} does not exist!')
 
     def MFC_OFF(self, mfc):
         """Close the MFC valve
@@ -103,7 +103,7 @@ class MFC(Base):
                 sensor = Sfx6xxxDevice(ShdlcChannel(port, shdlc_address=self._MFC_dic['MFC_id'][mfc]))
                 sensor.close_valve()
             else:
-                print(f'There is only {self.MFC_number} MFCs')
+                self.log.error(f'There is only {self.MFC_number} MFCs - the MFC #{mfc} does not exist!')
 
     def average_measure(self, mfc, n_measure):
         """Get the average measurement of the MFC valve

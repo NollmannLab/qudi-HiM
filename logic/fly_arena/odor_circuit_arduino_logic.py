@@ -30,9 +30,7 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import logging
 import time
-
 from qtpy import QtCore
-
 from core.configoption import ConfigOption
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
@@ -132,6 +130,39 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         pass
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling MFCs
+# ----------------------------------------------------------------------------------------------------------------------
+    def set_MFCs_flow(self, flow_setpoints):
+        print(f'Flow setpoint : {flow_setpoints}')
+
+        # check odor valves state
+        is_odor = self._ard.check_odor_valves()
+        print(f"odor detected : {is_odor}")
+
+        # check mixing valve state
+        is_mixing = self._ard.check_mixing_valve()
+        print(f"mixing detected : {is_mixing}")
+
+        # check if all the MFCs are turned off
+        All_off = all(v == 0 for v in flow_setpoints)
+
+        # if none of the valves are open, open the mixing valve by default (expect in the case all MFCs are turned off)
+        if All_off:
+            self._ard.control_mixing_valve(0)
+        elif (not is_odor) and (not is_mixing) and (not All_off):
+            self._ard.control_mixing_valve(1)
+
+        # start the MFCs
+        for mfc in range(self.MFC_number):
+            if flow_setpoints[mfc] > 0:
+                self._MFC.MFC_ON(mfc, flow_setpoints[mfc])
+            else:
+                self._MFC.MFC_OFF(mfc)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling Valves
+# ----------------------------------------------------------------------------------------------------------------------
     def valve(self, pin, state):
         """
         Open only 1 valve

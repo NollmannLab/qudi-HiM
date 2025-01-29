@@ -190,6 +190,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.odor3.stateChanged.connect(self.odor_changed)
         self._mw.odor4.stateChanged.connect(self.odor_changed)
 
+        self._mw.comboBox_quadrants_config.activated[str].connect(self.update_arena_config)
         self._mw.stoplaunch.clicked.connect(self.stop_Launch)
         self._mw.Launch.clicked.connect(self.LaunchClicked)
         self._mw.in1.stateChanged.connect(self.check_box_changed)
@@ -225,6 +226,92 @@ class OdorCircuitGUI(GUIBase):
         self._mw.Launch.clicked.disconnect()
         self._mw.close()
         print('Odor circuit off')
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling the MFCs
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def update_arena_config(self):
+        """ Based on the comboBox value & the flow-rate setpoint for the arena (for each quadrant), compute the
+        flow-rate for each MFC.
+        """
+        index = self._mw.comboBox_quadrants_config.currentIndex()
+        flow = self._mw.doubleSpinBox_quadrant_flow.value()
+
+        # depending on the selected config, define the setpoint values for each MFC and send it to the logic
+        if index == 0:
+            mfc_flow = [0, 0, 0, 0]
+        elif index == 1:
+            mfc_flow = [flow, flow, 2 * flow, 2 * flow]
+        else:
+            mfc_flow = [2 * flow, 2 * flow, 4 * flow, 0]
+
+        # update the setpoints for all MFCs
+        self._mw.MFC1_setpoint.setText(str(mfc_flow[0]))
+        self._mw.MFC2_setpoint.setText(str(mfc_flow[1]))
+        self._mw.MFC3_setpoint.setText(str(mfc_flow[2]))
+        self._mw.MFC4_setpoint.setText(str(mfc_flow[3]))
+
+        # send the setpoint values to the logic
+        self._odor_circuit_arduino_logic.set_MFCs_flow(mfc_flow)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling the valves
+# ----------------------------------------------------------------------------------------------------------------------
+    def check_odor_valves_states(self, valves_status):
+        injected_odor = 0
+
+        # Check associations where both in and out valves are open
+        for odor, (in_valve, out_valve) in self.valves_in_out.items():
+            if valves_status[in_valve] == '1' and valves_status[out_valve] == '1':
+                count_on_associations += 1
+                active_associations.append(odor)
+            elif valves_status[in_valve] == '1' and valves_status[out_valve] == '0':
+                logger.error(f"You need to open {out_valve}")
+                return 0
+            elif valves_status[out_valve] == '1' and valves_status[in_valve] == '0':
+                logger.error(f"You need to open {in_valve}")
+                return 0
+
+    def check_valves(self, valves_status):
+        """
+        Check valves status to permit the MFC2 to turn on
+        @param valves_statues : is the dictionary of valves
+        """
+
+        count_on_associations = 0
+        active_associations = []
+
+        # Check associations where both in and out valves are '1'
+        for odor, (in_valve, out_valve) in self.valves_in_out.items():
+            if valves_status[in_valve] == '1' and valves_status[out_valve] == '1':
+                count_on_associations += 1
+                active_associations.append(odor)
+            elif valves_status[in_valve] == '1' and valves_status[out_valve] == '0':
+                logger.error(f"You need to open {out_valve}")
+                return 0
+            elif valves_status[out_valve] == '1' and valves_status[in_valve] == '0':
+                logger.error(f"You need to open {in_valve}")
+                return 0
+
+        # Determine action based on mixing valve status and count of active associations
+        if count_on_associations > 1:
+            logger.error('You need to close all but one pair of valves')
+            return 0
+        elif count_on_associations == 1 and valves_status['mixing_valve'] == '1':
+            logger.info('The Mixing valve has been automatically closed')
+            return 1
+
+        elif count_on_associations == 1 and valves_status['mixing_valve'] == '0':
+            logger.info(f'MFC2 operates for {active_associations[0]}')
+            return 1
+        elif count_on_associations == 0 and valves_status['mixing_valve'] == '1':
+            logger.info('MFC2 operates with mixing valve.')
+            return 1
+        elif count_on_associations == 0 and valves_status['mixing_valve'] == '0':
+            logger.error('You need to open the Mixing Valve first')
+            return 0
+
 
     def show(self):
         """ To make the window visible and bring it to the front.
@@ -392,44 +479,7 @@ class OdorCircuitGUI(GUIBase):
                 self.valves_status['valve_odor_4_out'] = '0'
                 self.update_valve_label(self._mw.label_4out_2, 0)
 
-    def check_valves(self, valves_status):
-        """
-        Check valves status to permit the MFC2 to turn on
-        @param valves_statues : is the dictionary of valves
-        """
 
-        count_on_associations = 0
-        active_associations = []
-
-        # Check associations where both in and out valves are '1'
-        for odor, (in_valve, out_valve) in self.valves_in_out.items():
-            if valves_status[in_valve] == '1' and valves_status[out_valve] == '1':
-                count_on_associations += 1
-                active_associations.append(odor)
-            elif valves_status[in_valve] == '1' and valves_status[out_valve] == '0':
-                logger.error(f"You need to open {out_valve}")
-                return 0
-            elif valves_status[out_valve] == '1' and valves_status[in_valve] == '0':
-                logger.error(f"You need to open {in_valve}")
-                return 0
-
-        # Determine action based on mixing valve status and count of active associations
-        if count_on_associations > 1:
-            logger.error('You need to close all but one pair of valves')
-            return 0
-        elif count_on_associations == 1 and valves_status['mixing_valve'] == '1':
-            logger.info('The Mixing valve has been automatically closed')
-            return 1
-
-        elif count_on_associations == 1 and valves_status['mixing_valve'] == '0':
-            logger.info(f'MFC2 operates for {active_associations[0]}')
-            return 1
-        elif count_on_associations == 0 and valves_status['mixing_valve'] == '1':
-            logger.info('MFC2 operates with mixing valve.')
-            return 1
-        elif count_on_associations == 0 and valves_status['mixing_valve'] == '0':
-            logger.error('You need to open the Mixing Valve first')
-            return 0
 
     def enable_valve_after_launch(self):
         """Enable the valves and update the labels after the launch process."""
