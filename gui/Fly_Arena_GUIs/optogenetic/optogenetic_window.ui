@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>783</width>
-    <height>694</height>
+    <height>689</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -63,11 +63,11 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:16pt; font-weight:600; text-decoration: underline;&quot;&gt;Optogenetic Display&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="quart1">
+    <widget class="QToolButton" name="arena_red">
      <property name="geometry">
       <rect>
        <x>270</x>
-       <y>160</y>
+       <y>190</y>
        <width>211</width>
        <height>131</height>
       </rect>
@@ -80,7 +80,7 @@
      <property name="geometry">
       <rect>
        <x>500</x>
-       <y>160</y>
+       <y>190</y>
        <width>211</width>
        <height>131</height>
       </rect>
@@ -89,46 +89,17 @@
       <string>Quarters (red)</string>
      </property>
     </widget>
-    <widget class="QLabel" name="label">
-     <property name="geometry">
-      <rect>
-       <x>160</x>
-       <y>102</y>
-       <width>140</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>opto stimulation duration (s)</string>
-     </property>
-    </widget>
-    <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_stimulation">
-     <property name="geometry">
-      <rect>
-       <x>300</x>
-       <y>100</y>
-       <width>62</width>
-       <height>22</height>
-      </rect>
-     </property>
-     <property name="decimals">
-      <number>1</number>
-     </property>
-     <property name="minimum">
-      <double>0.000000000000000</double>
-     </property>
-    </widget>
-    <widget class="QToolButton" name="noir">
+    <widget class="QToolButton" name="arena_black">
      <property name="geometry">
       <rect>
        <x>40</x>
-       <y>160</y>
+       <y>190</y>
        <width>211</width>
        <height>131</height>
       </rect>
      </property>
      <property name="text">
-      <string>Noir</string>
+      <string>BLACK</string>
      </property>
     </widget>
     <widget class="QLabel" name="retour_2">
@@ -170,34 +141,68 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;Obturateur&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse">
+    <widget class="QWidget" name="gridLayoutWidget">
      <property name="geometry">
       <rect>
-       <x>460</x>
+       <x>100</x>
        <y>100</y>
-       <width>62</width>
-       <height>22</height>
+       <width>515</width>
+       <height>80</height>
       </rect>
      </property>
-     <property name="decimals">
-      <number>1</number>
-     </property>
-     <property name="minimum">
-      <double>0.000000000000000</double>
-     </property>
-    </widget>
-    <widget class="QLabel" name="label_4">
-     <property name="geometry">
-      <rect>
-       <x>380</x>
-       <y>100</y>
-       <width>80</width>
-       <height>20</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>pulse length (s)</string>
-     </property>
+     <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="3">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse_ON">
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>pulse ON length (s)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_stimulation">
+        <property name="decimals">
+         <number>1</number>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="4">
+       <widget class="QLabel" name="label_5">
+        <property name="text">
+         <string>pulse OFF length (s)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="0">
+       <widget class="QLabel" name="label">
+        <property name="text">
+         <string>opto stimulation duration (s)</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="5">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse_OFF">
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </widget>
   </widget>

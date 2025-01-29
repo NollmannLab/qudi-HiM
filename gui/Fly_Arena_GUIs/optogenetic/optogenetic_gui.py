@@ -50,26 +50,34 @@ logger = logging.getLogger(__name__)
 
 class WorkerSignals(QtCore.QObject):
     """ Defines the signals available from a running worker thread """
-    sigOptoStepFinished = QtCore.Signal(float, float, int, QtGui.QPixmap, QtGui.QPixmap)
+    sigOptoStepFinished = QtCore.Signal(float, float, float, int, int, QtGui.QPixmap, QtGui.QPixmap)
 
 
 class OptoWorker(QtCore.QRunnable):
-    """ Worker thread to wait during an opto pule. The worker handles only the waiting time.
+    """ Worker thread to wait during an opto pulse. The worker handles only the waiting time.
     """
-    def __init__(self, dt, duration, n_step, im_off, im_on):
+    def __init__(self, t_on, t_off, duration, n_step_on, n_step_off, im_off, im_on):
         super(OptoWorker, self).__init__()
         self.signals = WorkerSignals()
-        self.dt = dt
+        self.t_on = t_on
+        self.t_off = t_off
         self.duration = duration
-        self.n_step = n_step
+        self.n_step_on = n_step_on
+        self.n_step_off = n_step_off
         self.im_on = im_on
         self.im_off = im_off
 
     @QtCore.Slot()
     def run(self):
         """ """
-        sleep(self.dt)
-        self.signals.sigOptoStepFinished.emit(self.dt, self.duration, self.n_step, self.im_off, self.im_on)
+        if self.n_step_on > self.n_step_off:
+            sleep(self.t_on)
+        else:
+            sleep(self.t_off)
+        self.signals.sigOptoStepFinished.emit(self.t_on, self.t_off,
+                                              self.duration,
+                                              self.n_step_on, self.n_step_off,
+                                              self.im_off, self.im_on)
 
 
 class ImageWindow(QMainWindow):
@@ -119,12 +127,12 @@ class OptoWindow(QtWidgets.QMainWindow):
 class OptogeneticGUI(GUIBase):
     optogenetic_logic = Connector(interface='OptogeneticLogic')
 
-    _noir_path = ConfigOption('noir_path', None)
-    _quart1_path = ConfigOption('quart1_path', None)
+    _no_light_path = ConfigOption('no_light_path', None)
+    _arena_red_path = ConfigOption('arena_red_path', None)
     _quart2_path = ConfigOption('quart2_path', None)
 
-    signoirClicked = Signal()
-    sigquart1Clicked = Signal()
+    sig_map_off_Clicked = Signal()
+    sig_map_red_Clicked = Signal()
     sigquart2Clicked = Signal()
 
     screens = QApplication.screens()
@@ -145,19 +153,19 @@ class OptogeneticGUI(GUIBase):
 
         self._ow = None
         self._iw = None
-        self.noirmap = QPixmap(self._noir_path)
-        self.quart1map = QPixmap(self._quart1_path)
+        self.map_off = QPixmap(self._no_light_path)
+        self.map_red = QPixmap(self._arena_red_path)
         self.quart2map = QPixmap(self._quart2_path)
         self._ow = OptoWindow()
         self._iw = ImageWindow()
-        self.noirmapscaled = self.noirmap.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                  Qt.KeepAspectRatio)
-        self.quart1mapscaled = self.quart1map.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        self.map_red_scaled = self.map_red.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                      Qt.KeepAspectRatio)
         self.quart2mapscaled = self.quart2map.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                      Qt.KeepAspectRatio)
-        self._iw.label.setPixmap(self.noirmapscaled)
-        self._ow.retour_2.setPixmap(self.noirmapscaled)
+        self._iw.label.setPixmap(self.map_off_scaled)
+        self._ow.retour_2.setPixmap(self.map_off_scaled)
 
     def on_activate(self):
         """
@@ -165,11 +173,11 @@ class OptogeneticGUI(GUIBase):
         """
         self._optogenetic_logic = self.optogenetic_logic()
 
-        self._ow.noir.clicked.connect(self.noirdisplay)
-        self._ow.quart1.clicked.connect(self.quart1display)
+        self._ow.arena_black.clicked.connect(self.map_off_display)
+        self._ow.arena_red.clicked.connect(self.map_red_display)
         self._ow.quart2.clicked.connect(self.quart2display)
-        self.signoirClicked.connect(lambda: self.noirdisplay())
-        self.sigquart1Clicked.connect(lambda: self.sigButton1Clicked.emit())
+        self.sig_map_off_Clicked.connect(lambda: self.map_off_display())
+        self.sig_map_red_Clicked.connect(lambda: self.sigButton1Clicked.emit())
         self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
         self._ow.toggleButton.setCheckable(True)
         self._ow.toggleButton.toggled.connect(self.on_toggle)
@@ -200,39 +208,42 @@ class OptogeneticGUI(GUIBase):
         self._optogenetic_logic.backward()
         self._ow.toggleButton.setText('Open')
 
-    def noirdisplay(self):
+    def map_off_display(self):
         """
         Display the 'noir' image and update the optogenetic logic.
         """
-        im = self.noirmap.scaled(371, 271, Qt.KeepAspectRatio)
+        im = self.map_off.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
-        self._optogenetic_logic.image_display(self.noirmapscaled, self._iw)
+        self._optogenetic_logic.image_display(self.map_off_scaled, self._iw)
 
-    def quart1display(self):
+    def map_red_display(self):
         """
-        Display the 'quart1' image and update the optogenetic logic.
+        Display the red_map image and update the optogenetic logic.
         """
-        im = self.quart1map.scaled(371, 271, Qt.KeepAspectRatio)
+        im = self.map_red.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
         if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
-            self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
+            self._optogenetic_logic.image_display(self.map_red_scaled, self._iw)
 
         else:
-            im_off = self.noirmap.scaled(371, 271, Qt.KeepAspectRatio)
-            t_pulse = self._ow.doubleSpinBox_opto_pulse.value()
+            im_off = self.map_off.scaled(371, 271, Qt.KeepAspectRatio)
+            t_ON_pulse = self._ow.doubleSpinBox_opto_pulse_ON.value()
+            t_OFF_pulse = self._ow.doubleSpinBox_opto_pulse_OFF.value()
             t_opto = self._ow.doubleSpinBox_opto_stimulation.value()
-            self.opto(t_pulse, t_opto, 0, im_off, im)
+            self.opto(t_ON_pulse, t_OFF_pulse, t_opto, 0, 0, im_off, im)
 
-    def opto(self, dt, duration, n_step, im_off, im_on):
-        if dt * n_step < duration:
-            if n_step / 2 == round(n_step / 2):
-                self._ow.retour_2.setPixmap(im_off)
-                self._optogenetic_logic.image_display(self.noirmapscaled, self._iw)
+    def opto(self, t_on, t_off, duration, n_step_on, n_step_off, im_off, im_on):
+        dt = t_on * n_step_on + t_off * n_step_off
+        if dt < duration:
+            if n_step_on > n_step_off:
+                # self._ow.retour_2.setPixmap(im_off)
+                self._optogenetic_logic.image_display(self.map_off_scaled, self._iw)
+                worker = OptoWorker(t_on, t_off, duration, n_step_on, n_step_off + 1, im_off, im_on)
             else:
-                self._ow.retour_2.setPixmap(im_on)
-                self._optogenetic_logic.image_display(self.quart1mapscaled, self._iw)
+                # self._ow.retour_2.setPixmap(im_on)
+                self._optogenetic_logic.image_display(self.map_red_scaled, self._iw)
+                worker = OptoWorker(t_on, t_off, duration, n_step_on + 1, n_step_off, im_off, im_on)
 
-            worker = OptoWorker(dt, duration, n_step+1, im_off, im_on)
             worker.signals.sigOptoStepFinished.connect(self.opto)
             self.threadpool.start(worker)
 
@@ -247,7 +258,7 @@ class OptogeneticGUI(GUIBase):
 
         else:
             self._optogenetic_logic.image_display(self.quart2mapscaled, self._iw)
-            QTimer.singleShot(self._ow.doubleSpinBox.value() * 60 * 1000, self.noirdisplay)
+            QTimer.singleShot(self._ow.doubleSpinBox.value() * 60 * 1000, self.map_off_display)
 
     def on_toggle(self, checked):
         """
