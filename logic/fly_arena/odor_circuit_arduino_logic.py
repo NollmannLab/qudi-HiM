@@ -135,8 +135,11 @@ class OdorCircuitArduinoLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods from GUI
 # ----------------------------------------------------------------------------------------------------------------------
+
+# Handling of the flow configuration  ----------------------------------------------------------------------------------
+
     def stop_air_flow(self):
-        """ Stop all air flow in the arena and close the odor circuit (when selected from the GUI comboBox)
+        """ Stop all air flow in the arena and close the odor circuit
         """
         self.turn_all_MFC_off()
         self.close_odor_circuit()
@@ -156,7 +159,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         # if no odor are being prepared or injected, make sure the mixing valve is open (else, an error will occur for
         # the MFCs since it will be impossible to reach the set-point)
         if (not is_odor) and (not is_mixing):
-            self._ard.control_mixing_valve(1)
+            self._ard.change_valve_state("mixing", 1)
 
         # start the MFCs
         for mfc in range(self.MFC_number):
@@ -165,16 +168,54 @@ class OdorCircuitArduinoLogic(GenericLogic):
             else:
                 self._MFC.MFC_OFF(mfc)
 
+# Flowrate measurement loop --------------------------------------------------------------------------------------------
+
+    def start_flow_measurement(self):
+        """
+        Start a continuous measurement of the flowrate.
+        """
+        self.measuring_flowrate = True
+        # monitor the flowrate, using a worker thread
+        worker = MeasurementWorker()
+        worker.signals.sigFinished.connect(self.flow_measurement_loop)
+        self.threadpool.start(worker)
+
+    def flow_measurement_loop(self):
+        """
+        Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
+        """
+        flow_rates = self.read_average_flow()
+        self.sigUpdateFlowMeasurement.emit(flow_rates)
+        if self.measuring_flowrate:
+            # enter a loop until measuring mode is switched off
+            worker = MeasurementWorker()
+            worker.signals.sigFinished.connect(self.flow_measurement_loop)
+            self.threadpool.start(worker)
+
+    def stop_flow_measurement(self):
+        """
+        Stops the measurement of flowrate.
+        """
+        self.measuring_flowrate = False
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling MFCs
 # ----------------------------------------------------------------------------------------------------------------------
     def turn_all_MFC_off(self):
-        """
-        Close the MFCs
+        """ Turn all MFCs OFF
         """
         for mfc in range(self.MFC_number):
             self._MFC.MFC_OFF(mfc)
             time.sleep(0.3)
+
+    def read_average_flow(self):
+        """ Read the average flow-rate for each MFC
+        @return flow: (list) contains the mean value of the flow measured separately for each MFC
+        """
+        flow = []
+        for n in range(self.MFC_number):
+            flow.append(self._MFC.average_measure(n, 10))
+        return flow
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling Valves
@@ -184,7 +225,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         self._ard.change_valve_state("mixing", 0)
         for odor in range(self.n_odors_available):
-            self._ard.change_valve_state(f"odor_{odor}", 0)
+            self._ard.change_valve_state(f"odor_{odor + 1}", 0)
         self._ard.change_valve_state("switch_purge_arena", 0)
 
     def check_odor_valves(self):
@@ -192,10 +233,23 @@ class OdorCircuitArduinoLogic(GenericLogic):
         @return: (bool) return True if a pair of valves is open. Else False.
         """
         for odor in range(self.n_odors_available):
-            is_odor = self._ard.check_valve_state(f"odor_{odor}")
+            is_odor = self._ard.check_valve_state(f"odor_{odor + 1}")
             if is_odor:
                 return True
         return False
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def valve(self, pin, state):
         """
@@ -266,51 +320,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
     #     time.sleep(0.3)
     #     self._MFC.MFC_OFF(self._MFC_4)
 
-    def read_all_average_measure(self):
-        """
-        Read the flow passing through the MFCs
-        @return flow: (list) contains the mean value of the flow measured separately for each MFC
-        """
-        flow = []
-        for n in range(self.MFC_number):
-            flow.append(self._MFC.average_measure(n, 20))
 
-        return flow
 
-    # -----------------------------------------------------------------------------------------------------------------
-    # Methods for continuous processes (flowrate measurement loop)
-    # -----------------------------------------------------------------------------------------------------------------
-
-    # Flowrate measurement loop ---------------------------------------------------------------------------------------
-
-    def start_flow_measurement(self):
-        """
-        Start a continuous measurement of the flowrate.
-        """
-        self.measuring_flowrate = True
-        # monitor the flowrate, using a worker thread
-        worker = MeasurementWorker()
-        worker.signals.sigFinished.connect(self.flow_measurement_loop)
-        self.threadpool.start(worker)
-
-    def flow_measurement_loop(self):
-        """
-        Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
-        """
-        flow_rates = self.read_all_average_measure()
-        self.sigUpdateFlowMeasurement.emit(flow_rates)
-        if self.measuring_flowrate:
-            # enter a loop until measuring mode is switched off
-            worker = MeasurementWorker()
-            worker.signals.sigFinished.connect(self.flow_measurement_loop)
-            self.threadpool.start(worker)
-
-    def stop_flow_measurement(self):
-        """
-        Stops the measurement of flowrate.
-        Emits a signal to update the GUI with the most recent values.
-        """
-        self.measuring_flowrate = False
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Methods to handle the user interface state
