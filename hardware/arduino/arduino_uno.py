@@ -46,7 +46,7 @@ class ArduinoUno(Base):
     _valve_odor_1_read = ConfigOption('valve_odor_1_read', missing='error')
     _valve_odor_2_read = ConfigOption('valve_odor_2_read', missing='error')
     _valve_odor_3_read = ConfigOption('valve_odor_3_read', missing='error')
-    _valve_odor_4_ren_odor_availablead = ConfigOption('valve_odor_4_read', missing='error')
+    _valve_odor_4_read = ConfigOption('valve_odor_4_read', missing='error')
     _mixing_valve_write = ConfigOption('mixing_valve_write', missing='error')
     _mixing_valve_read = ConfigOption('mixing_valve_read', missing='error')
     _switch_valve_write = ConfigOption('final_valve_write', missing='error')
