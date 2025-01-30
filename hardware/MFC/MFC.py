@@ -111,11 +111,10 @@ class MFC(Base):
         @param n_measure: (int) Number of measurement to average
         @return flow: (float) mean value of the flow measured
         """
-
         with ShdlcSerialPort(port=self._MFC_port, baudrate=115200) as port:
             if mfc < self.MFC_number:
                 sensor = Sfx6xxxDevice(ShdlcChannel(port, shdlc_address=self._MFC_dic['MFC_id'][mfc]))
                 flow = sensor.read_averaged_measured_value(n_measure)
             else:
-                print(f'There is only {self.MFC_number} MFCs')
+                self.log.error(f'There is only {self.MFC_number} MFCs - MFC #{mfc} does not exist!')
         return flow
