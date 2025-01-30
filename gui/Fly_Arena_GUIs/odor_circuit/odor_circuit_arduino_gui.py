@@ -235,25 +235,33 @@ class OdorCircuitGUI(GUIBase):
         """ Based on the comboBox value & the flow-rate setpoint for the arena (for each quadrant), compute the
         flow-rate for each MFC.
         """
+        # read the comboBox to define which configuration is selected. Same for the flow which will define the expected
+        # air-flow in each quadrant
         index = self._mw.comboBox_quadrants_config.currentIndex()
         flow = self._mw.doubleSpinBox_quadrant_flow.value()
 
-        # depending on the selected config, define the setpoint values for each MFC and send it to the logic
-        if index == 0:
+        # depending on the selected config, define the air-flow setpoint values for each MFC and send it to the logic.
+        # Three configurations are available :
+        # 1: all MFCs are off
+        # 2: the two pairs of quadrants are handle using two different circuits - quadrants 1/3 are connected to the
+        # odor circuit through MFCs 1/2/3 (air or odor, depending on the state of the final valve) and quadrants 2/4 are
+        # connected to MFC 4 (air)
+        # 3: all quadrants are connected to the odor circuits - MFC4 is then turned off.
+        if (index == 0) or (flow == 0):
             mfc_flow = [0, 0, 0, 0]
+            self._odor_circuit_arduino_logic.stop_air_flow()
         elif index == 1:
             mfc_flow = [flow, flow, 2 * flow, 2 * flow]
+            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow)
         else:
             mfc_flow = [2 * flow, 2 * flow, 4 * flow, 0]
+            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow)
 
-        # update the setpoints for all MFCs
+        # update the set-points for all MFCs
         self._mw.MFC1_setpoint.setText(str(mfc_flow[0]))
         self._mw.MFC2_setpoint.setText(str(mfc_flow[1]))
         self._mw.MFC3_setpoint.setText(str(mfc_flow[2]))
         self._mw.MFC4_setpoint.setText(str(mfc_flow[3]))
-
-        # send the setpoint values to the logic
-        self._odor_circuit_arduino_logic.set_MFCs_flow(mfc_flow)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the valves

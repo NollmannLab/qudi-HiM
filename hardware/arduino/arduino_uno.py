@@ -37,27 +37,30 @@ from core.module import Base
 
 class ArduinoUno(Base):
 
-    _arduino_port = ConfigOption('arduino_port', None)
-    _valve_odor_1_write = ConfigOption('valve_odor_1_write', None)
-    _valve_odor_2_write = ConfigOption('valve_odor_2_write', None)
-    _valve_odor_3_write = ConfigOption('valve_odor_3_write', None)
-    _valve_odor_4_write = ConfigOption('valve_odor_4_write', None)
-    _valve_odor_1_read = ConfigOption('valve_odor_1_read', None)
-    _valve_odor_2_read = ConfigOption('valve_odor_2_read', None)
-    _valve_odor_3_read = ConfigOption('valve_odor_3_read', None)
-    _valve_odor_4_read = ConfigOption('valve_odor_4_read', None)
-    _mixing_valve_write = ConfigOption('mixing_valve_write', None)
-    _mixing_valve_read = ConfigOption('mixing_valve_read', None)
-    _switch_valve_write = ConfigOption('final_valve_write', None)
-    _switch_valve_read = ConfigOption('final_valve_read', None)
+    n_odor_available = ConfigOption('n_odor_available', missing='error')
+    _arduino_port = ConfigOption('arduino_port', missing='error')
+    _valve_odor_1_write = ConfigOption('valve_odor_1_write', missing='error')
+    _valve_odor_2_write = ConfigOption('valve_odor_2_write', missing='error')
+    _valve_odor_3_write = ConfigOption('valve_odor_3_write', missing='error')
+    _valve_odor_4_write = ConfigOption('valve_odor_4_write', missing='error')
+    _valve_odor_1_read = ConfigOption('valve_odor_1_read', missing='error')
+    _valve_odor_2_read = ConfigOption('valve_odor_2_read', missing='error')
+    _valve_odor_3_read = ConfigOption('valve_odor_3_read', missing='error')
+    _valve_odor_4_ren_odor_availablead = ConfigOption('valve_odor_4_read', missing='error')
+    _mixing_valve_write = ConfigOption('mixing_valve_write', missing='error')
+    _mixing_valve_read = ConfigOption('mixing_valve_read', missing='error')
+    _switch_valve_write = ConfigOption('final_valve_write', missing='error')
+    _switch_valve_read = ConfigOption('final_valve_read', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.arduino = None
-        self._odor_valves_pin = {"odor_1": [self._valve_odor_1_write, self._valve_odor_1_read],
-                                 "odor_2": [self._valve_odor_2_write, self._valve_odor_2_read],
-                                 "odor_3": [self._valve_odor_3_write, self._valve_odor_3_read],
-                                 "odor_4": [self._valve_odor_4_write, self._valve_odor_4_read]}
+        self.valve_pin = {"odor_1": [self._valve_odor_1_write, self._valve_odor_1_read],
+                          "odor_2": [self._valve_odor_2_write, self._valve_odor_2_read],
+                          "odor_3": [self._valve_odor_3_write, self._valve_odor_3_read],
+                          "odor_4": [self._valve_odor_4_write, self._valve_odor_4_read],
+                          "mixing": [self._mixing_valve_write, self._mixing_valve_read],
+                          "switch_purge_arena": [self._switch_valve_write, self._switch_valve_read]}
 
     def on_activate(self):
         """
@@ -143,44 +146,41 @@ class ArduinoUno(Base):
 # ======================================================================================================================
 # Specific methods for the FlyArena
 # ======================================================================================================================
-    def check_odor_valves(self):
-        """ Check if an odor in active (meaning if the inlet & outlet valves associated to an odor are both open)
-        @return: odor_active (bool) True if at least one odor is active - else return False
+    def check_valve_state(self, code):
+        """ Check if the selected valve is OPEN (return TRUE) or CLOSE (return FALSE)
+        @param: code (str) indicate the name of the selected valve in the dictionary
+        @return: (bool) True if the valves for the selected odor are open - else False
         """
-        # check if an odor is already active (in & out valve open at the same time)
-        odor_active = False
-        for odor in self._odor_valves_pin.keys():
-            read_valve = self.read_analog_pin(self._odor_valves_pin[odor][1])
+        if code in self.valve_pin.keys():
+            read_valve = self.read_analog_pin(self.valve_pin[code][1])
             if read_valve > 500:
-                odor_active = True
-                break
-        return odor_active
-
-    def check_mixing_valve(self):
-        """ Check if the mixing valve is open.
-        @return: (bool) True if valve is open, else False
-        """
-        mixing_valve_state = self.read_analog_pin(self._mixing_valve_read)
-        if mixing_valve_state > 500:
-            return True
+                return True
+            else:
+                return False
         else:
+            self.log.error(f"The code {code} indicated does not correspond to any valve")
             return False
 
-    def control_mixing_valve(self, state):
-        """ Open/close the mixing valve
-        @param: state (bool) indicate True to open the valve, False to close it
+    def change_valve_state(self, code, state):
+        """ Open/close the selected valve
+        @param code: (str) indicate the name of the selected valve in the dictionary
+        @param state: (bool) indicate True to open the valve, False to close it
         @return: (bool) True if an error is encountered
         """
-        # open / close the valve
-        if state:
-            self.pin_on(self._mixing_valve_write)
-        else:
-            self.pin_off(self._mixing_valve_write)
+        if code in self.valve_pin.keys():
+            # open / close the valve
+            if state:
+                self.pin_on(self.valve_pin[code][0])
+            else:
+                self.pin_off(self.valve_pin[code][0])
 
-        # read the mixing valve pin and check the status corresponds to the input value
-        read_state = self.check_mixing_valve()
-        if read_state == state:
-            return False
+            # read the mixing valve pin and check the status corresponds to the input value
+            read_state = self.check_valve_state(code)
+            if read_state == state:
+                return False
+            else:
+                self.log.warn(f"The valve {code} is not responding properly!")
+                return True
         else:
-            self.log.warn("Mixing valve not responding properly!")
+            self.log.error(f"The code {code} indicated does not correspond to any valve")
             return True

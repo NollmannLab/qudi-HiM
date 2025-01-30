@@ -89,25 +89,25 @@ class OdorCircuitArduinoLogic(GenericLogic):
     measuring_flowrate = False
     time_since_start = 0
 
-    _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
-    _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
-    _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
-    _valve_odor_4_in = ConfigOption('valve_odor_4_in', 10)
-    _valve_odor_1_out = ConfigOption('valve_odor_1_in', 7)
-    _valve_odor_2_out = ConfigOption('valve_odor_2_in', 6)
-    _valve_odor_3_out = ConfigOption('valve_odor_3_in', 5)
-    _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
-    _mixing_valve = ConfigOption('mixing_valve', 9)
-    _final_valve = ConfigOption('final_valve', 8)
-
-    _MFC_1 = ConfigOption('MFC_1', 0)
-    _MFC_2 = ConfigOption('MFC_2', 1)
-    _MFC_3_purge = ConfigOption('MFC_purge', 2)
-    _MFC_4 = ConfigOption('MFC_4', 3)
-
-    _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.5)
-    _MFC_1_flow = ConfigOption('MFC_1_flow', 0.25)
-    _MFC_2_flow = ConfigOption('MFC_2_flow', 0.25)
+    # _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
+    # _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
+    # _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
+    # _valve_odor_4_in = ConfigOption('valve_odor_4_in', 10)
+    # _valve_odor_1_out = ConfigOption('valve_odor_1_in', 7)
+    # _valve_odor_2_out = ConfigOption('valve_odor_2_in', 6)
+    # _valve_odor_3_out = ConfigOption('valve_odor_3_in', 5)
+    # _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
+    # _mixing_valve = ConfigOption('mixing_valve', 9)
+    # _final_valve = ConfigOption('final_valve', 8)
+    #
+    # _MFC_1 = ConfigOption('MFC_1', 0)
+    # _MFC_2 = ConfigOption('MFC_2', 1)
+    # _MFC_3_purge = ConfigOption('MFC_purge', 2)
+    # _MFC_4 = ConfigOption('MFC_4', 3)
+    #
+    # _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.5)
+    # _MFC_1_flow = ConfigOption('MFC_1_flow', 0.25)
+    # _MFC_2_flow = ConfigOption('MFC_2_flow', 0.25)
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -115,12 +115,14 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self._MFC = None
         self._ard = None
         self.MFC_number: int = 0
+        self.n_odors_available: int = 0
 
     def on_activate(self):
         """
         Initialisation performed during activation of the module.
         """
         self._ard = self.arduino_uno()
+        self.n_odors_available = self._ard.n_odor_available
         self._MFC = self.MFC()
         self.MFC_number = self._MFC.MFC_number
 
@@ -128,41 +130,73 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         Perform required deactivation.
         """
-        pass
+        self.stop_air_flow()
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Methods handling MFCs
+# Methods from GUI
 # ----------------------------------------------------------------------------------------------------------------------
-    def set_MFCs_flow(self, flow_setpoints):
-        print(f'Flow setpoint : {flow_setpoints}')
+    def stop_air_flow(self):
+        """ Stop all air flow in the arena and close the odor circuit (when selected from the GUI comboBox)
+        """
+        self.turn_all_MFC_off()
+        self.close_odor_circuit()
 
-        # check odor valves state
-        is_odor = self._ard.check_odor_valves()
-        print(f"odor detected : {is_odor}")
+    def start_air_flow(self, flow_set_points):
+        """ Set the flow rate for all MFCs - this function is called from the GUI when selecting a configuration from
+        the comboBox.
+        @param: flow_set_points (list): indicate the flow set_points for all MFCs
+        @return:
+        """
+        # check odor valves state - return True if at least one couple of inlet / outlet valves for the odors is OPEN
+        is_odor = self.check_odor_valves()
 
-        # check mixing valve state
-        is_mixing = self._ard.check_mixing_valve()
-        print(f"mixing detected : {is_mixing}")
+        # check mixing valve state - return True if the mixing valve is OPEN
+        is_mixing = self._ard.check_valve_state("mixing")
 
-        # check if all the MFCs are turned off
-        All_off = all(v == 0 for v in flow_setpoints)
-
-        # if none of the valves are open, open the mixing valve by default (expect in the case all MFCs are turned off)
-        if All_off:
-            self._ard.control_mixing_valve(0)
-        elif (not is_odor) and (not is_mixing) and (not All_off):
+        # if no odor are being prepared or injected, make sure the mixing valve is open (else, an error will occur for
+        # the MFCs since it will be impossible to reach the set-point)
+        if (not is_odor) and (not is_mixing):
             self._ard.control_mixing_valve(1)
 
         # start the MFCs
         for mfc in range(self.MFC_number):
-            if flow_setpoints[mfc] > 0:
-                self._MFC.MFC_ON(mfc, flow_setpoints[mfc])
+            if flow_set_points[mfc] > 0:
+                self._MFC.MFC_ON(mfc, flow_set_points[mfc])
             else:
                 self._MFC.MFC_OFF(mfc)
 
 # ----------------------------------------------------------------------------------------------------------------------
-# Methods handling Valves
+# Helper methods handling MFCs
 # ----------------------------------------------------------------------------------------------------------------------
+    def turn_all_MFC_off(self):
+        """
+        Close the MFCs
+        """
+        for mfc in range(self.MFC_number):
+            self._MFC.MFC_OFF(mfc)
+            time.sleep(0.3)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper methods handling Valves
+# ----------------------------------------------------------------------------------------------------------------------
+    def close_odor_circuit(self):
+        """ Close all the valve in the odor circuit (odor, mixing and final valves).
+        """
+        self._ard.change_valve_state("mixing", 0)
+        for odor in range(self.n_odors_available):
+            self._ard.change_valve_state(f"odor_{odor}", 0)
+        self._ard.change_valve_state("switch_purge_arena", 0)
+
+    def check_odor_valves(self):
+        """ Check if at least one pair of odor valves is OPEN
+        @return: (bool) return True if a pair of valves is open. Else False.
+        """
+        for odor in range(self.n_odors_available):
+            is_odor = self._ard.check_valve_state(f"odor_{odor}")
+            if is_odor:
+                return True
+        return False
+
     def valve(self, pin, state):
         """
         Open only 1 valve
@@ -220,17 +254,17 @@ class OdorCircuitArduinoLogic(GenericLogic):
         for n_MFC, flow in enumerate(flow_setpoints):
             self._MFC.MFC_ON(n_MFC, flow)
 
-    def close_air(self):
-        """
-        Close the MFCs
-        """
-        self._MFC.MFC_OFF(self._MFC_1)
-        time.sleep(0.3)
-        self._MFC.MFC_OFF(self._MFC_2)
-        time.sleep(0.3)
-        self._MFC.MFC_OFF(self._MFC_3_purge)
-        time.sleep(0.3)
-        self._MFC.MFC_OFF(self._MFC_4)
+    # def close_air(self):
+    #     """
+    #     Close the MFCs
+    #     """
+    #     self._MFC.MFC_OFF(self._MFC_1)
+    #     time.sleep(0.3)
+    #     self._MFC.MFC_OFF(self._MFC_2)
+    #     time.sleep(0.3)
+    #     self._MFC.MFC_OFF(self._MFC_3_purge)
+    #     time.sleep(0.3)
+    #     self._MFC.MFC_OFF(self._MFC_4)
 
     def read_all_average_measure(self):
         """
