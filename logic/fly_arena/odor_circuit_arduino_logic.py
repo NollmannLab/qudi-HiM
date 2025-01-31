@@ -198,6 +198,20 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         self.measuring_flowrate = False
 
+# Odor handling --------------------------------------------------------------------------------------------------------
+    def prepare_odor(self, odor_number):
+        """
+        Prepare the specified odor by activating the corresponding valves. Note that when preparing an odor the
+        following steps need to be checked:
+        - open the valves associated to the selected odor
+        - close the mixing valve
+        - make sure the odor is sent to the purge (final valve in False state)
+        @param odor_number: number of the odor you want to inject (not use yet)
+        """
+        self._ard.change_valve_state("mixing", 0)
+        self._ard.change_valve_state(f"odor_{odor_number}", 1)
+        self._ard.change_valve_state("switch_purge_arena", 0)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling MFCs
 # ----------------------------------------------------------------------------------------------------------------------
@@ -263,26 +277,26 @@ class OdorCircuitArduinoLogic(GenericLogic):
         elif state == 0:
             self._ard.pin_off(pin)
 
-    def prepare_odor(self, odor_number):
-        """
-        Prepare the specified odor by activating the corresponding valves.
-        @param odor_number: number of the odor you want to inject (not use yet)
-        input example: 'odor_number'
-        """
-        if odor_number == 1:
-            self.valve(self._valve_odor_1_in, 1)
-            self.valve(self._valve_odor_1_out, 1)
-        elif odor_number == 2:
-            self.valve(self._valve_odor_2_in, 1)
-            self.valve(self._valve_odor_2_out, 1)
-        elif odor_number == 3:
-            self.valve(self._valve_odor_3_in, 1)
-            self.valve(self._valve_odor_3_out, 1)
-        elif odor_number == 4:
-            self.valve(self._valve_odor_4_in, 1)
-            self.valve(self._valve_odor_4_out, 1)
-        else:
-            logger.warning('4 odor only')
+    # def prepare_odor(self, odor_number):
+    #     """
+    #     Prepare the specified odor by activating the corresponding valves.
+    #     @param odor_number: number of the odor you want to inject (not use yet)
+    #     input example: 'odor_number'
+    #     """
+    #     if odor_number == 1:
+    #         self.valve(self._valve_odor_1_in, 1)
+    #         self.valve(self._valve_odor_1_out, 1)
+    #     elif odor_number == 2:
+    #         self.valve(self._valve_odor_2_in, 1)
+    #         self.valve(self._valve_odor_2_out, 1)
+    #     elif odor_number == 3:
+    #         self.valve(self._valve_odor_3_in, 1)
+    #         self.valve(self._valve_odor_3_out, 1)
+    #     elif odor_number == 4:
+    #         self.valve(self._valve_odor_4_in, 1)
+    #         self.valve(self._valve_odor_4_out, 1)
+    #     else:
+    #         logger.warning('4 odor only')
 
     def flush_odor(self):
         """
