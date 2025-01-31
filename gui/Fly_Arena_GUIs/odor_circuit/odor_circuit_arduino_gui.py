@@ -259,19 +259,23 @@ class OdorCircuitGUI(GUIBase):
     def init_admin_dockwidget(self):
         """ Initialize actions handle within the admin dockwidget
         """
-        self._mw.odor1.stateChanged.connect(self.odor_changed)
-        self._mw.odor2.stateChanged.connect(self.odor_changed)
-        self._mw.odor3.stateChanged.connect(self.odor_changed)
-        self._mw.odor4.stateChanged.connect(self.odor_changed)
-        self._mw.in1.stateChanged.connect(self.check_box_changed)
-        self._mw.out1.stateChanged.connect(self.check_box_changed)
-        self._mw.in2.stateChanged.connect(self.check_box_changed)
-        self._mw.checkBox_F_2.stateChanged.connect(self.check_box_changed)
-        self._mw.out2.stateChanged.connect(self.check_box_changed)
-        self._mw.in3.stateChanged.connect(self.check_box_changed)
-        self._mw.out3.stateChanged.connect(self.check_box_changed)
-        self._mw.in4.stateChanged.connect(self.check_box_changed)
-        self._mw.out4.stateChanged.connect(self.check_box_changed)
+        # self._mw.odor1.stateChanged.connect(self.odor_changed)
+        # self._mw.odor2.stateChanged.connect(self.odor_changed)
+        # self._mw.odor3.stateChanged.connect(self.odor_changed)
+        # self._mw.odor4.stateChanged.connect(self.odor_changed)
+        # self._mw.in1.stateChanged.connect(self.check_box_changed)
+        # self._mw.out1.stateChanged.connect(self.check_box_changed)
+        # self._mw.in2.stateChanged.connect(self.check_box_changed)
+        # self._mw.checkBox_F_2.stateChanged.connect(self.check_box_changed)
+        # self._mw.out2.stateChanged.connect(self.check_box_changed)
+        # self._mw.in3.stateChanged.connect(self.check_box_changed)
+        # self._mw.out3.stateChanged.connect(self.check_box_changed)
+        # self._mw.in4.stateChanged.connect(self.check_box_changed)
+        # self._mw.out4.stateChanged.connect(self.check_box_changed)
+        self._mw.valves_odor1_checkBox.stateChanged.connect(self.check_box_changed)
+        self._mw.valves_odor2_checkBox.stateChanged.connect(self.check_box_changed)
+        self._mw.valves_odor3_checkBox.stateChanged.connect(self.check_box_changed)
+        self._mw.valves_odor4_checkBox.stateChanged.connect(self.check_box_changed)
         self._mw.checkBox_M_2.stateChanged.connect(self.check_box_changed)
         self.hide_admin_Dock()
 
@@ -279,7 +283,7 @@ class OdorCircuitGUI(GUIBase):
         """Initialize the flowcontrol dockwidget, setting up plots, labels, and signal-slot connections.
         """
         # Initialize pushbutton
-        self._mw.stoplaunch.setDisabled(True)
+        # self._mw.stoplaunch.setDisabled(True)
 
         # Connect signals to methods
         self._mw.comboBox_quadrants_config.activated[str].connect(self.update_arena_config)
@@ -304,7 +308,7 @@ class OdorCircuitGUI(GUIBase):
         self.flowrate_data = {i: [] for i in range(self.MFC_number)}
         self.mesure_data = {i: [] for i in range(self.MFC_number)}
         self.flowrate_timetraces = {
-            i: plot_widget.plot(self.t_data, self.flowrate_data[i], pen=colors[i - 1], name=labels[i - 1])
+            i: plot_widget.plot(self.t_data, self.flowrate_data[i], pen=colors[i], name=labels[i])
             for i in range(self.MFC_number)
         }
 
@@ -381,15 +385,18 @@ class OdorCircuitGUI(GUIBase):
         # check if one odor was selected
         if self.selected_odor == 0:
             self.log.error("You need to select at least one odor")
+            self._mw.Prepare_odor_pushButton.setChecked(False)
             return
 
         # prepare the selected odor
-        odor_prep_time = self._mw.doubleSpinBox_odor_prep_duration.value() * 60
-        if (not self.preparing_odor) and (odor_prep_time > 0):
+        # odor_prep_time = self._mw.doubleSpinBox_odor_prep_duration.value() * 60
+        if not self.preparing_odor:
             self._mw.Prepare_odor_pushButton.setChecked(True)
             self._mw.Prepare_odor_pushButton.setText('Preparing odor ...')
             self._mw.Prepare_odor_pushButton.setDisabled(True)
             self._odor_circuit_arduino_logic.prepare_odor(self.selected_odor)
+            self.preparing_odor = True
+
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the timers
@@ -449,11 +456,13 @@ class OdorCircuitGUI(GUIBase):
         """
         # self.G += 1
         # Update flow rate data - a maximum of 100 data points will be displayed on the ime trace.
+        print(flow_rates)
+
         if len(self.flowrate_data[1]) < 100:
             self.t_data.append(len(self.t_data))
             for i in range(self.MFC_number):
                 self.flowrate_data[i].append(flow_rates[i])
-                getattr(self._mw, f'MFC{i + 1}').setText(f'{np.around(flow_rates[i - 1], decimals=4)}')
+                getattr(self._mw, f'MFC{i + 1}').setText(f'{np.around(flow_rates[i], decimals=4)}')
         else:
             self.t_data[:-1] = self.t_data[1:]
             self.t_data[-1] += 1

@@ -223,7 +223,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
             time.sleep(0.3)
 
     def read_average_flow(self):
-        """ Read the average flow-rate for each MFC
+        """ Read the average flow-rate for each MFC - note that the measurements are performed according to the order of
+        the MFCs id/address indicated in the parameters file
         @return flow: (list) contains the mean value of the flow measured separately for each MFC
         """
         flow = []
