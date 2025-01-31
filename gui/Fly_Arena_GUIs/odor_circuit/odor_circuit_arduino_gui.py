@@ -124,8 +124,10 @@ class OdorCircuitGUI(GUIBase):
         self.date_str = None
         # self.Caltime = 0
         # self.G = 0
-        self.timer_prep = None
-        self.timer2 = None
+        self.prep_timer = None
+        self.start_prep_time = None
+        self.inject_timer = None
+        self.start_inject_time = None
         self.flowrate_timetraces: dict = {}
         self.flowrate_data: dict = {}
         self.measure: dict = {}
@@ -133,6 +135,7 @@ class OdorCircuitGUI(GUIBase):
         self.MFC_number: int = 0
         self.odor_number: int = 0
         self.preparing_odor: bool = False
+        self.injecting_odor: bool = False
         self.selected_odor: int = 0
 
         # self._flowrate1_timetrace = None
@@ -290,6 +293,9 @@ class OdorCircuitGUI(GUIBase):
         # self._mw.stoplaunch.clicked.connect(self.stop_Launch)
         self._mw.Prepare_odor_pushButton.clicked.connect(self.prepare_odor_clicked)
         self._mw.Prepare_odor_pushButton.clicked.connect(self.start_prep_timer)
+        self._mw.Inject_odor_pushButton.clicked.connect(self.inject_odor_clicked)
+        self._mw.Inject_odor_pushButton.clicked.connect(self.start_inject_timer)
+        self._mw.Stop_odor_pushButton.clicked.connect(self.stop_odor_clicked)
         self._mw.odor1_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(1, checked))
         self._mw.odor2_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(2, checked))
         self._mw.odor3_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(3, checked))
@@ -313,8 +319,9 @@ class OdorCircuitGUI(GUIBase):
         }
 
         # Initialize timers
-        self.prep_timer, self.timer2 = QTimer(), QTimer()
+        self.prep_timer, self.inject_timer = QTimer(), QTimer()
         self.prep_timer.timeout.connect(self.update_prep_timer)
+        self.inject_timer.timeout.connect(self.update_inject_timer)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling arena configuration & odors
@@ -380,7 +387,7 @@ class OdorCircuitGUI(GUIBase):
 
     def prepare_odor_clicked(self):
         """ Handle the click event to launch the odor preparation process. Note that when clicked the procedure is
-        launched and can only be stopped by using the "Stop odor" pushbutton
+        launched and can only be stopped either by using the "Stop odor" or the "Inject odor" pushButtons.
         """
         # check if one odor was selected
         if self.selected_odor == 0:
@@ -397,20 +404,77 @@ class OdorCircuitGUI(GUIBase):
             self._odor_circuit_arduino_logic.prepare_odor(self.selected_odor)
             self.preparing_odor = True
 
+            # check if an injection was performed
+            if self.injecting_odor:
+                self._mw.Inject_odor_pushButton.setChecked(False)
+                self._mw.Inject_odor_pushButton.setText('Inject odor')
+                self._mw.Inject_odor_pushButton.setDisabled(False)
+                self.injecting_odor = False
+
+    def inject_odor_clicked(self):
+        """ Handle event to launch injection into the arena. Note that when clicked the procedure is
+        launched and can only be stopped by using either the "Stop odor" or "Prepare odor" pushButtons
+        """
+        # check if an odor is already in preparation
+        if not self.preparing_odor:
+            self.log.error("No odor is in preparation")
+            self._mw.Inject_odor_pushButton.setChecked(False)
+            return
+
+        # inject the selected odor in the arena
+        if not self.injecting_odor:
+            # release the prepare odor pushButton
+            self._mw.Prepare_odor_pushButton.setChecked(False)
+            self._mw.Prepare_odor_pushButton.setText('Prepare odor')
+            self._mw.Prepare_odor_pushButton.setDisabled(False)
+
+            # launch injection
+            self._mw.Inject_odor_pushButton.setChecked(True)
+            self._mw.Inject_odor_pushButton.setText('Injecting odor ...')
+            self._mw.Inject_odor_pushButton.setDisabled(True)
+            self._odor_circuit_arduino_logic.inject_odor()
+            self.injecting_odor = True
+            self.preparing_odor = False
+
+    def stop_odor_clicked(self):
+        """ Stop any preparation or injection of odor
+        """
+        # release the prepare odor pushButton
+        self._mw.Prepare_odor_pushButton.setChecked(False)
+        self._mw.Prepare_odor_pushButton.setText('Prepare odor')
+        self._mw.Prepare_odor_pushButton.setDisabled(False)
+        self.preparing_odor = False
+
+        # release the inject odor pushButton
+        self._mw.Inject_odor_pushButton.setChecked(False)
+        self._mw.Inject_odor_pushButton.setText('Inject odor')
+        self._mw.Inject_odor_pushButton.setDisabled(True)
+        self.injecting_odor = False
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the timers
 # ----------------------------------------------------------------------------------------------------------------------
     def start_prep_timer(self):
         """Starts the timer for the odor preparation (when the button is clicked)."""
-        self.start_time = QTime.currentTime()  # Store start time
+        self.start_prep_time = QTime.currentTime()  # Store start time
         self.prep_timer.start(1000)  # Update every second
 
     def update_prep_timer(self):
         """Updates the QLineEdit with elapsed time."""
-        if self.start_time:
-            elapsed = self.start_time.secsTo(QTime.currentTime())  # Get elapsed time in seconds
+        if self.start_prep_time:
+            elapsed = self.start_prep_time.secsTo(QTime.currentTime())  # Get elapsed time in seconds
             self._mw.prep_timer_display.setText(f"{elapsed} sec")
+
+    def start_inject_timer(self):
+        """Starts the timer for the odor preparation (when the button is clicked)."""
+        self.start_inject_time = QTime.currentTime()  # Store start time
+        self.inject_timer.start(1000)  # Update every second
+
+    def update_inject_timer(self):
+        """Updates the QLineEdit with elapsed time."""
+        if self.start_inject_time:
+            elapsed = self.start_inject_time.secsTo(QTime.currentTime())  # Get elapsed time in seconds
+            self._mw.inject_timer_display.setText(f"{elapsed} sec")
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the valves states

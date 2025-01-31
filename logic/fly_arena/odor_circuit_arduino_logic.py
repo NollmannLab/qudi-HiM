@@ -212,6 +212,22 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self._ard.change_valve_state(f"odor_{odor_number}", 1)
         self._ard.change_valve_state("switch_purge_arena", 0)
 
+    def inject_odor(self):
+        """
+        Inject the specified odor by activating the corresponding valves. Note that when injecting an odor, it is
+        assumed that preparation was already running. Therefore, only the state of the "final" valve is changed
+        (switching between purge & arena)
+        """
+        self._ard.change_valve_state("switch_purge_arena", 1)
+
+    def stop_odor(self, odor_number):
+        """ Stop odor preparation or injection.
+        @param odor_number: number of the odor you want to inject (not use yet)
+        """
+        self._ard.change_valve_state("mixing", 1)
+        self._ard.change_valve_state(f"odor_{odor_number}", 0)
+        self._ard.change_valve_state("switch_purge_arena", 0)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling MFCs
 # ----------------------------------------------------------------------------------------------------------------------
