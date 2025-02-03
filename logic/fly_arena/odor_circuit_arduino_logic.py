@@ -84,6 +84,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
     sigUpdateFlowMeasurement = QtCore.Signal(list)
     sigDisableFlowActions = QtCore.Signal()
     sigEnableFlowActions = QtCore.Signal()
+    sigChangeValveState = QtCore.Signal(dict)
 
     # attributes
     measuring_flowrate = False
@@ -116,15 +117,27 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self._ard = None
         self.MFC_number: int = 0
         self.n_odors_available: int = 0
+        self.valves_status: dict = {}
 
     def on_activate(self):
         """
         Initialisation performed during activation of the module.
         """
+        # connect logic to arduino (valve control) & MFC (air flow control)
         self._ard = self.arduino_uno()
-        self.n_odors_available = self._ard.n_odor_available
         self._MFC = self.MFC()
+
+        # initialize variables
+        self.n_odors_available = self._ard.n_odor_available
         self.MFC_number = self._MFC.MFC_number
+        self.valves_status = {'odor_1': 0,
+                              'odor_2': 0,
+                              'odor_3': 0,
+                              'odor_4': 0,
+                              'mixing': 0,
+                              'switch_purge_arena': 0}
+
+        # initialize connection to GUI
 
     def on_deactivate(self):
         """
@@ -159,7 +172,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         # if no odor are being prepared or injected, make sure the mixing valve is open (else, an error will occur for
         # the MFCs since it will be impossible to reach the set-point)
         if (not is_odor) and (not is_mixing):
-            self._ard.change_valve_state("mixing", 1)
+            self.change_valve_state("mixing", 1)
 
         # start the MFCs
         for mfc in range(self.MFC_number):
@@ -208,9 +221,9 @@ class OdorCircuitArduinoLogic(GenericLogic):
         - make sure the odor is sent to the purge (final valve in False state)
         @param odor_number: number of the odor you want to inject (not use yet)
         """
-        self._ard.change_valve_state("mixing", 0)
-        self._ard.change_valve_state(f"odor_{odor_number}", 1)
-        self._ard.change_valve_state("switch_purge_arena", 0)
+        self.change_valve_state("mixing", 0)
+        self.change_valve_state(f"odor_{odor_number}", 1)
+        self.change_valve_state("switch_purge_arena", 0)
 
     def inject_odor(self):
         """
@@ -218,15 +231,15 @@ class OdorCircuitArduinoLogic(GenericLogic):
         assumed that preparation was already running. Therefore, only the state of the "final" valve is changed
         (switching between purge & arena)
         """
-        self._ard.change_valve_state("switch_purge_arena", 1)
+        self.change_valve_state("switch_purge_arena", 1)
 
     def stop_odor(self, odor_number):
         """ Stop odor preparation or injection.
         @param odor_number: number of the odor you want to inject (not use yet)
         """
-        self._ard.change_valve_state("mixing", 1)
-        self._ard.change_valve_state(f"odor_{odor_number}", 0)
-        self._ard.change_valve_state("switch_purge_arena", 0)
+        self.change_valve_state("mixing", 1)
+        self.change_valve_state(f"odor_{odor_number}", 0)
+        self.change_valve_state("switch_purge_arena", 0)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling MFCs
@@ -254,10 +267,11 @@ class OdorCircuitArduinoLogic(GenericLogic):
     def close_odor_circuit(self):
         """ Close all the valve in the odor circuit (odor, mixing and final valves).
         """
-        self._ard.change_valve_state("mixing", 0)
+        self.change_valve_state("mixing", 0)
         for odor in range(self.n_odors_available):
-            self._ard.change_valve_state(f"odor_{odor + 1}", 0)
-        self._ard.change_valve_state("switch_purge_arena", 0)
+            self.change_valve_state(f"odor_{odor + 1}", 0)
+
+        self.change_valve_state("switch_purge_arena", 0)
 
     def check_odor_valves(self):
         """ Check if at least one pair of odor valves is OPEN
@@ -268,6 +282,16 @@ class OdorCircuitArduinoLogic(GenericLogic):
             if is_odor:
                 return True
         return False
+
+    def change_valve_state(self, code, state):
+        """ Send signal to GUI to update valve state
+        @param code: (str) indicate the name of the selected valve in the dictionary
+        @param state: (bool) indicate True to open the valve, False to close it
+        """
+        err = self._ard.change_valve_state(code, state)
+        if not err:
+            self.valves_status[code] = state
+            self.sigChangeValveState.emit(self.valves_status)
 
 
 
