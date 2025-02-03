@@ -49,8 +49,8 @@ class ArduinoUno(Base):
     _valve_odor_4_read = ConfigOption('valve_odor_4_read', missing='error')
     _mixing_valve_write = ConfigOption('mixing_valve_write', missing='error')
     _mixing_valve_read = ConfigOption('mixing_valve_read', missing='error')
-    _switch_valve_write = ConfigOption('final_valve_write', missing='error')
-    _switch_valve_read = ConfigOption('final_valve_read', missing='error')
+    _switch_valve_write = ConfigOption('switch_purge_arena_valve_write', missing='error')
+    _switch_valve_read = ConfigOption('switch_purge_arena_valve_read', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
