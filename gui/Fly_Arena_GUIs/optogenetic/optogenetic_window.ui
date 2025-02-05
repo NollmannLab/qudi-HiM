@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>783</width>
-    <height>689</height>
+    <height>632</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -54,59 +54,59 @@
      <property name="geometry">
       <rect>
        <x>260</x>
-       <y>30</y>
+       <y>10</y>
        <width>281</width>
-       <height>81</height>
+       <height>41</height>
       </rect>
      </property>
      <property name="text">
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:16pt; font-weight:600; text-decoration: underline;&quot;&gt;Optogenetic Display&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="arena_red">
+    <widget class="QToolButton" name="arena_red_toolButton">
      <property name="geometry">
       <rect>
        <x>270</x>
-       <y>190</y>
+       <y>120</y>
        <width>211</width>
-       <height>131</height>
+       <height>81</height>
       </rect>
      </property>
      <property name="text">
       <string>Whole arena (red)</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="quart2">
+    <widget class="QToolButton" name="arena_green_toolButton">
      <property name="geometry">
       <rect>
        <x>500</x>
-       <y>190</y>
+       <y>120</y>
        <width>211</width>
-       <height>131</height>
+       <height>81</height>
       </rect>
      </property>
      <property name="text">
-      <string>Quarters (red)</string>
+      <string>Whole arena (green)</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="arena_black">
+    <widget class="QToolButton" name="arena_OFF_toolButton">
      <property name="geometry">
       <rect>
        <x>40</x>
-       <y>190</y>
+       <y>120</y>
        <width>211</width>
-       <height>131</height>
+       <height>81</height>
       </rect>
      </property>
      <property name="text">
-      <string>BLACK</string>
+      <string>CLOSE</string>
      </property>
     </widget>
     <widget class="QLabel" name="retour_2">
      <property name="geometry">
       <rect>
        <x>200</x>
-       <y>340</y>
+       <y>210</y>
        <width>371</width>
        <height>271</height>
       </rect>
@@ -115,42 +115,26 @@
       <string/>
      </property>
     </widget>
-    <widget class="QPushButton" name="toggleButton">
-     <property name="geometry">
-      <rect>
-       <x>620</x>
-       <y>430</y>
-       <width>101</width>
-       <height>61</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Open</string>
-     </property>
-    </widget>
-    <widget class="QLabel" name="label_3">
-     <property name="geometry">
-      <rect>
-       <x>630</x>
-       <y>400</y>
-       <width>91</width>
-       <height>16</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:12pt;&quot;&gt;Obturateur&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-     </property>
-    </widget>
     <widget class="QWidget" name="gridLayoutWidget">
      <property name="geometry">
       <rect>
-       <x>100</x>
-       <y>100</y>
-       <width>515</width>
-       <height>80</height>
+       <x>70</x>
+       <y>60</y>
+       <width>621</width>
+       <height>51</height>
       </rect>
      </property>
      <layout class="QGridLayout" name="gridLayout">
+      <item row="0" column="5">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse_OFF">
+        <property name="decimals">
+         <number>2</number>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
       <item row="0" column="3">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse_ON">
         <property name="decimals">
@@ -161,13 +145,6 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="2">
-       <widget class="QLabel" name="label_4">
-        <property name="text">
-         <string>pulse ON length (s)</string>
-        </property>
-       </widget>
-      </item>
       <item row="0" column="1">
        <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_stimulation">
         <property name="decimals">
@@ -175,6 +152,13 @@
         </property>
         <property name="minimum">
          <double>0.000000000000000</double>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="2">
+       <widget class="QLabel" name="label_4">
+        <property name="text">
+         <string>pulse ON length (s)</string>
         </property>
        </widget>
       </item>
@@ -192,13 +176,13 @@
         </property>
        </widget>
       </item>
-      <item row="0" column="5">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_opto_pulse_OFF">
-        <property name="decimals">
-         <number>2</number>
+      <item row="0" column="6">
+       <widget class="QPushButton" name="shutter_toolButton">
+        <property name="text">
+         <string>Open/close shutter</string>
         </property>
-        <property name="minimum">
-         <double>0.000000000000000</double>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>

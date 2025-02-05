@@ -101,9 +101,7 @@ class ImageWindow(QMainWindow):
             sys.exit(1)
 
         second_screen = screens[1]
-
         screen_geometry = second_screen.geometry()
-
         self.label = QLabel(self)
         self.label.setAlignment(Qt.AlignCenter)
         self.setCentralWidget(self.label)
@@ -125,44 +123,47 @@ class OptoWindow(QtWidgets.QMainWindow):
 
 
 class OptogeneticGUI(GUIBase):
+    """ Main GUI class to handle interactions with the shutter & the projector for optogenetic activation - since the
+    projector cannot be controlled, a second screen is defined where the image will be displayed & project onto the
+    FlyArena
+    """
+    # define variable from the config file
     optogenetic_logic = Connector(interface='OptogeneticLogic')
-
     _no_light_path = ConfigOption('no_light_path', None)
     _arena_red_path = ConfigOption('arena_red_path', None)
-    _quart2_path = ConfigOption('quart2_path', None)
+    _arena_green_path = ConfigOption('arena_green_path', None)
 
-    sig_map_off_Clicked = Signal()
-    sig_map_red_Clicked = Signal()
-    sigquart2Clicked = Signal()
+    # sig_map_off_Clicked = Signal()
+    # sig_map_red_Clicked = Signal()
+    # sigquart2Clicked = Signal()
 
+    # define the screen
     screens = QApplication.screens()
-
     if len(screens) < 2:
         print("Error: There are not enough screens available.")
         sys.exit(1)
-
     second_screen = screens[1]
-
     screen_geometry = second_screen.geometry()
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.threadpool = QtCore.QThreadPool()
-        self.p = False
+        # self.p = False
         self._optogenetic_logic = None
+        self.shutter_state: bool = False  # The state of the shutter is assumed Close / False when starting qudi
 
         self._ow = None
         self._iw = None
         self.map_off = QPixmap(self._no_light_path)
         self.map_red = QPixmap(self._arena_red_path)
-        self.quart2map = QPixmap(self._quart2_path)
+        self.map_green = QPixmap(self._arena_green_path)
         self._ow = OptoWindow()
         self._iw = ImageWindow()
         self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                  Qt.KeepAspectRatio)
         self.map_red_scaled = self.map_red.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                      Qt.KeepAspectRatio)
-        self.quart2mapscaled = self.quart2map.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        self.map_green_scaled = self.map_green.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                      Qt.KeepAspectRatio)
         self._iw.label.setPixmap(self.map_off_scaled)
         self._ow.retour_2.setPixmap(self.map_off_scaled)
@@ -173,45 +174,50 @@ class OptogeneticGUI(GUIBase):
         """
         self._optogenetic_logic = self.optogenetic_logic()
 
-        self._ow.arena_black.clicked.connect(self.map_off_display)
-        self._ow.arena_red.clicked.connect(self.map_red_display)
-        self._ow.quart2.clicked.connect(self.quart2display)
-        self.sig_map_off_Clicked.connect(lambda: self.map_off_display())
-        self.sig_map_red_Clicked.connect(lambda: self.sigButton1Clicked.emit())
-        self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
-        self._ow.toggleButton.setCheckable(True)
-        self._ow.toggleButton.toggled.connect(self.on_toggle)
+        # connect signals to methods
+        self._ow.arena_OFF_toolButton.clicked.connect(self.map_off_display)
+        self._ow.arena_red_toolButton.clicked.connect(self.map_red_display)
+        self._ow.arena_green_toolButton.clicked.connect(self.map_green_display)
+        # self.sig_map_off_Clicked.connect(lambda: self.map_off_display())
+        # self.sig_map_red_Clicked.connect(lambda: self.sigButton1Clicked.emit())
+        # self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
+        self._ow.shutter_toolButton.toggled.connect(self.change_shutter)
 
     def on_deactivate(self):
         """
         Perform required deactivation.
         """
-        if not self.p:
-            pass
-        else:
-            self.backward()
+        # if not self.p:
+        #     pass
+        # else:
+        #     self.backward()
         self._iw.close()
 
-    def forward(self):
-        """
-        take a 180° step forward
-        """
-        self.p = True
-        self._optogenetic_logic.forward()
-        self._ow.toggleButton.setText('Close')
+    # def forward(self):
+    #     """
+    #     take a 180° step forward
+    #     """
+    #     self.p = True
+    #     self._optogenetic_logic.forward()
+    #     self._ow.toggleButton.setText('Close')
+    #
+    # def backward(self):
+    #     """
+    #     take a 180° step backward
+    #     """
+    #     self.p = False
+    #     self._optogenetic_logic.backward()
+    #     self._ow.toggleButton.setText('Open')
 
-    def backward(self):
-        """
-        take a 180° step backward
-        """
-        self.p = False
-        self._optogenetic_logic.backward()
-        self._ow.toggleButton.setText('Open')
+# ======================================================================================================================
+# Specific methods handling image display and optogenetic pulses
+# ======================================================================================================================
 
     def map_off_display(self):
         """
-        Display the 'noir' image and update the optogenetic logic.
+        Display the 'black' image
         """
+        self.close_shutter()
         im = self.map_off.scaled(371, 271, Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(im)
         self._optogenetic_logic.image_display(self.map_off_scaled, self._iw)
@@ -220,72 +226,116 @@ class OptogeneticGUI(GUIBase):
         """
         Display the red_map image and update the optogenetic logic.
         """
-        im = self.map_red.scaled(371, 271, Qt.KeepAspectRatio)
-        self._ow.retour_2.setPixmap(im)
+        # set the image - if the duration is set to zero, no optogenetic pulse will be sent and the image is displayed
+        # until another image is activated
+        im = self.map_red_scaled
+        self._ow.retour_2.setPixmap(im.scaled(371, 271, Qt.KeepAspectRatio))
         if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
-            self._optogenetic_logic.image_display(self.map_red_scaled, self._iw)
+            self.open_shutter()
+            self._optogenetic_logic.image_display(im, self._iw)
 
         else:
-            im_off = self.map_off.scaled(371, 271, Qt.KeepAspectRatio)
+            im_off = self.map_off_scaled
             t_ON_pulse = self._ow.doubleSpinBox_opto_pulse_ON.value()
             t_OFF_pulse = self._ow.doubleSpinBox_opto_pulse_OFF.value()
             t_opto = self._ow.doubleSpinBox_opto_stimulation.value()
+            self.open_shutter()
+            self.opto(t_ON_pulse, t_OFF_pulse, t_opto, 0, 0, im_off, im)
+
+    def map_green_display(self):
+        """
+        Display the 'green map' image and update the optogenetic logic.
+        """
+        # set the image - if the duration is set to zero, no optogenetic pulse will be sent and the image is displayed
+        # until another image is activated
+        im = self.map_green_scaled
+        self._ow.retour_2.setPixmap(im.scaled(371, 271, Qt.KeepAspectRatio))
+        if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
+            self.open_shutter()
+            self._optogenetic_logic.image_display(im, self._iw)
+
+        else:
+            im_off = self.map_off_scaled
+            t_ON_pulse = self._ow.doubleSpinBox_opto_pulse_ON.value()
+            t_OFF_pulse = self._ow.doubleSpinBox_opto_pulse_OFF.value()
+            t_opto = self._ow.doubleSpinBox_opto_stimulation.value()
+            self.open_shutter()
             self.opto(t_ON_pulse, t_OFF_pulse, t_opto, 0, 0, im_off, im)
 
     def opto(self, t_on, t_off, duration, n_step_on, n_step_off, im_off, im_on):
+        """ Launch an optogenetic excitation
+        @param t_on: (float) indicate how long a single excitation should stay ON (during a pulse)
+        @param t_off: (float) indicate how long a single excitation should stay OFF (during a pulse)
+        @param duration: (float) total duration of the optogenetic cycle
+        @param n_step_on: (int) number of ON_excitation pulse already sent
+        @param n_step_off: (int) number of OFF_excitation pulse already sent
+        @param im_off: (Qimage) image associated to the OFF state
+        @param im_on: (Qimage) image associated to the ON state
+        """
         dt = t_on * n_step_on + t_off * n_step_off
         if dt < duration:
             if n_step_on > n_step_off:
                 # self._ow.retour_2.setPixmap(im_off)
-                self._optogenetic_logic.image_display(self.map_off_scaled, self._iw)
+                self._optogenetic_logic.image_display(im_off, self._iw)
                 worker = OptoWorker(t_on, t_off, duration, n_step_on, n_step_off + 1, im_off, im_on)
             else:
                 # self._ow.retour_2.setPixmap(im_on)
-                self._optogenetic_logic.image_display(self.map_red_scaled, self._iw)
+                self._optogenetic_logic.image_display(im_on, self._iw)
                 worker = OptoWorker(t_on, t_off, duration, n_step_on + 1, n_step_off, im_off, im_on)
 
             worker.signals.sigOptoStepFinished.connect(self.opto)
             self.threadpool.start(worker)
 
-    def quart2display(self):
-        """
-        Display the 'quart2' image and update the optogenetic logic.
-        """
-        im = self.quart2map.scaled(371, 271, Qt.KeepAspectRatio)
-        self._ow.retour_2.setPixmap(im)
-        if self._ow.doubleSpinBox.value() == 0:
-            self._optogenetic_logic.image_display(self.quart2mapscaled, self._iw)
-
         else:
-            self._optogenetic_logic.image_display(self.quart2mapscaled, self._iw)
-            QTimer.singleShot(self._ow.doubleSpinBox.value() * 60 * 1000, self.map_off_display)
+            self.close_shutter()
 
-    def on_toggle(self, checked):
-        """
-        Check the state of the push Button
-        @param checked : the state of the button
-        """
-        if checked:
-            self.on_pressed()
-        else:
-            self.on_released()
+    # ======================================================================================================================
+    # Specific methods handling the shutter
+    # ======================================================================================================================
 
-    def on_pressed(self):
+    def change_shutter(self):
+        """ Handle signal from the shutter_toolButton. Note that the state of the shutter is then changed in the logic
         """
-        Open the projector
-        """
-        self.forward()
+        self.shutter_state = self._optogenetic_logic.send_trigger_to_shutter()
 
-    def on_released(self):
+    def open_shutter(self):
+        """ Open the shutter
         """
-        Close the projector
-        """
-        self.backward()
+        if not self.shutter_state:
+            self.change_shutter()
 
-    def infinite_time(self, state):
-        """ """
-        if state == 2:  # Checked
-            self._ow.doubleSpinBox.setValue(0)
-            self._ow.doubleSpinBox.setDisabled(True)
-        else:  # Unchecked
-            self._ow.doubleSpinBox.setDisabled(False)
+    def close_shutter(self):
+        """ Close the shutter
+        """
+        if self.shutter_state:
+            self.change_shutter()
+
+    # def on_toggle(self, checked):
+    #     """
+    #     Check the state of the push Button
+    #     @param checked : the state of the button
+    #     """
+    #     if checked:
+    #         self.on_pressed()
+    #     else:
+    #         self.on_released()
+    #
+    # def on_pressed(self):
+    #     """
+    #     Open the projector
+    #     """
+    #     self.forward()
+    #
+    # def on_released(self):
+    #     """
+    #     Close the projector
+    #     """
+    #     self.backward()
+    #
+    # def infinite_time(self, state):
+    #     """ """
+    #     if state == 2:  # Checked
+    #         self._ow.doubleSpinBox.setValue(0)
+    #         self._ow.doubleSpinBox.setDisabled(True)
+    #     else:  # Unchecked
+    #         self._ow.doubleSpinBox.setDisabled(False)

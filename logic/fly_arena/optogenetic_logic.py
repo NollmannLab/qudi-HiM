@@ -36,15 +36,16 @@ from logic.generic_logic import GenericLogic
 
 class OptogeneticLogic(GenericLogic):
 
-    motor_FlyArena = Connector(interface='Base')  # no specific MFC interface required
+    # motor_FlyArena = Connector(interface='Base')  # no specific MFC interface required
+    arduino_uno = Connector(interface='Base')  # no specific arduino interface required
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
-        self._motor_control = None
+        self._shutter_ard = None
+        self.shutter_state: bool = False
 
     def on_activate(self):
-
-        self._motor_control = self.motor_FlyArena()
+        self._shutter_ard = self.arduino_uno()
 
     def on_deactivate(self):
         """
@@ -52,6 +53,9 @@ class OptogeneticLogic(GenericLogic):
         """
         pass
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling image display
+# ----------------------------------------------------------------------------------------------------------------------
     @staticmethod
     def image_display(image, window):
         """
@@ -59,19 +63,26 @@ class OptogeneticLogic(GenericLogic):
         @param image: The QPixmap image to be displayed.
         @param window: The window object that contains the label where the image will be displayed.
         """
-
         window.label.setPixmap(image)
         window.label.setAlignment(Qt.AlignCenter)
 
-    def forward(self):
-        """
-        Turn the motor at 180° forward
-        """
-        self._motor_control.send_command("forward")
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling the shutter
+# ----------------------------------------------------------------------------------------------------------------------
+    def send_trigger_to_shutter(self):
+        self._shutter_ard.shutter()
+        self.shutter_state = not self.shutter_state
+        return self.shutter_state
 
-    def backward(self):
-        """
-        Turn the motor at 180° backward
-        """
-        self._motor_control.send_command("backward")
+    # def forward(self):
+    #     """
+    #     Turn the motor at 180° forward
+    #     """
+    #     self._motor_control.send_command("forward")
+    #
+    # def backward(self):
+    #     """
+    #     Turn the motor at 180° backward
+    #     """
+    #     self._motor_control.send_command("backward")
 
