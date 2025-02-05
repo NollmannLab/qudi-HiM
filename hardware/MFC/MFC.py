@@ -43,8 +43,8 @@ class MFC(Base):
     MFC_number = ConfigOption('MFC_number', missing="error")
     MFC_names = ConfigOption('MFC_names', missing="error")
     MFC_address = ConfigOption('Daisy_chain_ids', missing="error")
-    MFC_flow = ConfigOption('Default_flow', missing="error")
 
+    # MFC_flow = ConfigOption('Default_flow', missing="error")
     # _MFC_purge = ConfigOption('MFC_purge', missing="warning", default=0)
     # _MFC_1 = ConfigOption('MFC_1', missing="warning", default=0)
     # _MFC_2 = ConfigOption('MFC_2', missing="warning", default=0)
@@ -55,8 +55,7 @@ class MFC(Base):
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self._MFC_dic = {'MFC_names': self.MFC_names,
-                         'MFC_id': self.MFC_address,
-                         'MFC_flow': self.MFC_flow}
+                         'MFC_id': self.MFC_address}
 
     def on_activate(self):
         """ Test all MFCs are connected and available
