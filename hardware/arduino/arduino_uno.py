@@ -51,6 +51,10 @@ class ArduinoUno(Base):
     _mixing_valve_read = ConfigOption('mixing_valve_read', missing='error')
     _switch_valve_write = ConfigOption('switch_purge_arena_valve_write', missing='error')
     _switch_valve_read = ConfigOption('switch_purge_arena_valve_read', missing='error')
+    _3_way_valve_write = ConfigOption('3_way_valve_write', missing='error')
+    _3_way_valve_read = ConfigOption('3_way_valve_read', missing='error')
+    _switch_quadrant_valve_write = ConfigOption('switch_quadrant_valve_write', missing='error')
+    _switch_quadrant_valve_read = ConfigOption('switch_quadrant_valve_read', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -60,7 +64,9 @@ class ArduinoUno(Base):
                           "odor_3": [self._valve_odor_3_write, self._valve_odor_3_read],
                           "odor_4": [self._valve_odor_4_write, self._valve_odor_4_read],
                           "mixing": [self._mixing_valve_write, self._mixing_valve_read],
-                          "switch_purge_arena": [self._switch_valve_write, self._switch_valve_read]}
+                          "switch_purge_arena": [self._switch_valve_write, self._switch_valve_read],
+                          "3_way": [self._3_way_valve_write, self._3_way_valve_read],
+                          "switch_quadrants": [self._switch_quadrant_valve_write, self._switch_quadrant_valve_read]}
 
     def on_activate(self):
         """

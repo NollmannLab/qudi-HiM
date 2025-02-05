@@ -193,7 +193,7 @@ class OdorCircuitGUI(GUIBase):
         self._mw.centralwidget.show()
         self.init_menu()
         self.init_toolbar()
-        self.init_flowcontrol_dockwidget()
+        self.init_flowcontrol_main_window()
         self.init_MFC_calibration_window()
         self.init_admin_dockwidget()
         self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
@@ -273,28 +273,26 @@ class OdorCircuitGUI(GUIBase):
         # Connect signals from logic
         self._odor_circuit_arduino_logic.sigChangeValveState.connect(self.update_valves_status)
 
-    def init_flowcontrol_dockwidget(self):
+    def init_flowcontrol_main_window(self):
         """Initialize the flowcontrol dockwidget, setting up plots, labels, and signal-slot connections.
         """
-        # Initialize pushbutton
-        # self._mw.stoplaunch.setDisabled(True)
-
-        # Connect signals to methods
+        # Connect signals from pushButtons to methods
         self._mw.comboBox_quadrants_config.activated[str].connect(self.update_arena_config)
         self._mw.doubleSpinBox_quadrant_flow.valueChanged.connect(self.update_arena_config)
-        # self._mw.stoplaunch.clicked.connect(self.stop_Launch)
         self._mw.Prepare_odor_pushButton.clicked.connect(self.prepare_odor_clicked)
         self._mw.Prepare_odor_pushButton.clicked.connect(self.start_prep_timer)
         self._mw.Inject_odor_pushButton.clicked.connect(self.inject_odor_clicked)
         self._mw.Inject_odor_pushButton.clicked.connect(self.start_inject_timer)
         self._mw.Stop_odor_pushButton.clicked.connect(self.stop_odor_clicked)
+        self._mw.Switch_quadrant_pushButton.clicked.connect(self.switch_quandrant_clicked)
 
+        # Connect signals from checkBox to methods
         self._mw.odor1_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(1, checked))
         self._mw.odor2_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(2, checked))
         self._mw.odor3_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(3, checked))
         self._mw.odor4_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(4, checked))
 
-        # initialize pushbuttons for odor
+        # initialize pushButtons for odor
         self.disable_enable_odor_pushbuttons()
 
         # Configure plot widget and define plot colors and labels
@@ -358,11 +356,11 @@ class OdorCircuitGUI(GUIBase):
 
         elif index == 1:
             mfc_flow = [flow, flow, 2 * flow, 2 * flow]
-            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow)
+            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow, config=1)
             self.disable_enable_odor_pushbuttons(prep=False)
         else:
             mfc_flow = [2 * flow, 2 * flow, 4 * flow, 0]
-            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow)
+            self._odor_circuit_arduino_logic.start_air_flow(mfc_flow, config=2)
             self.disable_enable_odor_pushbuttons(prep=False)
 
         # update the set-points for all MFCs
@@ -451,7 +449,7 @@ class OdorCircuitGUI(GUIBase):
     def stop_odor_clicked(self):
         """ Stop any preparation or injection of odor
         """
-        # enable pushbutton for prep and disbale the others
+        # enable pushbutton for prep and disable the others
         self.disable_enable_odor_pushbuttons(prep=False, inject=True, stop=True)
 
         # release the prepare odor pushButton
@@ -466,6 +464,13 @@ class OdorCircuitGUI(GUIBase):
 
         # send to logic
         self._odor_circuit_arduino_logic.stop_odor(self.selected_odor)
+
+    def switch_quadrant_clicked(self):
+        """ Change the quadrants' configuration. By default, quadrants 1/3 are connected to the odor circuit and
+        quadrants 2/4 to the MFC4 & 3-way valve. When the valve is activated, the quadrants 1/3 and 2/4 are inverted.
+        """
+        state = self._mw.Switch_quadrant_pushButton.isChecked()
+        self._odor_circuit_arduino_logic.switch_quadrants(state)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the timers

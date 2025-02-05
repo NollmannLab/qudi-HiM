@@ -157,10 +157,12 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.turn_all_MFC_off()
         self.close_odor_circuit()
 
-    def start_air_flow(self, flow_set_points):
+    def start_air_flow(self, flow_set_points, config=1):
         """ Set the flow rate for all MFCs - this function is called from the GUI when selecting a configuration from
         the comboBox.
         @param: flow_set_points (list): indicate the flow set_points for all MFCs
+        @param: config (int) : indicate the arena configuration: 1 = 2 quadrants (1/3 and 2/4 are handled separately) -
+        2 = 4 quadrants (all quadrants are identical)
         @return:
         """
         # check odor valves state - return True if at least one couple of inlet / outlet valves for the odors is OPEN
@@ -168,6 +170,14 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
         # check mixing valve state - return True if the mixing valve is OPEN
         is_mixing = self._ard.check_valve_state("mixing")
+
+        # depending on the selected config, change the state of the 3way-valve
+        if config == 1:
+            self.change_valve_state("3_way", 0)
+        elif config == 2:
+            self.change_valve_state("3_way", 1)
+        else:
+            self.log.error("The indicated config does not exist (in logic - function start_air_flow")
 
         # if no odor are being prepared or injected, make sure the mixing valve is open (else, an error will occur for
         # the MFCs since it will be impossible to reach the set-point)
@@ -240,6 +250,12 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.change_valve_state("mixing", 1)
         self.change_valve_state(f"odor_{odor_number}", 0)
         self.change_valve_state("switch_purge_arena", 0)
+
+    def switch_quadrants(self, state):
+        """ Control the valve allowing switching between quadrants
+        @param state: (bool) indicate the state of the switch valve
+        """
+        self.change_valve_state("switch_quadrants", state)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Helper methods handling MFCs

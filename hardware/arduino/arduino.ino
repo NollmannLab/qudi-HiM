@@ -15,10 +15,16 @@ void setup() {
   // Define the baud rate for the serial communication
   Serial.begin(9600);
 
-  // Set pins 2 to 13 as output - meaning they will sent digital signal to another device (for example the opto-coupler)
-  // Initialize pins as OUTPUT
-    for (int i = 2; i <= 13; i++) {
+  // Set pins 2 to 10 as output - meaning they will sent digital signal to another device (for example the opto-coupler)
+    for (int i = 2; i <= 10; i++) {
         pinMode(i, OUTPUT);
+        digitalWrite(i, LOW);  // Set all to LOW initially
+    }
+
+  // Set pins 11 to 13 as input - meaning they will read digital signal from another device (for example from another
+  // channel of Arduino)
+    for (int i = 11; i <= 13; i++) {
+        pinMode(i, INPUT);
         digitalWrite(i, LOW);  // Set all to LOW initially
     }
 }
@@ -29,14 +35,15 @@ void loop() {
     String command = Serial.readStringUntil('\n');
     char firstChar = command.charAt(0);
 
-    // If command starts with a digit, the command will control a digital pin = change pin status
+    // If command starts with a digit, the command will either control a digital pin if values are between 2 & 10
+    // (change pin status) or read a digital pin if values are between 11 & 13
     if (isDigit(firstChar)) {
       String pinStr = command.substring(0, command.length() - 1);
       char state = command.charAt(command.length() - 1);
       int pin = pinStr.toInt();
 
       // If input pin is valid, switch its state according to the indicated value from input command
-      if (pin >= 2 && pin <= 13) {
+      if (pin >= 2 && pin <= 10) {
           if (state == '1') {
             digitalWrite(pin, HIGH);
             Serial.println("pin" + String(pin) + " ON");
@@ -44,6 +51,12 @@ void loop() {
             digitalWrite(pin, LOW);
             Serial.println("pin" + String(pin) + " OFF");
           }
+      }
+
+      // If input pin is valid, switch its state according to the indicated value from input command
+      if (pin >= 11 && pin <= 13) {
+        int digitalValue = digitalRead(pin);
+        Serial.println(String(digitalValue));
       }
     }
       // If command starts with a 'A', the command will control an analog input pin = read pin status

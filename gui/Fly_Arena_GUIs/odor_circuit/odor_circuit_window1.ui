@@ -24,12 +24,37 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>140</y>
+      <y>150</y>
       <width>221</width>
-      <height>80</height>
+      <height>89</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="gridLayout_3">
+     <item row="3" column="0" colspan="2" alignment="Qt::AlignHCenter">
+      <widget class="QToolButton" name="Switch_quadrant_pushButton">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Maximum" vsizetype="Maximum">
+         <horstretch>1</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="text">
+        <string>Switch quadrants</string>
+       </property>
+       <property name="iconSize">
+        <size>
+         <width>20</width>
+         <height>20</height>
+        </size>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
      <item row="0" column="1">
       <widget class="QDoubleSpinBox" name="doubleSpinBox_quadrant_flow">
        <property name="minimum">
@@ -43,13 +68,6 @@
        </property>
        <property name="value">
         <double>0.100000000000000</double>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_8">
-       <property name="text">
-        <string>flow (sL/min) in quadrant</string>
        </property>
       </widget>
      </item>
@@ -72,172 +90,40 @@
        </item>
       </widget>
      </item>
+     <item row="0" column="0">
+      <widget class="QLabel" name="label_8">
+       <property name="text">
+        <string>flow (sL/min) in quadrant</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="0">
+      <spacer name="verticalSpacer">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>40</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item row="2" column="1">
+      <spacer name="verticalSpacer_2">
+       <property name="orientation">
+        <enum>Qt::Vertical</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>20</width>
+         <height>40</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
     </layout>
-   </widget>
-   <widget class="QDockWidget" name="admin_dockWidget">
-    <property name="enabled">
-     <bool>true</bool>
-    </property>
-    <property name="geometry">
-     <rect>
-      <x>860</x>
-      <y>-30</y>
-      <width>351</width>
-      <height>421</height>
-     </rect>
-    </property>
-    <property name="minimumSize">
-     <size>
-      <width>351</width>
-      <height>421</height>
-     </size>
-    </property>
-    <widget class="QWidget" name="dockWidgetContents_7">
-     <widget class="QTextEdit" name="textEdit_7">
-      <property name="geometry">
-       <rect>
-        <x>53</x>
-        <y>10</y>
-        <width>250</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="html">
-       <string>&lt;!DOCTYPE HTML PUBLIC &quot;-//W3C//DTD HTML 4.0//EN&quot; &quot;http://www.w3.org/TR/REC-html40/strict.dtd&quot;&gt;
-&lt;html&gt;&lt;head&gt;&lt;meta name=&quot;qrichtext&quot; content=&quot;1&quot; /&gt;&lt;style type=&quot;text/css&quot;&gt;
-p, li { white-space: pre-wrap; }
-&lt;/style&gt;&lt;/head&gt;&lt;body style=&quot; font-family:'MS Shell Dlg 2'; font-size:8.25pt; font-weight:400; font-style:normal;&quot;&gt;
-&lt;p align=&quot;center&quot; style=&quot; margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;&quot;&gt;&lt;span style=&quot; font-size:12pt; text-decoration: underline;&quot;&gt;Valves Configuration :&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC1">
-      <property name="geometry">
-       <rect>
-        <x>180</x>
-        <y>180</y>
-        <width>47</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>5.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.010000000000000</double>
-      </property>
-      <property name="value">
-       <double>0.500000000000000</double>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC2">
-      <property name="geometry">
-       <rect>
-        <x>230</x>
-        <y>180</y>
-        <width>47</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>5.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="value">
-       <double>0.250000000000000</double>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC3_purge">
-      <property name="geometry">
-       <rect>
-        <x>183</x>
-        <y>214</y>
-        <width>47</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>5.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="value">
-       <double>0.250000000000000</double>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC4">
-      <property name="geometry">
-       <rect>
-        <x>243</x>
-        <y>214</y>
-        <width>47</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="minimum">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="maximum">
-       <double>5.000000000000000</double>
-      </property>
-      <property name="singleStep">
-       <double>0.000000000000000</double>
-      </property>
-      <property name="value">
-       <double>0.500000000000000</double>
-      </property>
-     </widget>
-     <widget class="QLabel" name="label_6">
-      <property name="geometry">
-       <rect>
-        <x>170</x>
-        <y>230</y>
-        <width>141</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>min before wipping</string>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="doubleSpinBox_odor_prep_duration">
-      <property name="geometry">
-       <rect>
-        <x>210</x>
-        <y>260</y>
-        <width>62</width>
-        <height>22</height>
-       </rect>
-      </property>
-     </widget>
-     <widget class="QDoubleSpinBox" name="Aodor">
-      <property name="geometry">
-       <rect>
-        <x>210</x>
-        <y>290</y>
-        <width>62</width>
-        <height>22</height>
-       </rect>
-      </property>
-     </widget>
-    </widget>
    </widget>
    <widget class="QWidget" name="gridLayoutWidget_5">
     <property name="geometry">
@@ -245,7 +131,7 @@ p, li { white-space: pre-wrap; }
       <x>10</x>
       <y>10</y>
       <width>219</width>
-      <height>119</height>
+      <height>133</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="gridLayout_5">
@@ -348,10 +234,10 @@ p, li { white-space: pre-wrap; }
    <widget class="QWidget" name="verticalLayoutWidget">
     <property name="geometry">
      <rect>
-      <x>720</x>
-      <y>80</y>
-      <width>250</width>
-      <height>140</height>
+      <x>700</x>
+      <y>10</y>
+      <width>311</width>
+      <height>168</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
@@ -389,6 +275,26 @@ p, li { white-space: pre-wrap; }
      </item>
      <item>
       <layout class="QGridLayout" name="gridLayout_6">
+       <item row="0" column="0">
+        <widget class="QToolButton" name="Prepare_odor_pushButton">
+         <property name="text">
+          <string>Prepare odor</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+         <property name="checked">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QLabel" name="label_23">
+         <property name="text">
+          <string>injection time</string>
+         </property>
+        </widget>
+       </item>
        <item row="2" column="0" colspan="3" alignment="Qt::AlignHCenter">
         <widget class="QToolButton" name="Stop_odor_pushButton">
          <property name="sizePolicy">
@@ -408,37 +314,10 @@ p, li { white-space: pre-wrap; }
          </property>
         </widget>
        </item>
-       <item row="0" column="0">
-        <widget class="QToolButton" name="Prepare_odor_pushButton">
-         <property name="text">
-          <string>Prepare odor</string>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-         <property name="checked">
-          <bool>false</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="1">
-        <widget class="QLineEdit" name="inject_timer_display">
-         <property name="readOnly">
-          <bool>true</bool>
-         </property>
-        </widget>
-       </item>
        <item row="0" column="1">
         <widget class="QLineEdit" name="prep_timer_display">
          <property name="readOnly">
           <bool>true</bool>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="2">
-        <widget class="QLabel" name="label_23">
-         <property name="text">
-          <string>injection time</string>
          </property>
         </widget>
        </item>
@@ -452,6 +331,13 @@ p, li { white-space: pre-wrap; }
          </property>
          <property name="checked">
           <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="inject_timer_display">
+         <property name="readOnly">
+          <bool>true</bool>
          </property>
         </widget>
        </item>
@@ -469,7 +355,7 @@ p, li { white-space: pre-wrap; }
    <widget class="QDockWidget" name="Arena_circuit_dockWidget">
     <property name="geometry">
      <rect>
-      <x>10</x>
+      <x>0</x>
       <y>370</y>
       <width>1191</width>
       <height>591</height>
@@ -641,7 +527,7 @@ p, li { white-space: pre-wrap; }
      <widget class="QLabel" name="label_circuit_scheme">
       <property name="geometry">
        <rect>
-        <x>10</x>
+        <x>20</x>
         <y>0</y>
         <width>1021</width>
         <height>551</height>
@@ -657,6 +543,154 @@ p, li { white-space: pre-wrap; }
        <string/>
       </property>
      </widget>
+     <widget class="QDockWidget" name="admin_dockWidget">
+      <property name="enabled">
+       <bool>true</bool>
+      </property>
+      <property name="geometry">
+       <rect>
+        <x>1010</x>
+        <y>10</y>
+        <width>351</width>
+        <height>421</height>
+       </rect>
+      </property>
+      <property name="minimumSize">
+       <size>
+        <width>351</width>
+        <height>421</height>
+       </size>
+      </property>
+      <widget class="QWidget" name="dockWidgetContents_7">
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC1">
+        <property name="geometry">
+         <rect>
+          <x>127</x>
+          <y>56</y>
+          <width>47</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>5.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.010000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.500000000000000</double>
+        </property>
+       </widget>
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC2">
+        <property name="geometry">
+         <rect>
+          <x>177</x>
+          <y>56</y>
+          <width>47</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>5.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.250000000000000</double>
+        </property>
+       </widget>
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC3_purge">
+        <property name="geometry">
+         <rect>
+          <x>130</x>
+          <y>90</y>
+          <width>47</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>5.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.250000000000000</double>
+        </property>
+       </widget>
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC4">
+        <property name="geometry">
+         <rect>
+          <x>190</x>
+          <y>90</y>
+          <width>47</width>
+          <height>20</height>
+         </rect>
+        </property>
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="minimum">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="maximum">
+         <double>5.000000000000000</double>
+        </property>
+        <property name="singleStep">
+         <double>0.000000000000000</double>
+        </property>
+        <property name="value">
+         <double>0.500000000000000</double>
+        </property>
+       </widget>
+       <widget class="QLabel" name="label_6">
+        <property name="geometry">
+         <rect>
+          <x>117</x>
+          <y>106</y>
+          <width>141</width>
+          <height>31</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>min before wipping</string>
+        </property>
+       </widget>
+       <widget class="QDoubleSpinBox" name="doubleSpinBox_odor_prep_duration">
+        <property name="geometry">
+         <rect>
+          <x>157</x>
+          <y>136</y>
+          <width>62</width>
+          <height>22</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QDoubleSpinBox" name="Aodor">
+        <property name="geometry">
+         <rect>
+          <x>157</x>
+          <y>166</y>
+          <width>62</width>
+          <height>22</height>
+         </rect>
+        </property>
+       </widget>
+      </widget>
+     </widget>
      <zorder>label_circuit_scheme</zorder>
      <zorder>label_M_2</zorder>
      <zorder>label_4out_2</zorder>
@@ -670,6 +704,7 @@ p, li { white-space: pre-wrap; }
      <zorder>label_2out_2</zorder>
      <zorder>label_MFC2_2</zorder>
      <zorder>label_3in_2</zorder>
+     <zorder>admin_dockWidget</zorder>
     </widget>
    </widget>
    <widget class="PlotWidget" name="flowrate_PlotWidget_1">
@@ -685,17 +720,26 @@ p, li { white-space: pre-wrap; }
    <widget class="QWidget" name="gridLayoutWidget">
     <property name="geometry">
      <rect>
-      <x>720</x>
-      <y>260</y>
-      <width>256</width>
-      <height>101</height>
+      <x>700</x>
+      <y>250</y>
+      <width>308</width>
+      <height>111</height>
      </rect>
     </property>
     <layout class="QGridLayout" name="gridLayout">
-     <item row="2" column="0" colspan="4" alignment="Qt::AlignHCenter">
-      <widget class="QCheckBox" name="valve_switch_purge_arena_checkBox">
+     <item row="3" column="2" colspan="2" alignment="Qt::AlignHCenter">
+      <widget class="QCheckBox" name="checkBox_M_3">
+       <property name="enabled">
+        <bool>true</bool>
+       </property>
+       <property name="layoutDirection">
+        <enum>Qt::LeftToRight</enum>
+       </property>
        <property name="text">
-        <string>Valve switch purge /arena</string>
+        <string>3-way valve MFC4</string>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
        </property>
       </widget>
      </item>
@@ -709,13 +753,10 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="0" column="1">
-      <widget class="QCheckBox" name="valve_odor_2_checkBox">
-       <property name="enabled">
-        <bool>true</bool>
-       </property>
+     <item row="3" column="0" colspan="2" alignment="Qt::AlignHCenter">
+      <widget class="QCheckBox" name="checkBox_F_3">
        <property name="text">
-        <string>odor 2</string>
+        <string>Valve switch quadrants</string>
        </property>
       </widget>
      </item>
@@ -735,13 +776,6 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="3" column="0" colspan="2" alignment="Qt::AlignHCenter">
-      <widget class="QCheckBox" name="checkBox_F_3">
-       <property name="text">
-        <string>Valve switch quadrants</string>
-       </property>
-      </widget>
-     </item>
      <item row="0" column="2">
       <widget class="QCheckBox" name="valve_odor_3_checkBox">
        <property name="enabled">
@@ -752,19 +786,20 @@ p, li { white-space: pre-wrap; }
        </property>
       </widget>
      </item>
-     <item row="3" column="2" colspan="2" alignment="Qt::AlignHCenter">
-      <widget class="QCheckBox" name="checkBox_M_3">
+     <item row="2" column="0" colspan="4" alignment="Qt::AlignHCenter">
+      <widget class="QCheckBox" name="valve_switch_purge_arena_checkBox">
+       <property name="text">
+        <string>Valve switch purge /arena</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QCheckBox" name="valve_odor_2_checkBox">
        <property name="enabled">
         <bool>true</bool>
        </property>
-       <property name="layoutDirection">
-        <enum>Qt::LeftToRight</enum>
-       </property>
        <property name="text">
-        <string>3-way valve MFC4</string>
-       </property>
-       <property name="checked">
-        <bool>false</bool>
+        <string>odor 2</string>
        </property>
       </widget>
      </item>
@@ -784,7 +819,7 @@ p, li { white-space: pre-wrap; }
      <x>0</x>
      <y>0</y>
      <width>1270</width>
-     <height>21</height>
+     <height>20</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuMenu">
