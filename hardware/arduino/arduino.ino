@@ -35,8 +35,7 @@ void loop() {
     String command = Serial.readStringUntil('\n');
     char firstChar = command.charAt(0);
 
-    // If command starts with a digit, the command will either control a digital pin if values are between 2 & 10
-    // (change pin status) or read a digital pin if values are between 11 & 13
+    // If command starts with a digit, the command will change the state of a digital pin
     if (isDigit(firstChar)) {
       String pinStr = command.substring(0, command.length() - 1);
       char state = command.charAt(command.length() - 1);
@@ -52,14 +51,8 @@ void loop() {
             Serial.println("pin" + String(pin) + " OFF");
           }
       }
-
-      // If input pin is valid, switch its state according to the indicated value from input command
-      if (pin >= 11 && pin <= 13) {
-        int digitalValue = digitalRead(pin);
-        Serial.println(String(digitalValue));
-      }
     }
-      // If command starts with a 'A', the command will control an analog input pin = read pin status
+    // If command starts with a 'A', the command will control an analog input pin = read pin status
     else if (firstChar == 'A') {
         int analogPin = command.substring(1).toInt();
         if (analogPin >= 0 && analogPin <= 5) {
@@ -70,6 +63,18 @@ void loop() {
             Serial.println("Invalid analog pin");
         }
     }
+    // If command starts with a 'D', the command will control a digital input pin = read pin status
+    else if (firstChar == 'D') {
+        int digitalPin = command.substring(1).toInt();
+        if (digitalPin >= 11 && digitalPin <= 13) {
+            int digitalValue = digitalRead(digitalPin);
+            Serial.println(String(digitalValue));
+        }
+        else {
+            Serial.println("Invalid digital pin");
+        }
+    }
+
     else {
         Serial.println("Unknown command format");
     }

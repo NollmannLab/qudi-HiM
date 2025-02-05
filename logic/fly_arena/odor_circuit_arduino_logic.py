@@ -135,9 +135,9 @@ class OdorCircuitArduinoLogic(GenericLogic):
                               'odor_3': 0,
                               'odor_4': 0,
                               'mixing': 0,
-                              'switch_purge_arena': 0}
-
-        # initialize connection to GUI
+                              'switch_purge_arena': 0,
+                              "3_way": 0,
+                              "switch_quadrants": 0}
 
     def on_deactivate(self):
         """
@@ -253,7 +253,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
     def switch_quadrants(self, state):
         """ Control the valve allowing switching between quadrants
-        @param state: (bool) indicate the state of the switch valve
+        @param state: (int) indicate the state of the switch valve
         """
         self.change_valve_state("switch_quadrants", state)
 

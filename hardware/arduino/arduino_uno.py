@@ -29,10 +29,10 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 
-import time
 import serial
 from core.configoption import ConfigOption
 from core.module import Base
+from time import time, sleep
 
 
 class ArduinoUno(Base):
@@ -55,6 +55,8 @@ class ArduinoUno(Base):
     _3_way_valve_read = ConfigOption('3_way_valve_read', missing='error')
     _switch_quadrant_valve_write = ConfigOption('switch_quadrant_valve_write', missing='error')
     _switch_quadrant_valve_read = ConfigOption('switch_quadrant_valve_read', missing='error')
+    _shutter_write = ConfigOption('shutter_write', missing='error')
+    _shutter_read = ConfigOption('shutter_read', missing='error')
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -100,7 +102,7 @@ class ArduinoUno(Base):
             # Create the command string
             command = f"{pin}{state}\n"
             self.arduino.write(command.encode())
-            time.sleep(0.1)
+            sleep(0.1)
 
             # Read and print all available responses from the Arduino
             response = self.arduino.readline().decode().strip()
@@ -109,11 +111,11 @@ class ArduinoUno(Base):
             print(f"Error reading pin {pin}: {e}")
             return None
 
-    def read_analog_pin(self, pin):
+    def read_digital_analog_pin(self, pin):
         """
         Read the status of the pin
         @param pin: (str) address of the analog pin to read - for example A0
-        @return: pin_value (int) value of the selected pin
+        @return: response (int) value of the selected pin
         """
         if not self.arduino.is_open:
             self.log.error("Serial connection for the Arduino is lost!")
@@ -122,12 +124,10 @@ class ArduinoUno(Base):
         try:
             command = f"{pin}\n"
             self.arduino.write(command.encode())
-            time.sleep(0.1)
+            sleep(0.1)
             response = self.arduino.readline().decode().strip()
-            print(response)
-
             if response.isdigit():  # Ensure response is valid
-                return int(response)
+                return response
             else:
                 print(f"Invalid response from Arduino: {response}")
                 return None
@@ -158,11 +158,26 @@ class ArduinoUno(Base):
         @return: (bool) True if the valves for the selected odor are open - else False
         """
         if code in self.valve_pin.keys():
-            read_valve = self.read_analog_pin(self.valve_pin[code][1])
-            if read_valve > 500:
-                return True
+            read_valve = self.read_digital_analog_pin(self.valve_pin[code][1])
+            print("&&&&&&")
+            print(read_valve, type(read_valve))
+            print(self.valve_pin[code][1][0])
+            print("&&&&&&")
+
+            if self.valve_pin[code][1][0] == "A":
+                if int(read_valve) > 500:
+                    return True
+                else:
+                    return False
+
+            elif self.valve_pin[code][1][0] == "D":
+                if int(read_valve) == 1:
+                    return True
+                else:
+                    return False
             else:
-                return False
+                self.log.error(f"The format of the pin {self.valve_pin[code][1][0]} is not conform!")
+
         else:
             self.log.error(f"The code {code} indicated does not correspond to any valve")
             return False
@@ -173,6 +188,7 @@ class ArduinoUno(Base):
         @param state: (bool) indicate True to open the valve, False to close it
         @return: (bool) True if an error is encountered
         """
+        print(f"{code} and {state}")
         if code in self.valve_pin.keys():
             # open / close the valve
             if state:
@@ -182,6 +198,10 @@ class ArduinoUno(Base):
 
             # read the mixing valve pin and check the status corresponds to the input value
             read_state = self.check_valve_state(code)
+            print("+++++++")
+            print(read_state)
+            print(state)
+            print("+++++++")
             if read_state == state:
                 return False
             else:
@@ -190,3 +210,10 @@ class ArduinoUno(Base):
         else:
             self.log.error(f"The code {code} indicated does not correspond to any valve")
             return True
+
+    def shutter(self):
+        """ Open/close the shutter
+        """
+        self.pin_on(self._shutter_write)
+        sleep(0.5)
+        self.pin_off(self._shutter_write)
