@@ -84,7 +84,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
     sigUpdateFlowMeasurement = QtCore.Signal(list)
     sigDisableFlowActions = QtCore.Signal()
     sigEnableFlowActions = QtCore.Signal()
-    sigChangeValveState = QtCore.Signal(dict)
+    sigUpdateValveState = QtCore.Signal(dict)
 
     # attributes
     measuring_flowrate = False
@@ -265,7 +265,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         for mfc in range(self.MFC_number):
             self._MFC.MFC_OFF(mfc)
-            time.sleep(0.3)
+            time.sleep(0.1)
 
     def read_average_flow(self):
         """ Read the average flow-rate for each MFC - note that the measurements are performed according to the order of
@@ -288,6 +288,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
             self.change_valve_state(f"odor_{odor + 1}", 0)
 
         self.change_valve_state("switch_purge_arena", 0)
+        self.change_valve_state("3_way", 0)
 
     def check_odor_valves(self):
         """ Check if at least one pair of odor valves is OPEN
@@ -302,12 +303,12 @@ class OdorCircuitArduinoLogic(GenericLogic):
     def change_valve_state(self, code, state):
         """ Send signal to GUI to update valve state
         @param code: (str) indicate the name of the selected valve in the dictionary
-        @param state: (bool) indicate True to open the valve, False to close it
+        @param state: (int) indicate 1 to open the valve, 0 to close it
         """
         err = self._ard.change_valve_state(code, state)
         if not err:
             self.valves_status[code] = state
-            self.sigChangeValveState.emit(self.valves_status)
+            self.sigUpdateValveState.emit(self.valves_status)
 
 
 

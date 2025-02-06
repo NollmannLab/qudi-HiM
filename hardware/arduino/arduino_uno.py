@@ -159,10 +159,6 @@ class ArduinoUno(Base):
         """
         if code in self.valve_pin.keys():
             read_valve = self.read_digital_analog_pin(self.valve_pin[code][1])
-            print("&&&&&&")
-            print(read_valve, type(read_valve))
-            print(self.valve_pin[code][1][0])
-            print("&&&&&&")
 
             if self.valve_pin[code][1][0] == "A":
                 if int(read_valve) > 500:
@@ -198,10 +194,6 @@ class ArduinoUno(Base):
 
             # read the mixing valve pin and check the status corresponds to the input value
             read_state = self.check_valve_state(code)
-            print("+++++++")
-            print(read_state)
-            print(state)
-            print("+++++++")
             if read_state == state:
                 return False
             else:
