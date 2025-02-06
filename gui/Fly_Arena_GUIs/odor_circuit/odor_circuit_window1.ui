@@ -543,154 +543,6 @@
        <string/>
       </property>
      </widget>
-     <widget class="QDockWidget" name="admin_dockWidget">
-      <property name="enabled">
-       <bool>true</bool>
-      </property>
-      <property name="geometry">
-       <rect>
-        <x>1010</x>
-        <y>10</y>
-        <width>351</width>
-        <height>421</height>
-       </rect>
-      </property>
-      <property name="minimumSize">
-       <size>
-        <width>351</width>
-        <height>421</height>
-       </size>
-      </property>
-      <widget class="QWidget" name="dockWidgetContents_7">
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC1">
-        <property name="geometry">
-         <rect>
-          <x>127</x>
-          <y>56</y>
-          <width>47</width>
-          <height>20</height>
-         </rect>
-        </property>
-        <property name="minimum">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>5.000000000000000</double>
-        </property>
-        <property name="singleStep">
-         <double>0.010000000000000</double>
-        </property>
-        <property name="value">
-         <double>0.500000000000000</double>
-        </property>
-       </widget>
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC2">
-        <property name="geometry">
-         <rect>
-          <x>177</x>
-          <y>56</y>
-          <width>47</width>
-          <height>20</height>
-         </rect>
-        </property>
-        <property name="minimum">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>5.000000000000000</double>
-        </property>
-        <property name="singleStep">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="value">
-         <double>0.250000000000000</double>
-        </property>
-       </widget>
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC3_purge">
-        <property name="geometry">
-         <rect>
-          <x>130</x>
-          <y>90</y>
-          <width>47</width>
-          <height>20</height>
-         </rect>
-        </property>
-        <property name="minimum">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>5.000000000000000</double>
-        </property>
-        <property name="singleStep">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="value">
-         <double>0.250000000000000</double>
-        </property>
-       </widget>
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC4">
-        <property name="geometry">
-         <rect>
-          <x>190</x>
-          <y>90</y>
-          <width>47</width>
-          <height>20</height>
-         </rect>
-        </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimum">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="maximum">
-         <double>5.000000000000000</double>
-        </property>
-        <property name="singleStep">
-         <double>0.000000000000000</double>
-        </property>
-        <property name="value">
-         <double>0.500000000000000</double>
-        </property>
-       </widget>
-       <widget class="QLabel" name="label_6">
-        <property name="geometry">
-         <rect>
-          <x>117</x>
-          <y>106</y>
-          <width>141</width>
-          <height>31</height>
-         </rect>
-        </property>
-        <property name="text">
-         <string>min before wipping</string>
-        </property>
-       </widget>
-       <widget class="QDoubleSpinBox" name="doubleSpinBox_odor_prep_duration">
-        <property name="geometry">
-         <rect>
-          <x>157</x>
-          <y>136</y>
-          <width>62</width>
-          <height>22</height>
-         </rect>
-        </property>
-       </widget>
-       <widget class="QDoubleSpinBox" name="Aodor">
-        <property name="geometry">
-         <rect>
-          <x>157</x>
-          <y>166</y>
-          <width>62</width>
-          <height>22</height>
-         </rect>
-        </property>
-       </widget>
-      </widget>
-     </widget>
      <zorder>label_circuit_scheme</zorder>
      <zorder>label_M_2</zorder>
      <zorder>label_4out_2</zorder>
@@ -704,7 +556,6 @@
      <zorder>label_2out_2</zorder>
      <zorder>label_MFC2_2</zorder>
      <zorder>label_3in_2</zorder>
-     <zorder>admin_dockWidget</zorder>
     </widget>
    </widget>
    <widget class="PlotWidget" name="flowrate_PlotWidget_1">
@@ -812,6 +663,213 @@
      </item>
     </layout>
    </widget>
+   <widget class="QDockWidget" name="admin_dockWidget">
+    <property name="enabled">
+     <bool>true</bool>
+    </property>
+    <property name="geometry">
+     <rect>
+      <x>1040</x>
+      <y>10</y>
+      <width>200</width>
+      <height>300</height>
+     </rect>
+    </property>
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="minimumSize">
+     <size>
+      <width>200</width>
+      <height>300</height>
+     </size>
+    </property>
+    <widget class="QWidget" name="dockWidgetContents_7">
+     <widget class="QLabel" name="label_6">
+      <property name="geometry">
+       <rect>
+        <x>40</x>
+        <y>140</y>
+        <width>141</width>
+        <height>31</height>
+       </rect>
+      </property>
+      <property name="text">
+       <string>min before wipping</string>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="doubleSpinBox_odor_prep_duration">
+      <property name="geometry">
+       <rect>
+        <x>70</x>
+        <y>180</y>
+        <width>62</width>
+        <height>22</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QDoubleSpinBox" name="Aodor">
+      <property name="geometry">
+       <rect>
+        <x>70</x>
+        <y>220</y>
+        <width>62</width>
+        <height>22</height>
+       </rect>
+      </property>
+     </widget>
+     <widget class="QWidget" name="gridLayoutWidget_2">
+      <property name="geometry">
+       <rect>
+        <x>20</x>
+        <y>10</y>
+        <width>161</width>
+        <height>119</height>
+       </rect>
+      </property>
+      <layout class="QGridLayout" name="gridLayout_2">
+       <item row="1" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC1">
+         <property name="minimum">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>5.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.010000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label_12">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string> MFC1 (odor in)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC4">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="minimum">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>5.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC2">
+         <property name="minimum">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>5.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_17">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string> MFC2 (odor out)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="label_19">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string> MFC4 </string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_MFC3_purge">
+         <property name="minimum">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>5.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="label_18">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string> MFC3 (purge)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0" colspan="2">
+        <widget class="QLabel" name="label_21">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>      MFC direct flow control</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </widget>
   </widget>
   <widget class="QMenuBar" name="menubar">
    <property name="geometry">
@@ -844,7 +902,6 @@
    </attribute>
    <addaction name="start_flow_measurement_Action"/>
    <addaction name="separator"/>
-   <addaction name="actionMFC_ON_OFF"/>
   </widget>
   <action name="start_flow_measurement_Action">
    <property name="checkable">
@@ -852,11 +909,6 @@
    </property>
    <property name="text">
     <string>Start flowrate measurement</string>
-   </property>
-  </action>
-  <action name="actionMFC_ON_OFF">
-   <property name="text">
-    <string>MFC : ON</string>
    </property>
   </action>
   <action name="actionShow_Configuration_Dock">
