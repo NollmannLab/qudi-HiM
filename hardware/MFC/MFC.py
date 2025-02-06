@@ -40,7 +40,6 @@ from time import sleep
 
 class MFC(Base):
     _MFC_port = ConfigOption('MFC_port', missing="error")
-    MFC_number = ConfigOption('MFC_number', missing="error")
     MFC_names = ConfigOption('MFC_names', missing="error")
     MFC_address = ConfigOption('Daisy_chain_ids', missing="error")
 
@@ -56,6 +55,7 @@ class MFC(Base):
         super().__init__(config=config, **kwargs)
         self._MFC_dic = {'MFC_names': self.MFC_names,
                          'MFC_id': self.MFC_address}
+        self.MFC_number = len(self.MFC_names)
 
     def on_activate(self):
         """ Test all MFCs are connected and available
@@ -82,14 +82,14 @@ class MFC(Base):
     def MFC_ON(self, mfc, flow):
         """open the MFC valve to calibrate the flow and read the measure value
         @param flow : sl/min - setpoint
-        @param mfc : indicate the number of the MFC to turn on
+        @param mfc : indicate the daisy-chain ID of the MFC to turn on
         """
         with ShdlcSerialPort(port=self._MFC_port, baudrate=115200) as port:
             if mfc < self.MFC_number:
                 sensor0 = Sfx6xxxDevice(ShdlcChannel(port, shdlc_address=self._MFC_dic['MFC_id'][mfc]))
-                Z = sensor0.set_setpoint_and_read_measured_value(flow)
-                sleep(0.3)
-                print(Z)
+                sensor0.set_setpoint(flow)
+                #Z = sensor0.set_setpoint_and_read_measured_value(flow)
+                # sleep(0.3)
             else:
                 self.log.error(f'There is only {self.MFC_number} MFCs - the MFC #{mfc} does not exist!')
 
