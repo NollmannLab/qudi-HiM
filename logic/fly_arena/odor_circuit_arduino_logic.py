@@ -30,10 +30,14 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 """
 import logging
 import time
+import numpy as np
 from qtpy import QtCore
 from core.configoption import ConfigOption
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
+from matplotlib import pyplot as plt
+from scipy.stats import norm
+from os import path
 
 logging.basicConfig(filename='Fly Arena/logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -89,6 +93,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
     # attributes
     measuring_flowrate = False
     time_since_start = 0
+    calibrating_flowrate = False
 
     # _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
     # _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
@@ -118,6 +123,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self.MFC_number: int = 0
         self.n_odors_available: int = 0
         self.valves_status: dict = {}
+        self.calibration_saving_filename: str = ""
+        self.calibration: dict = {}
 
     def on_activate(self):
         """
@@ -150,7 +157,6 @@ class OdorCircuitArduinoLogic(GenericLogic):
 # ----------------------------------------------------------------------------------------------------------------------
 
 # Handling of the flow configuration  ----------------------------------------------------------------------------------
-
     def stop_air_flow(self):
         """ Stop all air flow in the arena and close the odor circuit
         """
@@ -192,7 +198,6 @@ class OdorCircuitArduinoLogic(GenericLogic):
                 self._MFC.MFC_OFF(mfc)
 
 # Flowrate measurement loop --------------------------------------------------------------------------------------------
-
     def start_flow_measurement(self):
         """
         Start a continuous measurement of the flowrate.
@@ -207,9 +212,17 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         Continuous measuring of the flowrate at a defined sampling rate using a worker thread.
         """
+        # launch signal to the GUI to update the flowchart
         flow_rates = self.read_average_flow()
         self.sigUpdateFlowMeasurement.emit(flow_rates)
-        if self.measuring_flowrate:
+
+        # if calibrating, save the datapoints
+        if self.calibrating_flowrate:
+            for n, key in enumerate(self.calibration.keys()):
+                self.calibration[key].append(flow_rates[n])
+
+        # if the conditions are checked, launch a new worker for the next measurement
+        if self.measuring_flowrate or self.calibrating_flowrate:
             # enter a loop until measuring mode is switched off
             worker = MeasurementWorker()
             worker.signals.sigFinished.connect(self.flow_measurement_loop)
@@ -220,6 +233,69 @@ class OdorCircuitArduinoLogic(GenericLogic):
         Stops the measurement of flowrate.
         """
         self.measuring_flowrate = False
+        self.calibrating_flowrate= False
+
+# MFC calibration ------------------------------------------------------------------------------------------------------
+    def start_flow_calibration(self, filename):
+        """
+        Start a calibration measurement of each MFC flowrate.
+        """
+        self.calibrating_flowrate = True
+        self.calibration = {"MFC1": [], "MFC2": [], "MFC3": [], "MFC4": []}
+        self.calibration_saving_filename = filename
+        worker = MeasurementWorker()
+        worker.signals.sigFinished.connect(self.flow_measurement_loop)
+        self.threadpool.start(worker)
+
+    def stop_flow_calibration(self):
+        """
+        Stop the calibration
+        """
+        # stop the flow rate loop
+        self.measuring_flowrate = False
+        self.calibrating_flowrate = False
+
+        # plot
+        fig, axes = plt.subplots(2, 2, figsize=(10, 18))
+        colors = ['b', 'g', 'r', 'k']
+        for n, key in enumerate(self.calibration.keys()):
+            x, y = divmod(n, 2)
+            self.plot_histogram_with_density(self.calibration[key], f'MFC_{n + 1}', colors[n], axes[x, y])
+
+        fig.suptitle('Histograms and Density Curves for the MFCs')
+        plt.savefig(self.calibration_saving_filename, dpi=150)
+
+        # set MFCs to OFF
+        self.stop_air_flow()
+
+    @staticmethod
+    def plot_histogram_with_density(data, label, color, ax):
+        """
+        Plot a histogram
+        @param label : Name of the MFC
+        @param color : color of the plot
+        @param data : the mfc values
+        @param ax : the place of the graph on the print
+        """
+        mean_value = np.mean(data)
+        std_deviation = np.std(data)
+
+        count, bins, ignored = ax.hist(data, bins='auto', alpha=0.5, rwidth=0.85, color=color,
+                                       edgecolor='black', density=True, label=f'{label} histogram')
+
+        bin_centers = 0.5 * (bins[1:] + bins[:-1])
+        pdf = norm.pdf(bin_centers, mean_value, std_deviation)
+
+        ax.plot(bin_centers, pdf, linestyle='dashed', linewidth=2, color=color, label=f'{label} density')
+
+        ax.axvline(mean_value, color=color, linestyle='dashed', linewidth=1)
+        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.9,
+                f'{label} Mean: {mean_value:.6f}', color=color)
+        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.85,
+                f'{label} Std Dev: {std_deviation:.6f}', color=color)
+        ax.set_xlabel('Flow (sL/min)')
+        ax.set_ylabel('Density')
+        ax.legend()
 
 # Odor handling --------------------------------------------------------------------------------------------------------
     def prepare_odor(self, odor_number):
@@ -323,17 +399,17 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
 
 
-    def valve(self, pin, state):
-        """
-        Open only 1 valve
-        @param pin: Number of the pin to activate (2 to 12)
-        @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
-        input example: ' 'state' '
-        """
-        if state == 1:
-            self._ard.pin_on(pin)
-        elif state == 0:
-            self._ard.pin_off(pin)
+    # def valve(self, pin, state):
+    #     """
+    #     Open only 1 valve
+    #     @param pin: Number of the pin to activate (2 to 12)
+    #     @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
+    #     input example: ' 'state' '
+    #     """
+    #     if state == 1:
+    #         self._ard.pin_on(pin)
+    #     elif state == 0:
+    #         self._ard.pin_off(pin)
 
     # def prepare_odor(self, odor_number):
     #     """
@@ -356,29 +432,29 @@ class OdorCircuitArduinoLogic(GenericLogic):
     #     else:
     #         logger.warning('4 odor only')
 
-    def flush_odor(self):
-        """
-        Close all the valves that need to be closed
-        """
-        self.valve(self._mixing_valve, 1)
-        self.valve(self._final_valve, 0)
-        self.valve(self._valve_odor_1_in, 0)
-        self.valve(self._valve_odor_1_out, 0)
-        self.valve(self._valve_odor_2_in, 0)
-        self.valve(self._valve_odor_2_out, 0)
-        self.valve(self._valve_odor_3_in, 0)
-        self.valve(self._valve_odor_3_out, 0)
-        self.valve(self._valve_odor_4_in, 0)
-
-        print('Odor circuit off')
-
-    def turn_MFC_on(self, flow_setpoints):
-        """
-        Open the MFCs
-        @param flow_setpoints : list of the setpoints for each MFC
-        """
-        for n_MFC, flow in enumerate(flow_setpoints):
-            self._MFC.MFC_ON(n_MFC, flow)
+    # def flush_odor(self):
+    #     """
+    #     Close all the valves that need to be closed
+    #     """
+    #     self.valve(self._mixing_valve, 1)
+    #     self.valve(self._final_valve, 0)
+    #     self.valve(self._valve_odor_1_in, 0)
+    #     self.valve(self._valve_odor_1_out, 0)
+    #     self.valve(self._valve_odor_2_in, 0)
+    #     self.valve(self._valve_odor_2_out, 0)
+    #     self.valve(self._valve_odor_3_in, 0)
+    #     self.valve(self._valve_odor_3_out, 0)
+    #     self.valve(self._valve_odor_4_in, 0)
+    #
+    #     print('Odor circuit off')
+    #
+    # def turn_MFC_on(self, flow_setpoints):
+    #     """
+    #     Open the MFCs
+    #     @param flow_setpoints : list of the setpoints for each MFC
+    #     """
+    #     for n_MFC, flow in enumerate(flow_setpoints):
+    #         self._MFC.MFC_ON(n_MFC, flow)
 
     # def close_air(self):
     #     """
@@ -395,20 +471,20 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
 
 
-    # ----------------------------------------------------------------------------------------------------------------------
-    # Methods to handle the user interface state
-    # ----------------------------------------------------------------------------------------------------------------------
-    def disable_flowcontrol_actions(self):
-        """
-        This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
-        button on GUI, for example during Tasks. By security, all thread actions (measuring flow-rate and volume are
-        stopped as well).
-        """
-        self.sigDisableFlowActions.emit()
-        self.stop_flow_measurement()
-
-    def enable_flowcontrol_actions(self):
-        """
-        This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks.
-        """
-        self.sigEnableFlowActions.emit()
+    # # ----------------------------------------------------------------------------------------------------------------------
+    # # Methods to handle the user interface state
+    # # ----------------------------------------------------------------------------------------------------------------------
+    # def disable_flowcontrol_actions(self):
+    #     """
+    #     This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
+    #     button on GUI, for example during Tasks. By security, all thread actions (measuring flow-rate and volume are
+    #     stopped as well).
+    #     """
+    #     self.sigDisableFlowActions.emit()
+    #     self.stop_flow_measurement()
+    #
+    # def enable_flowcontrol_actions(self):
+    #     """
+    #     This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks.
+    #     """
+    #     self.sigEnableFlowActions.emit()

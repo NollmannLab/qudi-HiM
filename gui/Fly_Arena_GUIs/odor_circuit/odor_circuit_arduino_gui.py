@@ -34,11 +34,12 @@ import os
 import numpy as np
 from PyQt5.QtCore import QTimer, Qt, QTime
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtWidgets import QFileDialog
 from matplotlib import pyplot as plt
 from qtpy import QtWidgets, uic, QtCore
-from qtpy.QtCore import Signal
-from scipy.stats import norm
-from datetime import datetime
+# from qtpy.QtCore import Signal
+# from scipy.stats import norm
+# from datetime import datetime
 from time import sleep
 from core.configoption import ConfigOption
 from core.connector import Connector
@@ -113,23 +114,26 @@ class OdorCircuitGUI(GUIBase):
     sigStartFlowMeasure = QtCore.Signal()
     sigStopFlowMeasure = QtCore.Signal()
     sigChangeValveState = QtCore.Signal(str, int)
+    sigStopFlowCalibration = QtCore.Signal()
     # define the default language option as English (to make sure all float have a point as a separator)
     QtCore.QLocale.setDefault(QtCore.QLocale("English"))
 
-    # Declaration of custom signals
-    sigMFC_ON = Signal()
-    sigMFC_OFF = Signal()
-    sigLaunchClicked = Signal()
+    # # Declaration of custom signals
+    # sigMFC_ON = Signal()
+    # sigMFC_OFF = Signal()
+    # sigLaunchClicked = Signal()
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.date_str = None
         # self.Caltime = 0
         # self.G = 0
-        self.prep_timer = None
-        self.start_prep_time = None
-        self.inject_timer = None
-        self.start_inject_time = None
+        self.prep_timer: object = None
+        self.start_prep_time: int = 0
+        self.inject_timer: object = None
+        self.start_inject_time: int = 0
+        self.calibration_timer: object = None
+        self.start_calibration_time: int = 0
         self.flowrate_timetraces: dict = {}
         self.flowrate_data: dict = {}
         self.measure: dict = {}
@@ -138,6 +142,7 @@ class OdorCircuitGUI(GUIBase):
         self.odor_number: int = 0
         self.preparing_odor: bool = False
         self.injecting_odor: bool = False
+        self.calibrating_MFCs: bool = False
         self.selected_odor: int = 0
         self.valve_status: dict = {}
 
@@ -197,7 +202,7 @@ class OdorCircuitGUI(GUIBase):
         self.init_toolbar()
         self.init_flowcontrol_main_window()
         self.init_MFC_calibration_window()
-        self.init_admin_dockwidget()
+        # self.init_admin_dockwidget()
         self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
 
         # Set the default flow
@@ -219,13 +224,13 @@ class OdorCircuitGUI(GUIBase):
         self._mw.activateWindow()
         self._mw.raise_()
 
-    def show_admin_Dock(self):
-        """Show the dock widget"""
-        self._mw.admin_dockWidget.show()
-
-    def hide_admin_Dock(self):
-        """Hide the dock widget"""
-        self._mw.admin_dockWidget.hide()
+    # def show_admin_Dock(self):
+    #     """Show the dock widget"""
+    #     self._mw.admin_dockWidget.show()
+    #
+    # def hide_admin_Dock(self):
+    #     """Hide the dock widget"""
+    #     self._mw.admin_dockWidget.hide()
 
     def show_MFC_calibration_window(self):
         """ Show the plot window
@@ -235,7 +240,7 @@ class OdorCircuitGUI(GUIBase):
     def init_menu(self):
         """ Initialize actions controlled by menu
         """
-        self._mw.actionShow_Configuration_Dock.triggered.connect(self.show_admin_Dock)
+        # self._mw.actionShow_Configuration_Dock.triggered.connect(self.show_admin_Dock)
         self._mw.actionShow_MFC_stability_check.triggered.connect(self.show_MFC_calibration_window)
 
     def init_toolbar(self):
@@ -260,22 +265,20 @@ class OdorCircuitGUI(GUIBase):
         """ Initialize actions handle by the MFC calibration window
         """
         # Initialize pushbutton
-        self._mfcw.cancel.setDisabled(True)
+        self._mfcw.toolButton_abort_calibration.setDisabled(True)
 
         # Connect signals to methods
-        self._mfcw.cancel.clicked.connect(self.cancel)
-        self._mfcw.toolButton.clicked.connect(self.Start_measure)
+        self._mfcw.toolButton_abort_calibration.clicked.connect(self.abort_MFC_calibration)
+        self._mfcw.toolButton_start_calibration.clicked.connect(self.start_MFC_calibration)
+        self._mfcw.toolButton_select_folder.clicked.connect(self.select_folder)
 
-    def init_admin_dockwidget(self):
-        """ Initialize actions handle within the admin dockwidget
-        """
-        # connect signals to methods
-        # self._mw.valve_odor_1_checkBox.stateChanged.connect(self.check_box_changed)
-        # self._mw.valve_odor_2_checkBox.stateChanged.connect(self.check_box_changed)
-        # self._mw.valve_odor_3_checkBox.stateChanged.connect(self.check_box_changed)
-        # self._mw.valve_odor_4_checkBox.stateChanged.connect(self.check_box_changed)
-        # self._mw.checkBox_M_2.stateChanged.connect(self.check_box_changed)
-        self.hide_admin_Dock()
+        # initialize timer
+        self.calibration_timer = QTimer()
+        self.calibration_timer.timeout.connect(lambda: self.update_calibration_timer(
+            self._mfcw.doubleSpinBox_calibration_duration.value()))
+
+        # connect signal to logic
+        self.sigStopFlowCalibration.connect(self._odor_logic.stop_flow_calibration)
 
     def init_flowcontrol_main_window(self):
         """Initialize the flowcontrol dockwidget, setting up plots, labels, and signal-slot connections.
@@ -344,9 +347,20 @@ class OdorCircuitGUI(GUIBase):
         self.inject_timer.timeout.connect(self.update_inject_timer)
 
     def disable_enable_odor_pushbuttons(self, prep=True, inject=True, stop=True):
+        """ Disable / Enable push buttons related to odor injection in arena """
         self._mw.Prepare_odor_pushButton.setDisabled(prep)
         self._mw.Inject_odor_pushButton.setDisabled(inject)
         self._mw.Stop_odor_pushButton.setDisabled(stop)
+
+    def close_function(self):
+        """
+        This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
+        when the main window is closed.
+        """
+        if self._odor_logic.measuring_flowrate:
+            self.sigStopFlowMeasure.emit()
+            self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
+            self._mw.start_flow_measurement_Action.setChecked(False)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling arena configuration & odors
@@ -368,7 +382,7 @@ class OdorCircuitGUI(GUIBase):
 
         # depending on the selected config, define the air-flow setpoint values for each MFC and send it to the logic.
         # Three configurations are available :
-        # 1: all MFCs are off
+        # 1: all MFCs are off - all valves (except the switch valve for the quadrants) are set to their initial states
         # 2: the two pairs of quadrants are handle using two different circuits - quadrants 1/3 are connected to the
         # odor circuit through MFCs 1/2/3 (air or odor, depending on the state of the final valve) and quadrants 2/4 are
         # connected to MFC 4 (air)
@@ -542,6 +556,37 @@ class OdorCircuitGUI(GUIBase):
         self.start_inject_time = None
         self._mw.inject_timer_display.setText("")
 
+    def start_calibration_timer(self):
+        """Starts the timer for the MFC calibration (when the toolButton_start_calibration is clicked)."""
+        self.start_calibration_time = QTime.currentTime()  # Store start time
+        self.calibration_timer.start(1000)  # Update every second
+
+    def update_calibration_timer(self, duration):
+        """ Updates the QLineEdit with elapsed time.
+        @param: duration (float): indicate the duration of the calibration in minutes.
+        """
+        if self.start_calibration_time and self.calibrating_MFCs:
+            elapsed = self.start_calibration_time.secsTo(QTime.currentTime())  # Get elapsed time in seconds
+            self._mfcw.calibration_timer_display.setText(f"{elapsed} sec")
+            if elapsed >= duration * 60:
+                self.stop_calibration_timer()
+        else:
+            self.stop_calibration_timer()
+
+    def stop_calibration_timer(self):
+        """ Stops the odor preparation timer and resets the display.
+        """
+        # reinitialize the timer
+        self.calibration_timer.stop()
+        self.start_calibration_time = None
+        self._mfcw.calibration_timer_display.setText("")
+
+        # send signal to logic indicating the calibration should be terminated
+        self.sigStopFlowCalibration.emit()
+
+        # stop the calibration
+        self.abort_MFC_calibration()
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the valves states
 # ----------------------------------------------------------------------------------------------------------------------
@@ -610,7 +655,6 @@ class OdorCircuitGUI(GUIBase):
         """
         # self.G += 1
         # Update flow rate data - a maximum of 100 data points will be displayed on the ime trace.
-
         if len(self.flowrate_data[1]) < 100:
             self.t_data.append(len(self.t_data))
             for i in range(self.MFC_number):
@@ -628,6 +672,140 @@ class OdorCircuitGUI(GUIBase):
         for i in range(self.MFC_number):
             self.flowrate_timetraces[i].setData(self.t_data, self.flowrate_data[i])
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Methods handling the characterization / calibration of the MFCs
+# ----------------------------------------------------------------------------------------------------------------------
+    def start_MFC_calibration(self):
+        """
+        Start calibration of the MFcs flow (noise)
+        """
+        # disable the main window to avoid race issues and the calibration button
+        self._mw.setDisabled(True)
+        self._mfcw.toolButton_start_calibration.setDisabled(True)
+
+        # initialize variables
+        self.calibrating_MFCs = True
+        self._mfcw.toolButton_abort_calibration.setDisabled(False)
+        self.calibration_time = self._mfcw.doubleSpinBox_calibration_duration.value()
+        mfc_setpoint = self._mfcw.doubleSpinBox_MFCs_setpoint.value()
+
+        # check if measurement of flowrate is running - if yes, suspend it to allow communication with MFCs
+        flowrate_measurement = self._odor_logic.measuring_flowrate
+        if flowrate_measurement:
+            self.sigStopFlowMeasure.emit()
+            sleep(2)
+
+        # set the configuration of the arena to ALL-OFF
+        self._mw.comboBox_quadrants_config.setCurrentIndex(0)
+
+        # launch MFCs based on the indicated setpoints - all MFCs are set to the same values
+        mfc_flow = [mfc_setpoint, mfc_setpoint, mfc_setpoint, mfc_setpoint]
+        self._odor_logic.start_air_flow(mfc_flow, config=1)
+        self._mw.MFC1_setpoint.setText(f'{str(mfc_flow[0])} sL/min')
+        self._mw.MFC2_setpoint.setText(f'{str(mfc_flow[1])} sL/min')
+        self._mw.MFC3_setpoint.setText(f'{str(mfc_flow[2])} sL/min')
+        self._mw.MFC4_setpoint.setText(f'{str(mfc_flow[3])} sL/min')
+
+        # launch calibration
+        hist_saving_path = os.path.join(self._mfcw.Folder_LineEdit.text(), self._mfcw.File_LineEdit.text())
+        self.start_calibration_timer()
+        self._odor_logic.start_flow_calibration(hist_saving_path)
+
+    def abort_MFC_calibration(self):
+        """Cancel the MFC calibration"""
+        self._odor_logic.stop_flow_measurement()
+        self._mw.setDisabled(False)
+        self._mfcw.toolButton_abort_calibration.setDisabled(True)
+        self._mfcw.toolButton_start_calibration.setDisabled(False)
+
+    def select_folder(self):
+        """ Select the folder where to save the graph """
+        folder = QFileDialog.getExistingDirectory(self._mfcw, "Select Folder", "E:\DATA")
+        if folder:
+            self._mfcw.Folder_LineEdit.setText(folder)
+
+    # def plot_total(self):
+    #     """
+    #     Plot the all 3 calibration graphs of the mfc
+    #     """
+    #     path1 = f'MesureMFC1{self.date_str}'
+    #     path2 = f'MesureMFC2{self.date_str}'
+    #     path3 = f'MesureMFC3{self.date_str}'
+    #     path4 = f'MFCPlot{self.date_str}.png'
+    #     P1 = os.path.join(self._Path_MFC, path1)
+    #     P2 = os.path.join(self._Path_MFC, path2)
+    #     P3 = os.path.join(self._Path_MFC, path3)
+    #     P4 = os.path.join(self._Path_MFC, path4)
+    #     np.savetxt(P1, self.mesure1, fmt='%.6f')
+    #     np.savetxt(P2, self.mesure2, fmt='%.6f')
+    #     np.savetxt(P3, self.mesure3, fmt='%.6f')
+    #     self.show_plot()
+    #     plt.savefig(P4)
+
+    # def measure_flow_clicked(self):
+    #     """
+    #     Callback of start flow measurement tool button. Handles the tool button state and initiates the start / stop
+    #     of flowrate .
+    #     """
+    #     if self._odor_logic.measuring_flowrate:  # measurement already running
+    #         self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
+    #         self.sigStopFlowMeasure.emit()
+    #         self._mw.actionMFC_ON_OFF.setDisabled(False)
+    #     else:
+    #         self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
+    #         self.t_data = []
+    #         self.flowrate1_data = []
+    #         self.flowrate2_data = []
+    #         self.flowrate3_data = []
+    #         self.flowrate4_data = []
+    #         self.sigStartFlowMeasure.emit()
+    #         self._mw.actionMFC_ON_OFF.setDisabled(True)
+
+    # @staticmethod
+    # def plot_histogram_with_density(data, label, color, ax):
+    #     """
+    #     Plot a histogram
+    #     @param label : Name of the MFC
+    #     @param color : color of the plot
+    #     @param data : the mfc values
+    #     @param ax : the place of the graph on the print
+    #     """
+    #     mean_value = np.mean(data)
+    #     std_deviation = np.std(data)
+    #
+    #     count, bins, ignored = ax.hist(data, bins='auto', alpha=0.5, rwidth=0.85, color=color,
+    #                                    edgecolor='black', density=True, label=f'{label} histogram')
+    #
+    #     bin_centers = 0.5 * (bins[1:] + bins[:-1])
+    #     pdf = norm.pdf(bin_centers, mean_value, std_deviation)
+    #
+    #     ax.plot(bin_centers, pdf, linestyle='dashed', linewidth=2, color=color, label=f'{label} density')
+    #
+    #     ax.axvline(mean_value, color=color, linestyle='dashed', linewidth=1)
+    #     ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.9,
+    #             f'{label} Mean: {mean_value:.6f}', color=color)
+    #     ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.85,
+    #             f'{label} Std Dev: {std_deviation:.6f}', color=color)
+
+    # def show_plot(self):
+    #     """
+    #     Show the Plot
+    #     """
+    #     fig, axes = plt.subplots(3, 1, figsize=(10, 18))
+    #     self.plot_histogram_with_density(self.mesure1, 'MFC 1', 'b', axes[0])
+    #     self.plot_histogram_with_density(self.mesure2, 'MFC 2', 'g', axes[1])
+    #     self.plot_histogram_with_density(self.mesure3, 'MFC Purge', 'r', axes[2])
+    #
+    #     for i, ax in enumerate(axes):
+    #         ax.set_xlabel('Valeurs')
+    #         ax.set_ylabel('Densité')
+    #         ax.legend()
+    #
+    #     fig.suptitle('Histograms and Density Curves for the MFCs')
+    #     plt.show()
+
+
+
 
         # self.mesure1.append(flow_rates[0])
         # self.mesure2.append(flow_rates[1])
@@ -637,7 +815,7 @@ class OdorCircuitGUI(GUIBase):
         # if self.G == self.Caltime * 60:
         #     self._odor_logic.stop_flow_measurement()
         #     self.plot_total()
-        #     self._mfcw.cancel.setDisabled(True)
+        #     self._mfcw.toolButton_abort_calibration.setDisabled(True)
         #     self._mw.setDisabled(False)
         #     self._mfcw.toolButton.setDisabled(False)
 
@@ -738,7 +916,7 @@ class OdorCircuitGUI(GUIBase):
     #     if self.G == self.Caltime * 60:
     #         self._odor_logic.stop_flow_measurement()
     #         self.plot_total()
-    #         self._mfcw.cancel.setDisabled(True)
+    #         self._mfcw.toolButton_abort_calibration.setDisabled(True)
     #         self._mw.setDisabled(False)
     #         self._mfcw.toolButton.setDisabled(False)
 
@@ -795,30 +973,30 @@ class OdorCircuitGUI(GUIBase):
     #     elif count_on_associations == 0 and valves_status['mixing_valve'] == '0':
     #         logger.error('You need to open the Mixing Valve first')
     #         return 0
-
-
-
-
-    def clear(self):
-        """
-         Reset the valve statuses and update the labels.
-        """
-        self.valves_status['valve_odor_1_in'] = '0'
-        self.valves_status['valve_odor_1_out'] = '0'
-        self.valves_status['valve_odor_2_in'] = '0'
-        self.valves_status['valve_odor_2_out'] = '0'
-        self.valves_status['valve_odor_3_in'] = '0'
-        self.valves_status['valve_odor_3_out'] = '0'
-        self.valves_status['valve_odor_4_in'] = '0'
-        self.valves_status['valve_odor_4_out'] = '0'
-        self.update_valve_label(self._mw.label_1in_2, 0)
-        self.update_valve_label(self._mw.label_1out_2, 0)
-        self.update_valve_label(self._mw.label_2in_2, 0)
-        self.update_valve_label(self._mw.label_2out_2, 0)
-        self.update_valve_label(self._mw.label_3in_2, 0)
-        self.update_valve_label(self._mw.label_3out_2, 0)
-        self.update_valve_label(self._mw.label_4in_2, 0)
-        self.update_valve_label(self._mw.label_4out_2, 0)
+    #
+    #
+    #
+    #
+    # def clear(self):
+    #     """
+    #      Reset the valve statuses and update the labels.
+    #     """
+    #     self.valves_status['valve_odor_1_in'] = '0'
+    #     self.valves_status['valve_odor_1_out'] = '0'
+    #     self.valves_status['valve_odor_2_in'] = '0'
+    #     self.valves_status['valve_odor_2_out'] = '0'
+    #     self.valves_status['valve_odor_3_in'] = '0'
+    #     self.valves_status['valve_odor_3_out'] = '0'
+    #     self.valves_status['valve_odor_4_in'] = '0'
+    #     self.valves_status['valve_odor_4_out'] = '0'
+    #     self.update_valve_label(self._mw.label_1in_2, 0)
+    #     self.update_valve_label(self._mw.label_1out_2, 0)
+    #     self.update_valve_label(self._mw.label_2in_2, 0)
+    #     self.update_valve_label(self._mw.label_2out_2, 0)
+    #     self.update_valve_label(self._mw.label_3in_2, 0)
+    #     self.update_valve_label(self._mw.label_3out_2, 0)
+    #     self.update_valve_label(self._mw.label_4in_2, 0)
+    #     self.update_valve_label(self._mw.label_4out_2, 0)
     #
     # a = 0
     #
@@ -1084,166 +1262,51 @@ class OdorCircuitGUI(GUIBase):
     #             self._odor_logic.valve(self._mixing_valve, 0)
     #             self.valves_status['mixing_valve'] = '0'
     #             self.update_valve_label(self._mw.label_M_2, 0)
-
-    def mfc_on(self):
-        """
-        Open the MFCs at the value indicated on the interface
-        """
-        flow_setpoints = [self._mw.doubleSpinBox_MFC1.value(), self._mw.doubleSpinBox_MFC2.value(),
-                          self._mw.doubleSpinBox_MFC3_purge.value(), self._mw.doubleSpinBox_MFC4.value()]
-        self._odor_logic.turn_MFC_on(flow_setpoints)
-
-    def mfc_on_off(self):
-        """
-        Turn the MFCs on or off switching the MFC status
-        """
-
-        if not self.MFC_status:
-            self._odor_logic.valve(self._mixing_valve, 1)
-            self.valves_status['mixing_valve'] = '1'
-            self.update_valve_label(self._mw.label_M_2, 1)
-            Permission = self.check_valves(self.valves_status)
-            if Permission == 1:
-                logger.info("Turning MFCs on")
-                # self.mfc_on()
-                self.sigMFC_ON.emit()
-                self._mw.actionMFC_ON_OFF.setText('MFC : ON')
-                self.MFC_status = True
-                self._odor_logic.valve(self._mixing_valve, 1)
-                self._mw.checkBox_M_2.setChecked(True)
-                self.valves_status['mixing_valve'] = '1'
-                self.update_valve_label(self._mw.label_M_2, 1)
-                self.update_valve_label(self._mw.label_MFCpurge_2, 1)
-                self.update_valve_label(self._mw.label_MFC1_2, 1)
-                self.update_valve_label(self._mw.label_MFC2_2, 1)
-            else:
-                logger.info("Permission denied")
-        else:
-            logger.info("Closing air...")
-            self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
-            self.sigMFC_OFF.emit()
-            self.MFC_status = False
-            self._odor_logic.valve(self._mixing_valve, 0)
-            self._mw.checkBox_M_2.setChecked(False)
-            self.valves_status['Mixing_valve'] = '0'
-            self.update_valve_label(self._mw.label_M_2, 0)
-            self.update_valve_label(self._mw.label_MFCpurge_2, 0)
-            self.update_valve_label(self._mw.label_MFC1_2, 0)
-            self.update_valve_label(self._mw.label_MFC2_2, 0)
-
-    # ----------------------------------------------------------------------------------------------------------------------
-    # Slots related to the flowcontrol
-    # ----------------------------------------------------------------------------------------------------------------------
-    def Start_measure(self):
-        """
-        Start measurement
-        """
-        self.G = 1
-        self._mfcw.cancel.setDisabled(False)
-        self.Caltime = self._mfcw.doubleSpinBox.value()
-        self.mesure1 = []
-        self.mesure2 = []
-        self.mesure3 = []
-        self.mesure4 = []
-        self._odor_logic.start_flow_measurement()
-        self.date_str = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        self._mw.setDisabled(True)
-        self._mfcw.toolButton.setDisabled(True)
-
-    def plot_total(self):
-        """
-        Plot the all 3 calibration graphs of the mfc
-        """
-        path1 = f'MesureMFC1{self.date_str}'
-        path2 = f'MesureMFC2{self.date_str}'
-        path3 = f'MesureMFC3{self.date_str}'
-        path4 = f'MFCPlot{self.date_str}.png'
-        P1 = os.path.join(self._Path_MFC, path1)
-        P2 = os.path.join(self._Path_MFC, path2)
-        P3 = os.path.join(self._Path_MFC, path3)
-        P4 = os.path.join(self._Path_MFC, path4)
-        np.savetxt(P1, self.mesure1, fmt='%.6f')
-        np.savetxt(P2, self.mesure2, fmt='%.6f')
-        np.savetxt(P3, self.mesure3, fmt='%.6f')
-        self.show_plot()
-        plt.savefig(P4)
-
-    # def measure_flow_clicked(self):
+    #
+    # def mfc_on(self):
     #     """
-    #     Callback of start flow measurement tool button. Handles the tool button state and initiates the start / stop
-    #     of flowrate .
+    #     Open the MFCs at the value indicated on the interface
     #     """
-    #     if self._odor_logic.measuring_flowrate:  # measurement already running
-    #         self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
-    #         self.sigStopFlowMeasure.emit()
-    #         self._mw.actionMFC_ON_OFF.setDisabled(False)
+    #     flow_setpoints = [self._mw.doubleSpinBox_MFC1.value(), self._mw.doubleSpinBox_MFC2.value(),
+    #                       self._mw.doubleSpinBox_MFC3_purge.value(), self._mw.doubleSpinBox_MFC4.value()]
+    #     self._odor_logic.turn_MFC_on(flow_setpoints)
+    #
+    # def mfc_on_off(self):
+    #     """
+    #     Turn the MFCs on or off switching the MFC status
+    #     """
+    #
+    #     if not self.MFC_status:
+    #         self._odor_logic.valve(self._mixing_valve, 1)
+    #         self.valves_status['mixing_valve'] = '1'
+    #         self.update_valve_label(self._mw.label_M_2, 1)
+    #         Permission = self.check_valves(self.valves_status)
+    #         if Permission == 1:
+    #             logger.info("Turning MFCs on")
+    #             # self.mfc_on()
+    #             self.sigMFC_ON.emit()
+    #             self._mw.actionMFC_ON_OFF.setText('MFC : ON')
+    #             self.MFC_status = True
+    #             self._odor_logic.valve(self._mixing_valve, 1)
+    #             self._mw.checkBox_M_2.setChecked(True)
+    #             self.valves_status['mixing_valve'] = '1'
+    #             self.update_valve_label(self._mw.label_M_2, 1)
+    #             self.update_valve_label(self._mw.label_MFCpurge_2, 1)
+    #             self.update_valve_label(self._mw.label_MFC1_2, 1)
+    #             self.update_valve_label(self._mw.label_MFC2_2, 1)
+    #         else:
+    #             logger.info("Permission denied")
     #     else:
-    #         self._mw.start_flow_measurement_Action.setText('Stop flowrate measurement')
-    #         self.t_data = []
-    #         self.flowrate1_data = []
-    #         self.flowrate2_data = []
-    #         self.flowrate3_data = []
-    #         self.flowrate4_data = []
-    #         self.sigStartFlowMeasure.emit()
-    #         self._mw.actionMFC_ON_OFF.setDisabled(True)
+    #         logger.info("Closing air...")
+    #         self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
+    #         self.sigMFC_OFF.emit()
+    #         self.MFC_status = False
+    #         self._odor_logic.valve(self._mixing_valve, 0)
+    #         self._mw.checkBox_M_2.setChecked(False)
+    #         self.valves_status['Mixing_valve'] = '0'
+    #         self.update_valve_label(self._mw.label_M_2, 0)
+    #         self.update_valve_label(self._mw.label_MFCpurge_2, 0)
+    #         self.update_valve_label(self._mw.label_MFC1_2, 0)
+    #         self.update_valve_label(self._mw.label_MFC2_2, 0)
 
-    @staticmethod
-    def plot_histogram_with_density(data, label, color, ax):
-        """
-        Plot a histogram
-        @param label : Name of the MFC
-        @param color : color of the plot
-        @param data : the mfc values
-        @param ax : the place of the graph on the print
-        """
-        mean_value = np.mean(data)
-        std_deviation = np.std(data)
 
-        count, bins, ignored = ax.hist(data, bins='auto', alpha=0.5, rwidth=0.85, color=color,
-                                       edgecolor='black', density=True, label=f'{label} histogram')
-
-        bin_centers = 0.5 * (bins[1:] + bins[:-1])
-        pdf = norm.pdf(bin_centers, mean_value, std_deviation)
-
-        ax.plot(bin_centers, pdf, linestyle='dashed', linewidth=2, color=color, label=f'{label} density')
-
-        ax.axvline(mean_value, color=color, linestyle='dashed', linewidth=1)
-        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.9,
-                f'{label} Mean: {mean_value:.6f}', color=color)
-        ax.text(mean_value + 0.1 * (np.max(data) - np.min(data)), ax.get_ylim()[1] * 0.85,
-                f'{label} Std Dev: {std_deviation:.6f}', color=color)
-
-    def show_plot(self):
-        """
-        Show the Plot
-        """
-        fig, axes = plt.subplots(3, 1, figsize=(10, 18))
-        self.plot_histogram_with_density(self.mesure1, 'MFC 1', 'b', axes[0])
-        self.plot_histogram_with_density(self.mesure2, 'MFC 2', 'g', axes[1])
-        self.plot_histogram_with_density(self.mesure3, 'MFC Purge', 'r', axes[2])
-
-        for i, ax in enumerate(axes):
-            ax.set_xlabel('Valeurs')
-            ax.set_ylabel('Densité')
-            ax.legend()
-
-        fig.suptitle('Histograms and Density Curves for the MFCs')
-
-        plt.show()
-
-    def cancel(self):
-        """Cancel the MFC calibration"""
-        self._odor_logic.stop_flow_measurement()
-        self._mw.setDisabled(False)
-        self._mfcw.cancel.setDisabled(True)
-        self._mfcw.toolButton.setDisabled(False)
-
-    def close_function(self):
-        """
-        This method serves as a reimplementation of the close event. Continuous measurement modes are stopped
-        when the main window is closed.
-        """
-        if self._odor_logic.measuring_flowrate:
-            self.sigStopFlowMeasure.emit()
-            self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
-            self._mw.start_flow_measurement_Action.setChecked(False)

@@ -184,7 +184,7 @@ class ArduinoUno(Base):
         @param state: (bool) indicate True to open the valve, False to close it
         @return: (bool) True if an error is encountered
         """
-        print(f"{code} and {state}")
+        # print(f"{code} and {state}")
         if code in self.valve_pin.keys():
             # open / close the valve
             if state:
