@@ -43,6 +43,7 @@ from qtpy import QtCore, QtGui
 from core.configoption import ConfigOption
 from core.connector import Connector
 from gui.guibase import GUIBase
+from glob import glob
 
 logging.basicConfig(filename='logfile.log', filemode='w', level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -129,9 +130,7 @@ class OptogeneticGUI(GUIBase):
     """
     # define variable from the config file
     optogenetic_logic = Connector(interface='OptogeneticLogic')
-    _no_light_path = ConfigOption('no_light_path', None)
-    _arena_red_path = ConfigOption('arena_red_path', None)
-    _arena_green_path = ConfigOption('arena_green_path', None)
+    _patterns_folder_path = ConfigOption('patterns_path', None)
 
     # sig_map_off_Clicked = Signal()
     # sig_map_red_Clicked = Signal()
@@ -151,22 +150,25 @@ class OptogeneticGUI(GUIBase):
         # self.p = False
         self._optogenetic_logic = None
         self.shutter_state: bool = False  # The state of the shutter is assumed Close / False when starting qudi
+        self.map_off: object = None
+        self.map_off_scaled: object = None
+        self.map_pattern: object = None
+        self.map_pattern_scaled: object = None
+        self.patterns_path: list = []
 
-        self._ow = None
-        self._iw = None
-        self.map_off = QPixmap(self._no_light_path)
-        self.map_red = QPixmap(self._arena_red_path)
-        self.map_green = QPixmap(self._arena_green_path)
+        # self.map_off = QPixmap(self._no_light_path)
+        # self.map_red = QPixmap(self._arena_red_path)
+        # self.map_green = QPixmap(self._arena_green_path)
         self._ow = OptoWindow()
         self._iw = ImageWindow()
-        self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
-                                                 Qt.KeepAspectRatio)
-        self.map_red_scaled = self.map_red.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
-                                                     Qt.KeepAspectRatio)
-        self.map_green_scaled = self.map_green.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
-                                                     Qt.KeepAspectRatio)
-        self._iw.label.setPixmap(self.map_off_scaled)
-        self._ow.retour_2.setPixmap(self.map_off_scaled)
+        # self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        #                                          Qt.KeepAspectRatio)
+        # self.map_red_scaled = self.map_red.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        #                                              Qt.KeepAspectRatio)
+        # self.map_green_scaled = self.map_green.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+        #                                              Qt.KeepAspectRatio)
+        # self._iw.label.setPixmap(self.map_off_scaled)
+        # self._ow.retour_2.setPixmap(self.map_off_scaled)
 
     def on_activate(self):
         """
@@ -174,14 +176,33 @@ class OptogeneticGUI(GUIBase):
         """
         self._optogenetic_logic = self.optogenetic_logic()
 
+        # define the combobox items
+        patterns = glob(os.path.join(self._patterns_folder_path, '*.PNG'))
+        self.patterns_path = sorted(patterns)
+        self._ow.comboBox_select_pattern.clear()
+        for file in patterns:
+            filename = os.path.basename(file)
+            if filename == "Black.png":
+                self.map_off = QPixmap(file)
+                self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+                                                          Qt.KeepAspectRatio)
+                self._ow.retour_2.setPixmap(self.map_off_scaled)
+            else:
+                self._ow.comboBox_select_pattern.addItem(os.path.basename(file))
+
+        # define the default pattern map
+        self.update_pattern()
+
         # connect signals to methods
-        self._ow.arena_OFF_toolButton.clicked.connect(self.map_off_display)
-        self._ow.arena_red_toolButton.clicked.connect(self.map_red_display)
-        self._ow.arena_green_toolButton.clicked.connect(self.map_green_display)
-        # self.sig_map_off_Clicked.connect(lambda: self.map_off_display())
+        self._ow.arena_OFF_toolButton.clicked.connect(self.pattern_off_display)
+        self._ow.display_pattern_toolButton.clicked.connect(self.pattern_display)
+        self._ow.shutter_toolButton.toggled.connect(self.change_shutter)
+        self._ow.comboBox_select_pattern.currentIndexChanged.connect(self.update_pattern)
+
+        #self._ow.arena_green_toolButton.clicked.connect(self.map_green_display)
+        # self.sig_map_off_Clicked.connect(lambda: self.pattern_off_display())
         # self.sig_map_red_Clicked.connect(lambda: self.sigButton1Clicked.emit())
         # self.sigquart2Clicked.connect(lambda: self.sigButton1Clicked.emit())
-        self._ow.shutter_toolButton.toggled.connect(self.change_shutter)
 
     def on_deactivate(self):
         """
@@ -212,8 +233,14 @@ class OptogeneticGUI(GUIBase):
 # ======================================================================================================================
 # Specific methods handling image display and optogenetic pulses
 # ======================================================================================================================
+    def update_pattern(self):
+        """ Select the pattern and create the Qpixmap for the display """
+        pattern_index = self._ow.comboBox_select_pattern.currentIndex()
+        self.map_pattern = QPixmap(self.patterns_path[pattern_index])
+        self.map_pattern_scaled = self.map_pattern.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
+                                                          Qt.KeepAspectRatio)
 
-    def map_off_display(self):
+    def pattern_off_display(self):
         """
         Display the 'black' image
         """
@@ -222,33 +249,13 @@ class OptogeneticGUI(GUIBase):
         self._ow.retour_2.setPixmap(im)
         self._optogenetic_logic.image_display(self.map_off_scaled, self._iw)
 
-    def map_red_display(self):
+    def pattern_display(self):
         """
         Display the red_map image and update the optogenetic logic.
         """
         # set the image - if the duration is set to zero, no optogenetic pulse will be sent and the image is displayed
         # until another image is activated
-        im = self.map_red_scaled
-        self._ow.retour_2.setPixmap(im.scaled(371, 271, Qt.KeepAspectRatio))
-        if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
-            self.open_shutter()
-            self._optogenetic_logic.image_display(im, self._iw)
-
-        else:
-            im_off = self.map_off_scaled
-            t_ON_pulse = self._ow.doubleSpinBox_opto_pulse_ON.value()
-            t_OFF_pulse = self._ow.doubleSpinBox_opto_pulse_OFF.value()
-            t_opto = self._ow.doubleSpinBox_opto_stimulation.value()
-            self.open_shutter()
-            self.opto(t_ON_pulse, t_OFF_pulse, t_opto, 0, 0, im_off, im)
-
-    def map_green_display(self):
-        """
-        Display the 'green map' image and update the optogenetic logic.
-        """
-        # set the image - if the duration is set to zero, no optogenetic pulse will be sent and the image is displayed
-        # until another image is activated
-        im = self.map_green_scaled
+        im = self.map_pattern_scaled
         self._ow.retour_2.setPixmap(im.scaled(371, 271, Qt.KeepAspectRatio))
         if self._ow.doubleSpinBox_opto_stimulation.value() == 0:
             self.open_shutter()
@@ -292,7 +299,6 @@ class OptogeneticGUI(GUIBase):
     # ======================================================================================================================
     # Specific methods handling the shutter
     # ======================================================================================================================
-
     def change_shutter(self):
         """ Handle signal from the shutter_toolButton. Note that the state of the shutter is then changed in the logic
         """

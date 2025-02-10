@@ -63,37 +63,24 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:16pt; font-weight:600; text-decoration: underline;&quot;&gt;Optogenetic Display&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="arena_red_toolButton">
+    <widget class="QToolButton" name="display_pattern_toolButton">
      <property name="geometry">
       <rect>
-       <x>270</x>
-       <y>120</y>
+       <x>370</x>
+       <y>160</y>
        <width>211</width>
        <height>81</height>
       </rect>
      </property>
      <property name="text">
-      <string>Whole arena (red)</string>
-     </property>
-    </widget>
-    <widget class="QToolButton" name="arena_green_toolButton">
-     <property name="geometry">
-      <rect>
-       <x>500</x>
-       <y>120</y>
-       <width>211</width>
-       <height>81</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Whole arena (green)</string>
+      <string>DISPLAY PATTERN</string>
      </property>
     </widget>
     <widget class="QToolButton" name="arena_OFF_toolButton">
      <property name="geometry">
       <rect>
-       <x>40</x>
-       <y>120</y>
+       <x>150</x>
+       <y>160</y>
        <width>211</width>
        <height>81</height>
       </rect>
@@ -105,8 +92,8 @@
     <widget class="QLabel" name="retour_2">
      <property name="geometry">
       <rect>
-       <x>200</x>
-       <y>210</y>
+       <x>180</x>
+       <y>260</y>
        <width>371</width>
        <height>271</height>
       </rect>
@@ -187,6 +174,16 @@
        </widget>
       </item>
      </layout>
+    </widget>
+    <widget class="QComboBox" name="comboBox_select_pattern">
+     <property name="geometry">
+      <rect>
+       <x>246</x>
+       <y>120</y>
+       <width>241</width>
+       <height>22</height>
+      </rect>
+     </property>
     </widget>
    </widget>
   </widget>
