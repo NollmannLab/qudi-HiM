@@ -86,19 +86,13 @@ class OdorCircuitGUI(GUIBase):
     _Fluidics_off_path = ConfigOption('Fluidics_off_path', None)
     _Fluidics_on_path = ConfigOption('Fluidics_on_path', None)
     _default_quadrant_flow = ConfigOption('default_quadrant_flow', None)
-    # _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
-    # _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
-    # _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
-    # _valve_odor_4_in = ConfigOption('valve_odor_4_in', 10)
-    # _valve_odor_1_out = ConfigOption('valve_odor_1_in', 7)
-    # _valve_odor_2_out = ConfigOption('valve_odor_2_in', 6)
-    # _valve_odor_3_out = ConfigOption('valve_odor_3_in', 5)
-    # _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
-    # _mixing_valve = ConfigOption('mixing_valve', 9)
-    # _final_valve = ConfigOption('final_valve', 8)
-    _path_MFC1 = ConfigOption('path_MFC1', None)
-    _path_MFC2 = ConfigOption('path_MFC2', None)
-    _path_MFCPurge = ConfigOption('path_MFCPurge', None)
+    _odors = ConfigOption('odors', None)
+    _config_valves = ConfigOption('config_valve', None)
+    _config_path = ConfigOption('config_path', None)
+
+    # _path_MFC1 = ConfigOption('path_MFC1', None)
+    # _path_MFC2 = ConfigOption('path_MFC2', None)
+    # _path_MFCPurge = ConfigOption('path_MFCPurge', None)
     # valve_odor_1_in = 0
     # valve_odor_2_in = 0
     # valve_odor_3_in = 0
@@ -145,6 +139,7 @@ class OdorCircuitGUI(GUIBase):
         self.calibrating_MFCs: bool = False
         self.selected_odor: int = 0
         self.valve_status: dict = {}
+        self.pixmap_fluidics_scheme: object = None
 
         # self._flowrate1_timetrace = None
         # self._flowrate2_timetrace = None
@@ -183,10 +178,10 @@ class OdorCircuitGUI(GUIBase):
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
         self._mfcw = MFCcheckWindow()
 
-        self.pixmap1 = QPixmap(self._Fluidics_on_path)
-        self.pixmap2 = QPixmap(self._Fluidics_off_path)
-        self.pixmap1 = self.pixmap1.scaled(1101, 651, Qt.KeepAspectRatio)
-        self.pixmap2 = self.pixmap2.scaled(1101, 651, Qt.KeepAspectRatio)
+        # self.pixmap1 = QPixmap(self._Fluidics_on_path)
+        # self.pixmap2 = QPixmap(self._Fluidics_off_path)
+        # self.pixmap1 = self.pixmap1.scaled(1101, 651, Qt.KeepAspectRatio)
+        # self.pixmap2 = self.pixmap2.scaled(1101, 651, Qt.KeepAspectRatio)
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
@@ -202,8 +197,6 @@ class OdorCircuitGUI(GUIBase):
         self.init_toolbar()
         self.init_flowcontrol_main_window()
         self.init_MFC_calibration_window()
-        # self.init_admin_dockwidget()
-        self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
 
         # Set the default flow
         self._mw.doubleSpinBox_quadrant_flow.setValue(self._default_quadrant_flow)
@@ -283,6 +276,16 @@ class OdorCircuitGUI(GUIBase):
     def init_flowcontrol_main_window(self):
         """Initialize the flowcontrol dockwidget, setting up plots, labels, and signal-slot connections.
         """
+        # assign odor names & disable the empty names
+        for n_odor in range(len(self._odors)):
+            checkbox = getattr(self._mw, f'odor{n_odor + 1}_CheckBox', None)
+            checkbox.setText(self._odors[n_odor])
+            if self._odors[n_odor] == 'no odor':
+                checkbox.setDisabled(True)
+
+        # display the fluidics scheme
+        self.display_fluidics_scheme(0)
+
         # Connect signals from pushButtons to methods
         self._mw.comboBox_quadrants_config.currentIndexChanged.connect(self.update_arena_config)
         self._mw.doubleSpinBox_quadrant_flow.editingFinished.connect(self.update_arena_config)
@@ -295,6 +298,7 @@ class OdorCircuitGUI(GUIBase):
 
         # Connect signals from logic
         self._odor_logic.sigUpdateValveState.connect(self.update_valves_status)
+        self._odor_logic.sigUpdateValveState.connect(self.display_circuit_config)
 
         # Connect signals from checkBox to methods
         self._mw.odor1_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(1, checked))
@@ -361,6 +365,15 @@ class OdorCircuitGUI(GUIBase):
             self.sigStopFlowMeasure.emit()
             self._mw.start_flow_measurement_Action.setText('Start flowrate measurement')
             self._mw.start_flow_measurement_Action.setChecked(False)
+
+    def display_fluidics_scheme(self, config):
+        """ Handle the display of the valves & MFC scheme, depending on the indicated configuration
+        @param config (int) indicate the configuration of the circuit
+        """
+        self.pixmap_fluidics_scheme = QPixmap(self._config_path[config])
+        self.pixmap_fluidics_scheme = self.pixmap_fluidics_scheme.scaled(1021, 551, Qt.KeepAspectRatio,
+                                                                         Qt.SmoothTransformation)
+        self._mw.label_circuit_scheme.setPixmap(self.pixmap_fluidics_scheme)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling arena configuration & odors
@@ -513,7 +526,7 @@ class OdorCircuitGUI(GUIBase):
         quadrants 2/4 to the MFC4 & 3-way valve. When the valve is activated, the quadrants 1/3 and 2/4 are inverted.
         """
         state = self._mw.Switch_quadrant_pushButton.isChecked()
-        self._odor_logic.switch_quadrants(state)
+        self._odor_logic.switch_quadrants(int(state))
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the timers
@@ -615,6 +628,36 @@ class OdorCircuitGUI(GUIBase):
             checkbox = getattr(self._mw, f'valve_{key}_checkBox', None)
             checkbox.setDisabled(disable)
             sleep(0.05)
+
+    def display_circuit_config(self, status_dict):
+        """ Read the status_dict and select the associated valve configuration to display an illustration of the
+        fluidics circuit
+        @param status_dict: (dict) indicate whether a valve is open or close
+        """
+        index = self._mw.comboBox_quadrants_config.currentIndex()
+        if index > 0:
+            # convert status dictionary into a list
+            status_list = [status_dict[key] for key in status_dict.keys()]
+            print(status_list)
+
+            # compare the list to the self._config_valves
+            matching_config = [n_config if config == status_list else None
+                               for n_config, config in enumerate(self._config_valves)]
+            print(matching_config)
+
+            # look for the matching config that is not None
+            matching_config = next((config for config in matching_config if config is not None), None)
+
+            # display the matching config
+            if matching_config is not None:
+                print(f'matching_config: {matching_config}')
+                print(self._config_path[matching_config])
+                self.display_fluidics_scheme(matching_config)
+            else:
+                print(f'matching_config: {matching_config} does not exist')
+
+        else:
+            self.display_fluidics_scheme(0)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling the flow chart (live display of the MFCs flow-rate)
@@ -1143,27 +1186,27 @@ class OdorCircuitGUI(GUIBase):
     #     self._mw.Launch.setDisabled(False)
     #     self._mw.stoplaunch.setDisabled(True)
 
-    @staticmethod
-    def update_valve_label(label, state):
-        """
-        Update the valve label to show 'opened' or 'closed'.
-        @param label : the designated label related to the valves or MFCs
-        @param state :  (bool) ON or OFF (1 or 0)
-        """
-        if state == 1:
-            label.setText("Open")
-        else:
-            label.setText("Close")
+    # @staticmethod
+    # def update_valve_label(label, state):
+    #     """
+    #     Update the valve label to show 'opened' or 'closed'.
+    #     @param label : the designated label related to the valves or MFCs
+    #     @param state :  (bool) ON or OFF (1 or 0)
+    #     """
+    #     if state == 1:
+    #         label.setText("Open")
+    #     else:
+    #         label.setText("Close")
 
-    def update_final_valve_label(self, state):
-        """
-        Update the final valve label to change background image.
-        @param state :  (bool) ON or OFF (1 or 0)
-        """
-        if state == 1:
-            self._mw.label_circuit_scheme.setPixmap(self.pixmap1)
-        else:
-            self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
+    # def update_final_valve_label(self, state):
+    #     """
+    #     Update the final valve label to change background image.
+    #     @param state :  (bool) ON or OFF (1 or 0)
+    #     """
+    #     if state == 1:
+    #         self._mw.label_circuit_scheme.setPixmap(self.pixmap1)
+    #     else:
+    #         self._mw.label_circuit_scheme.setPixmap(self.pixmap2)
 
     # def check_box_changed(self, state):
     #     """
