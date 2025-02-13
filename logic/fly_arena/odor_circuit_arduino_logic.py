@@ -379,11 +379,11 @@ class OdorCircuitArduinoLogic(GenericLogic):
     def change_valve_state(self, code, state):
         """ Send signal to GUI to update valve state
         @param code: (str) indicate the name of the selected valve in the dictionary
-        @param state: (int) indicate 1 to open the valve, 0 to close it
+        @param state: (bool or int) indicate the state of the valve
         """
-        err = self._ard.change_valve_state(code, state)
+        err = self._ard.change_valve_state(code, int(state))
         if not err:
-            self.valves_status[code] = state
+            self.valves_status[code] = int(state)
             self.sigUpdateValveState.emit(self.valves_status)
 
 
