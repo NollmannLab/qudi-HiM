@@ -1533,14 +1533,14 @@ class Task(InterruptableTask):  # do not change the name of the class. it is alw
 
             # look for all the tif/npy/yml/hdf5 files in the folder
             path_to_upload_npy = glob(self.directory + '/**/*.npy', recursive=True)
-            path_to_upload_yml = glob(self.directory + '/**/*.yml', recursive=True)
+            path_to_upload_yml = glob(self.directory + '/**/*.yaml', recursive=True)
             path_to_upload_tif = glob(self.directory + '/**/*.tif', recursive=True)
             path_to_upload_hdf5 = glob(self.directory + '/**/*.hdf5', recursive=True)
             path_to_upload = path_to_upload_npy + path_to_upload_yml + path_to_upload_tif + path_to_upload_hdf5
 
             # look for all the tif/npy/yml/hdf5 files in the destination folder
             uploaded_path_npy = glob(self.network_directory + '/**/*.npy', recursive=True)
-            uploaded_path_yml = glob(self.network_directory + '/**/*.yml', recursive=True)
+            uploaded_path_yml = glob(self.network_directory + '/**/*.yaml', recursive=True)
             uploaded_path_tif = glob(self.network_directory + '/**/*.tif', recursive=True)
             uploaded_path_hdf5 = glob(self.network_directory + '/**/*.hdf5', recursive=True)
             uploaded_path = uploaded_path_npy + uploaded_path_yml + uploaded_path_tif + uploaded_path_hdf5
