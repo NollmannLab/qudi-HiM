@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>783</width>
+    <width>832</width>
     <height>632</height>
    </rect>
   </property>
@@ -33,8 +33,8 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>783</width>
-     <height>21</height>
+     <width>832</width>
+     <height>20</height>
     </rect>
    </property>
   </widget>
@@ -53,9 +53,9 @@
     <widget class="QLabel" name="label_2">
      <property name="geometry">
       <rect>
-       <x>260</x>
+       <x>237</x>
        <y>10</y>
-       <width>281</width>
+       <width>250</width>
        <height>41</height>
       </rect>
      </property>
@@ -63,39 +63,13 @@
       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:16pt; font-weight:600; text-decoration: underline;&quot;&gt;Optogenetic Display&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
     </widget>
-    <widget class="QToolButton" name="display_pattern_toolButton">
-     <property name="geometry">
-      <rect>
-       <x>370</x>
-       <y>160</y>
-       <width>211</width>
-       <height>81</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>DISPLAY PATTERN</string>
-     </property>
-    </widget>
-    <widget class="QToolButton" name="arena_OFF_toolButton">
-     <property name="geometry">
-      <rect>
-       <x>150</x>
-       <y>160</y>
-       <width>211</width>
-       <height>81</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>CLOSE</string>
-     </property>
-    </widget>
     <widget class="QLabel" name="retour_2">
      <property name="geometry">
       <rect>
-       <x>180</x>
-       <y>260</y>
-       <width>371</width>
-       <height>271</height>
+       <x>150</x>
+       <y>230</y>
+       <width>431</width>
+       <height>331</height>
       </rect>
      </property>
      <property name="text">
@@ -105,9 +79,9 @@
     <widget class="QWidget" name="gridLayoutWidget">
      <property name="geometry">
       <rect>
-       <x>70</x>
+       <x>20</x>
        <y>60</y>
-       <width>621</width>
+       <width>691</width>
        <height>51</height>
       </rect>
      </property>
@@ -184,6 +158,42 @@
        <height>22</height>
       </rect>
      </property>
+    </widget>
+    <widget class="QWidget" name="horizontalLayoutWidget">
+     <property name="geometry">
+      <rect>
+       <x>120</x>
+       <y>150</y>
+       <width>485</width>
+       <height>60</height>
+      </rect>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout">
+      <item>
+       <widget class="QToolButton" name="arena_OFF_toolButton">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="text">
+         <string>CLOSE ALL DISPLAY</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QToolButton" name="display_pattern_toolButton">
+        <property name="text">
+         <string>DISPLAY PATTERN</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton">
+        <property name="text">
+         <string>LAUNCH STIMULATION SEQUENCE</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </widget>
   </widget>
