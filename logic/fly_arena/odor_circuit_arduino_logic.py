@@ -89,6 +89,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
     sigDisableFlowActions = QtCore.Signal()
     sigEnableFlowActions = QtCore.Signal()
     sigUpdateValveState = QtCore.Signal(dict)
+    sigTaskInitialization = QtCore.Signal(bool)
 
     # attributes
     measuring_flowrate = False
@@ -122,6 +123,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         self._ard = None
         self.MFC_number: int = 0
         self.n_odors_available: int = 0
+        self.odor_list: list = []
         self.valves_status: dict = {}
         self.calibration_saving_filename: str = ""
         self.calibration: dict = {}
@@ -136,6 +138,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
         # initialize variables
         self.n_odors_available = self._ard.n_odor_available
+        self.odor_list = self._ard.odor_list
         self.MFC_number = self._MFC.MFC_number
         self.valves_status = {'odor_1': 0,
                               'odor_2': 0,
@@ -233,7 +236,7 @@ class OdorCircuitArduinoLogic(GenericLogic):
         Stops the measurement of flowrate.
         """
         self.measuring_flowrate = False
-        self.calibrating_flowrate= False
+        self.calibrating_flowrate = False
 
 # MFC calibration ------------------------------------------------------------------------------------------------------
     def start_flow_calibration(self, filename):
@@ -386,105 +389,18 @@ class OdorCircuitArduinoLogic(GenericLogic):
             self.valves_status[code] = int(state)
             self.sigUpdateValveState.emit(self.valves_status)
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Helper methods for the tasks
+# ----------------------------------------------------------------------------------------------------------------------
 
+    def disable_odor_circuit_actions(self):
+        """
+        Safety when launching a task - to avoid conflict between task and actions handled by the GUI
+        """
+        self.sigTaskInitialization.emit(True)
 
-
-
-
-
-
-
-
-
-
-
-
-    # def valve(self, pin, state):
-    #     """
-    #     Open only 1 valve
-    #     @param pin: Number of the pin to activate (2 to 12)
-    #     @param state: (bool) ON / OFF state of the valve (1 : odor circuit on ; 0 : odor circuit off)
-    #     input example: ' 'state' '
-    #     """
-    #     if state == 1:
-    #         self._ard.pin_on(pin)
-    #     elif state == 0:
-    #         self._ard.pin_off(pin)
-
-    # def prepare_odor(self, odor_number):
-    #     """
-    #     Prepare the specified odor by activating the corresponding valves.
-    #     @param odor_number: number of the odor you want to inject (not use yet)
-    #     input example: 'odor_number'
-    #     """
-    #     if odor_number == 1:
-    #         self.valve(self._valve_odor_1_in, 1)
-    #         self.valve(self._valve_odor_1_out, 1)
-    #     elif odor_number == 2:
-    #         self.valve(self._valve_odor_2_in, 1)
-    #         self.valve(self._valve_odor_2_out, 1)
-    #     elif odor_number == 3:
-    #         self.valve(self._valve_odor_3_in, 1)
-    #         self.valve(self._valve_odor_3_out, 1)
-    #     elif odor_number == 4:
-    #         self.valve(self._valve_odor_4_in, 1)
-    #         self.valve(self._valve_odor_4_out, 1)
-    #     else:
-    #         logger.warning('4 odor only')
-
-    # def flush_odor(self):
-    #     """
-    #     Close all the valves that need to be closed
-    #     """
-    #     self.valve(self._mixing_valve, 1)
-    #     self.valve(self._final_valve, 0)
-    #     self.valve(self._valve_odor_1_in, 0)
-    #     self.valve(self._valve_odor_1_out, 0)
-    #     self.valve(self._valve_odor_2_in, 0)
-    #     self.valve(self._valve_odor_2_out, 0)
-    #     self.valve(self._valve_odor_3_in, 0)
-    #     self.valve(self._valve_odor_3_out, 0)
-    #     self.valve(self._valve_odor_4_in, 0)
-    #
-    #     print('Odor circuit off')
-    #
-    # def turn_MFC_on(self, flow_setpoints):
-    #     """
-    #     Open the MFCs
-    #     @param flow_setpoints : list of the setpoints for each MFC
-    #     """
-    #     for n_MFC, flow in enumerate(flow_setpoints):
-    #         self._MFC.MFC_ON(n_MFC, flow)
-
-    # def close_air(self):
-    #     """
-    #     Close the MFCs
-    #     """
-    #     self._MFC.MFC_OFF(self._MFC_1)
-    #     time.sleep(0.3)
-    #     self._MFC.MFC_OFF(self._MFC_2)
-    #     time.sleep(0.3)
-    #     self._MFC.MFC_OFF(self._MFC_3_purge)
-    #     time.sleep(0.3)
-    #     self._MFC.MFC_OFF(self._MFC_4)
-
-
-
-
-    # # ----------------------------------------------------------------------------------------------------------------------
-    # # Methods to handle the user interface state
-    # # ----------------------------------------------------------------------------------------------------------------------
-    # def disable_flowcontrol_actions(self):
-    #     """
-    #     This method provides a security to avoid using the set pressure, start volume measurement and start rinsing
-    #     button on GUI, for example during Tasks. By security, all thread actions (measuring flow-rate and volume are
-    #     stopped as well).
-    #     """
-    #     self.sigDisableFlowActions.emit()
-    #     self.stop_flow_measurement()
-    #
-    # def enable_flowcontrol_actions(self):
-    #     """
-    #     This method resets flowcontrol action buttons on GUI to callable state, for example after Tasks.
-    #     """
-    #     self.sigEnableFlowActions.emit()
+    def enable_odor_circuit_actions(self):
+        """
+        Safety when launching a task - to avoid conflict between task and actions handled by the GUI
+        """
+        self.sigTaskInitialization.emit(False)

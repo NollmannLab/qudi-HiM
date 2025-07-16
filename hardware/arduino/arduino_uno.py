@@ -38,6 +38,7 @@ from time import time, sleep
 class ArduinoUno(Base):
 
     n_odor_available = ConfigOption('n_odor_available', missing='error')
+    odor_list = ConfigOption('odors', missing='error')
     _arduino_port = ConfigOption('arduino_port', missing='error')
     _valve_odor_1_write = ConfigOption('valve_odor_1_write', missing='error')
     _valve_odor_2_write = ConfigOption('valve_odor_2_write', missing='error')

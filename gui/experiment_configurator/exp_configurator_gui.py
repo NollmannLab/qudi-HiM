@@ -41,10 +41,10 @@ class ExpConfiguratorWindow(QtWidgets.QMainWindow):
     """ Class defined for the main window (not the module).
 
     """
-    def __init__(self):
+    def __init__(self, ui_filename):
         # Get the path to the *.ui file
         this_dir = os.path.dirname(__file__)
-        ui_file = os.path.join(this_dir, 'ui_exp_configurator.ui')
+        ui_file = os.path.join(this_dir, ui_filename)
 
         # Load it
         super().__init__()
@@ -72,7 +72,9 @@ class ExpConfiguratorGUI(GUIBase):
 
     # config options
     default_location = ConfigOption('default_location_qudi_files', missing='warn')
-    # serves as a path stem to default locations where experimental configurations are saved, and where roi lists and injections lists are loaded
+    # serves as a path stem to default locations where experimental configurations are saved, and where roi lists and
+    # injections lists are loaded
+    _ui_window_filename = ConfigOption('_ui_window_filename', default='ui_exp_configurator.ui')
 
     # Signals
     sigSaveConfig = QtCore.Signal(str, str, str)
@@ -91,7 +93,7 @@ class ExpConfiguratorGUI(GUIBase):
         """
         self._exp_logic = self.exp_logic()
 
-        self._mw = ExpConfiguratorWindow()
+        self._mw = ExpConfiguratorWindow(self._ui_window_filename)
         self._mw.formWidget.hide()
 
         # initialize combobox

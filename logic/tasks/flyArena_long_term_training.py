@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Dummy task for taskrunner.
+Qudi-CBS
 
+An extension to Qudi.
+
+This module contains the Hi-M Experiment for the Airyscan experimental setup using confocal configuration.
+
+@author: JB. Fiche
+Created on Tue July 16 2025
+
+-----------------------------------------------------------------------------------
 Qudi is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
@@ -17,11 +25,13 @@ along with Qudi. If not, see <http://www.gnu.org/licenses/>.
 
 Copyright (c) the Qudi Developers. See the COPYRIGHT.txt file at the
 top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi/>
+-----------------------------------------------------------------------------------
 """
 from logic.generic_task import InterruptableTask
 import os
-import time
+from time import sleep
 import logging
+
 
 class Task(InterruptableTask):
     """ Dummy task, does nothing. """
@@ -33,57 +43,41 @@ class Task(InterruptableTask):
 
     def startTask(self):
         """ Dummy start """
-        print('Start')
-        self.ctr = 0
-        roi_pos = self.ref['roi'].roi_positions
-        roi_keys = roi_pos.keys()
-        for roi in roi_keys:
-            X = roi_pos[roi][0]
-            Y = roi_pos[roi][1]
-            Z = roi_pos[roi][2]
-            print(f"{roi} : X={X} - Y={Y} - Z={Z}")
 
-        self._result = '{0} lines printed!'.format(self.ctr)
-        self.file_handler = logging.FileHandler(filename=os.path.join('/home/jb/Desktop', 'HiM_task.log'))
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-        self.file_handler.setFormatter(formatter)
+        # initialization of the training - make sure that odor circuit is closed, shutter off and display off
+        self.ref['odor'].disable_odor_circuit_actions()
+        self.ref['opto'].disable_optogenetic_actions()
 
-        self.task_logger = logging.getLogger()
-        self.task_logger.setLevel(logging.INFO)
-        self.task_logger.addHandler(self.file_handler)
-        self.task_logger.info('started Task')
+        self.ref['odor'].stop_flow_measurement()
+        self.ref['odor'].stop_air_flow()
+        self.ref['odor'].close_odor_circuit()
+        self.ref['opto'].open_shutter()
+        self.ref['opto'].display_off()
 
     def runTaskStep(self):
         """ Dummy step """
-
-        if not self.aborted:
-            time.sleep(0.5)
-            self.task_logger.info(f'step :{self.ctr}')
-        if not self.aborted:
-            time.sleep(0.5)
-        if not self.aborted:
-            print('still in the task step', self.ctr)
-            time.sleep(0.1)
-            self.ctr += 1
-        self._result = '{0} lines printed!'.format(self.ctr)
-        return self.ctr < 5
+        for n in range(10):
+            print(n)
+            sleep(1)
 
     def pauseTask(self):
         """ Dummy pause """
-        time.sleep(1)
+        sleep(1)
         print('paused task')
 
     def resumeTask(self):
         """ Dummy resume """
-        time.sleep(1)
+        sleep(1)
         print('resumed task')
 
     def cleanupTask(self):
         """ Dummy cleanup """
-        print(self._result)
-        self.task_logger.info('task cleaned up')
-        self.task_logger.removeHandler(self.file_handler)
-        self.task_logger.info('task cleaned up')
+        self.ref['odor'].enable_odor_circuit_actions()
+        self.ref['opto'].enable_optogenetic_actions()
+
+        # self.task_logger.info('task cleaned up')
+        # self.task_logger.removeHandler(self.file_handler)
+        # self.task_logger.info('task cleaned up')
 
     def checkExtraStartPrerequisites(self):
         """ Check extra start prerequisites, there are none """

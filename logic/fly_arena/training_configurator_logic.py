@@ -62,8 +62,8 @@ class ExpConfigLogic(GenericLogic):
             filterwheel_logic: 'filterwheel_logic'
     """
     # define connectors to logic modules
-    odor_logic = Connector(interface='CameraLogic')
-    opto_logic = Connector(interface='LaserControlLogic')
+    odor_logic = Connector(interface='OdorCircuitArduinoLogic')
+    opto_logic = Connector(interface='OptogeneticLogic')
 
     # signals
     sigConfigDictUpdated = QtCore.Signal()
@@ -79,6 +79,8 @@ class ExpConfigLogic(GenericLogic):
         super().__init__(config=config, **kwargs)
         self._odor_logic = None
         self._opto_logic = None
+        self.odor: list = []
+        self.patterns: list = []
 
     def on_activate(self):
         """
@@ -115,10 +117,10 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['training_cycles'] = 10
         self.config_dict['resting_time'] = 15
         self.config_dict['training_duration'] = 60
-        self.config_dict['odor'] = 0
+        self.config_dict['odor'] = ""
         self.config_dict['air_flow'] = 0.1
         self.config_dict['prep_time'] = 10
-        self.config_dict['patterns'] = 0
+        self.config_dict['patterns'] = ""
         self.config_dict['t_on'] = 0.2
         self.config_dict['t_off'] = 0.2
 
@@ -143,7 +145,6 @@ class ExpConfigLogic(GenericLogic):
                 self.log.error(f'Error {e}.')
 
         config_dict = {}
-
         print(f'Experiment = {experiment}')
 
         try:
@@ -225,10 +226,10 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['training_duration'] = time
         self.sigConfigDictUpdated.emit()
 
-    @QtCore.Slot(int)
+    @QtCore.Slot(str)
     def update_odor(self, odor):
         """ Updates the dictionary entry 'odor'.
-        @param: (int) odor: indicate which odor will be injected
+        @param: (str) odor: indicate which odor will be injected
         """
         self.config_dict['odor'] = odor
         self.sigConfigDictUpdated.emit()
@@ -250,11 +251,11 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['prep_time'] = time
         self.sigConfigDictUpdated.emit()
 
-    @QtCore.Slot(int)
+    @QtCore.Slot(str)
     def update_pattern(self, pattern):
         """ Updates the dictionary entry 'patterns' indicating which pattern will be used for the optogenetics
         stimulation
-        @param: (int) pattern: indicate which pattern is selected
+        @param: (str) pattern: indicate which pattern is selected
         """
         self.config_dict['patterns'] = pattern
         self.sigConfigDictUpdated.emit()

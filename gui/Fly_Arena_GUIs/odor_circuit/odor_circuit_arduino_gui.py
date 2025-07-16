@@ -86,7 +86,7 @@ class OdorCircuitGUI(GUIBase):
     _Fluidics_off_path = ConfigOption('Fluidics_off_path', None)
     _Fluidics_on_path = ConfigOption('Fluidics_on_path', None)
     _default_quadrant_flow = ConfigOption('default_quadrant_flow', None)
-    _odors = ConfigOption('odors', None)
+    # _odors = ConfigOption('odors', None)
     _config_valves = ConfigOption('config_valve', None)
     _config_path = ConfigOption('config_path', None)
 
@@ -134,6 +134,7 @@ class OdorCircuitGUI(GUIBase):
         self.t_data: list = []
         self.MFC_number: int = 0
         self.odor_number: int = 0
+        self._odors: list = []
         self.preparing_odor: bool = False
         self.injecting_odor: bool = False
         self.calibrating_MFCs: bool = False
@@ -190,6 +191,7 @@ class OdorCircuitGUI(GUIBase):
         self._odor_logic = self.odor_logic()
         self.MFC_number = self._odor_logic.MFC_number
         self.odor_number = self._odor_logic.n_odors_available
+        self._odors = self._odor_logic.odor_list
 
         # Initialize the main window and its dockwidgets
         self._mw.centralwidget.show()
@@ -299,6 +301,7 @@ class OdorCircuitGUI(GUIBase):
         # Connect signals from logic
         self._odor_logic.sigUpdateValveState.connect(self.update_valves_status)
         self._odor_logic.sigUpdateValveState.connect(self.display_circuit_config)
+        self._odor_logic.sigTaskInitialization.connect(self.disable_GUI)
 
         # Connect signals from checkBox to methods
         self._mw.odor1_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(1, checked))
@@ -378,6 +381,9 @@ class OdorCircuitGUI(GUIBase):
 # ----------------------------------------------------------------------------------------------------------------------
 # Methods handling arena configuration & odors
 # ----------------------------------------------------------------------------------------------------------------------
+    def update_combobox_quadrant(self, index):
+        self._mw.comboBox_quadrants_config.setCurrentIndex(index)
+
     def update_arena_config(self):
         """ Based on the comboBox value & the flow-rate setpoint for the arena (for each quadrant), compute the
         flow-rate for each MFC.
@@ -766,6 +772,29 @@ class OdorCircuitGUI(GUIBase):
         folder = QFileDialog.getExistingDirectory(self._mfcw, "Select Folder", "E:\DATA")
         if folder:
             self._mfcw.Folder_LineEdit.setText(folder)
+
+# ----------------------------------------------------------------------------------------------------------------------
+# helper methods for hadling tasks
+# ----------------------------------------------------------------------------------------------------------------------
+
+    def disable_GUI(self, disable):
+
+        # disable all buttons to avoid conflicting actions
+        self.disable_flowcontrol_buttons()
+        self.disable_enable_valves_checkbox(disable)
+        self._mw.comboBox_quadrants_config.setDisabled(disable)
+        self._mw.doubleSpinBox_quadrant_flow.setDisabled(disable)
+        self._mw.Prepare_odor_pushButton.setDisabled(disable)
+        self._mw.Switch_quadrant_pushButton.setDisabled(disable)
+
+        self._mw.Inject_odor_pushButton.setDisabled(True)
+        self._mw.Stop_odor_pushButton.setDisabled(True)
+
+        # update values when starting
+        self._mw.comboBox_quadrants_config.setCurrentIndex(0)
+
+
+
 
     # def plot_total(self):
     #     """

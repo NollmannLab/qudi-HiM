@@ -29,20 +29,64 @@ top-level directory of this distribution and at <https://github.com/Ulm-IQO/qudi
 -----------------------------------------------------------------------------------
 """
 from PyQt5.QtCore import Qt
-
+from qtpy import QtCore
 from core.connector import Connector
 from logic.generic_logic import GenericLogic
+from core.configoption import ConfigOption
+from glob import glob
+from os import path
+from time import sleep
+
+
+class WorkerSignals(QtCore.QObject):
+    """ Defines the signals available from a running worker thread """
+    sigOptoStepFinished = QtCore.Signal(int, int)
+
+
+class OptoWorker(QtCore.QRunnable):
+    """ Worker thread to wait during an opto pulse. The worker handles only the waiting time.
+    """
+    def __init__(self, t, n_steps_on, n_steps_off):
+        super(OptoWorker, self).__init__()
+        self.signals = WorkerSignals()
+        self.t = t
+        self.n_steps_on = n_steps_on
+        self.n_steps_off = n_steps_off
+
+    @QtCore.Slot()
+    def run(self):
+        """ """
+        sleep(self.t)
+        self.signals.sigOptoStepFinished.emit(self.n_steps_on, self.n_steps_off)
 
 
 class OptogeneticLogic(GenericLogic):
-
     # motor_FlyArena = Connector(interface='Base')  # no specific MFC interface required
     arduino_uno = Connector(interface='Base')  # no specific arduino interface required
+    _patterns_folder_path = ConfigOption('patterns_path', missing='error')
+    _bkg_pattern = ConfigOption('background_pattern', missing='error')
+
+    # signals
+    sigInitBlackBkg = QtCore.Signal(str)
+    sigInitComboBox = QtCore.Signal(list, str)
+    sigDisplayBlackBkg = QtCore.Signal()
+    sigUpdatePattern = QtCore.Signal(str)
+    sigDisplayPattern = QtCore.Signal()
+    sigStimulation = QtCore.Signal(bool)
+    sigTaskInitialization = QtCore.Signal(bool)
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
+        self.threadpool = QtCore.QThreadPool()
         self._shutter_ard = None
         self.shutter_state: bool = False
+        self.emitting: bool = False
+        self.patterns_path: list = []
+        self.patterns_list: list = []
+        self.selected_pattern: str = ""
+        self.tON: float = 0.0
+        self.tOFF: float = 0.0
+        self.stimulation_duration: int = 0.0
 
     def on_activate(self):
         self._shutter_ard = self.arduino_uno()
@@ -53,36 +97,147 @@ class OptogeneticLogic(GenericLogic):
         """
         pass
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Methods handling image display
-# ----------------------------------------------------------------------------------------------------------------------
-    @staticmethod
-    def image_display(image, window):
+    # ------------------------------------------------------------------------------------------------------------------
+    # Methods handling GUI value change
+    # ------------------------------------------------------------------------------------------------------------------
+    @QtCore.Slot(str)
+    def update_pattern(self, filename):
         """
-        Display the given image in the specified window.
-        @param image: The QPixmap image to be displayed.
-        @param window: The window object that contains the label where the image will be displayed.
+        Update the pattern for the GUI (but do not display it)
+        @param filename: (str) indicate the filename associated to the selected pattern
         """
-        window.label.setPixmap(image)
-        window.label.setAlignment(Qt.AlignCenter)
+        self.selected_pattern = path.join(self._patterns_folder_path, filename)
+        self.sigUpdatePattern.emit(self.selected_pattern)
+        if self.shutter_state and self.emitting:
+            self.sigDisplayPattern.emit()
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Methods handling the shutter
-# ----------------------------------------------------------------------------------------------------------------------
+    @QtCore.Slot(float)
+    def update_tON(self, t):
+        """
+        Update t_on, the time of a stimulation pulse (in s)
+        @param t: (float) duration of a single duration pulse
+        """
+        self.tON = t
+
+    @QtCore.Slot(float)
+    def update_tOFF(self, t):
+        """
+        Update t_off, the time between two successive stimulation pulses (in s)
+        @param t: (float) duration of a pause between two successive simulations
+        """
+        self.tOFF = t
+
+    @QtCore.Slot(float)
+    def update_stimulation_length(self, t):
+        """
+        update stimulation_duration, the total time of the stimulation sequence (in s)
+        @param t: (int) total duration
+        """
+        self.stimulation_duration = t
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Methods handling image display
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def initialize_patterns_list(self):
+        """
+        Initialize the list of patterns available for the projector & optogenetics simulations
+        @return: list of patterns available as a list of paths to all the PNG files found in the folder.
+        """
+        patterns = glob(path.join(self._patterns_folder_path, '*.PNG'))
+        self.patterns_path = sorted(patterns)
+        for file in patterns:
+            filename = path.basename(file)
+            if filename == self._bkg_pattern:
+                self.sigInitBlackBkg.emit(file)
+            else:
+                self.patterns_list.append(filename)
+
+        self.sigInitComboBox.emit(self.patterns_list, self._patterns_folder_path)
+
+    def display_off(self):
+        """
+        Display the 'black' image
+        """
+        self.sigDisplayBlackBkg.emit()
+        self.close_shutter()
+        self.emitting = False
+
+    def display_on(self):
+        """
+        Display the current pattern (not the background)
+        """
+        self.open_shutter()
+        self.sigDisplayPattern.emit()
+        self.emitting = True
+
+    def launch_stimulation(self):
+        """
+        Launch a stimulation cycle
+        """
+        self.sigDisplayBlackBkg.emit()
+        self.open_shutter()
+        self.stimulation(0, 0)
+
+    def stimulation(self, n_step_ON, n_step_OFF):
+        dt = self.tON * n_step_ON + self.tOFF * n_step_OFF
+        if dt < self.stimulation_duration:
+            if n_step_ON == n_step_OFF:
+                n_step_ON += 1
+                self.sigStimulation.emit(True)
+                worker = OptoWorker(self.tON, n_step_ON, n_step_OFF)
+            else:
+                n_step_OFF += 1
+                self.sigStimulation.emit(False)
+                worker = OptoWorker(self.tOFF, n_step_ON, n_step_OFF)
+
+            worker.signals.sigOptoStepFinished.connect(self.stimulation)
+            self.threadpool.start(worker)
+        else:
+            self.stop_stimulation()
+
+    def stop_stimulation(self):
+        """
+        stop the stimulation sequence
+        """
+        self.close_shutter()
+        self.sigDisplayBlackBkg.emit()
+
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Methods handling the shutter
+    # ----------------------------------------------------------------------------------------------------------------------
     def send_trigger_to_shutter(self):
+        """
+        Send trigger to the shutter to open or close it (send pattern to the arena)
+        """
         self._shutter_ard.shutter()
         self.shutter_state = not self.shutter_state
         return self.shutter_state
 
-    # def forward(self):
-    #     """
-    #     Turn the motor at 180° forward
-    #     """
-    #     self._motor_control.send_command("forward")
-    #
-    # def backward(self):
-    #     """
-    #     Turn the motor at 180° backward
-    #     """
-    #     self._motor_control.send_command("backward")
+    def open_shutter(self):
+        """ Open the shutter
+        """
+        if not self.shutter_state:
+            self.send_trigger_to_shutter()
 
+    def close_shutter(self):
+        """ Close the shutter
+        """
+        if self.shutter_state:
+            self.send_trigger_to_shutter()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Helper methods for the tasks
+    # ------------------------------------------------------------------------------------------------------------------
+
+    def disable_optogenetic_actions(self):
+        """
+        Safety when launching a task - to avoid conflict between task and actions handled by the GUI
+        """
+        self.sigTaskInitialization.emit(True)
+
+    def enable_optogenetic_actions(self):
+        """
+        Safety when launching a task - to avoid conflict between task and actions handled by the GUI
+        """
+        self.sigTaskInitialization.emit(False)
