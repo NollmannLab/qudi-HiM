@@ -162,10 +162,16 @@ class ArduinoUno(Base):
             read_valve = self.read_digital_analog_pin(self.valve_pin[code][1])
 
             if self.valve_pin[code][1][0] == "A":
-                if int(read_valve) > 500:
-                    return True
-                else:
-                    return False
+                try:
+                    if int(read_valve) > 500:
+                        return True
+                    else:
+                        return False
+                    print("error while trying to check valve state in arduino_uno.py / check_valve_state ")
+                except TypeError as e:
+                    self.log.warn(f"The following error message was caught : {e}")
+                except Exception as e:
+                    self.log.warn(f"The following unknown error was caught : {e}")
 
             elif self.valve_pin[code][1][0] == "D":
                 if int(read_valve) == 1:

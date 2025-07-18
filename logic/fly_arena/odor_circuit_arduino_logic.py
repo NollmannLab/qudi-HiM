@@ -89,7 +89,12 @@ class OdorCircuitArduinoLogic(GenericLogic):
     sigDisableFlowActions = QtCore.Signal()
     sigEnableFlowActions = QtCore.Signal()
     sigUpdateValveState = QtCore.Signal(dict)
-    sigTaskInitialization = QtCore.Signal(bool)
+    sigTaskStartStop = QtCore.Signal(bool)
+    sigTaskUpdateOdorGui = QtCore.Signal(bool, int, float)
+    sigStartPrepOdor = QtCore.Signal()
+    sigUpdatePrepTimer = QtCore.Signal(int)
+    sigStartInjectOdor = QtCore.Signal()
+    sigUpdateInjectTimer = QtCore.Signal(int)
 
     # attributes
     measuring_flowrate = False
@@ -161,18 +166,21 @@ class OdorCircuitArduinoLogic(GenericLogic):
 
 # Handling of the flow configuration  ----------------------------------------------------------------------------------
     def stop_air_flow(self):
-        """ Stop all air flow in the arena and close the odor circuit
+        """ Stop all air flow in the arena and close the odor circuit - set all flow to zero
+        @return (list) mfc_flow - list of the set-flow for each MFC
         """
         self.turn_all_MFC_off()
         self.close_odor_circuit()
+        mfc_flow = [0, 0, 0, 0]
+        return mfc_flow
 
-    def start_air_flow(self, flow_set_points, config=1):
+    def start_air_flow(self, flow_set_point, config=1):
         """ Set the flow rate for all MFCs - this function is called from the GUI when selecting a configuration from
         the comboBox.
-        @param: flow_set_points (list): indicate the flow set_points for all MFCs
+        @param: flow_set_point (float): indicate the flow expected in each quadrant of the arena
         @param: config (int) : indicate the arena configuration: 1 = 2 quadrants (1/3 and 2/4 are handled separately) -
         2 = 4 quadrants (all quadrants are identical)
-        @return:
+        @return: flow_set_points (list) computed set-point values for each MFC
         """
         # check odor valves state - return True if at least one couple of inlet / outlet valves for the odors is OPEN
         is_odor = self.check_odor_valves()
@@ -183,9 +191,12 @@ class OdorCircuitArduinoLogic(GenericLogic):
         # depending on the selected config, change the state of the 3way-valve
         if config == 1:
             self.change_valve_state("3_way", 0)
+            flow_set_points = [flow_set_point, flow_set_point, 2 * flow_set_point, 2 * flow_set_point]
         elif config == 2:
             self.change_valve_state("3_way", 1)
+            flow_set_points = [2 * flow_set_point, 2 * flow_set_point, 4 * flow_set_point, 0]
         else:
+            flow_set_points = [0, 0, 0, 0]
             self.log.error("The indicated config does not exist (in logic - function start_air_flow")
 
         # if no odor are being prepared or injected, make sure the mixing valve is open (else, an error will occur for
@@ -199,6 +210,8 @@ class OdorCircuitArduinoLogic(GenericLogic):
                 self._MFC.MFC_ON(mfc, flow_set_points[mfc])
             else:
                 self._MFC.MFC_OFF(mfc)
+
+        return flow_set_points
 
 # Flowrate measurement loop --------------------------------------------------------------------------------------------
     def start_flow_measurement(self):
@@ -397,10 +410,48 @@ class OdorCircuitArduinoLogic(GenericLogic):
         """
         Safety when launching a task - to avoid conflict between task and actions handled by the GUI
         """
-        self.sigTaskInitialization.emit(True)
+        self.sigTaskStartStop.emit(True)
+
+    def update_odor_circuit_gui(self, init, odor, flow):
+        """
+        Launch signal to update the displays on the GUI based on task parameters
+        @param init: (bool) indicate whether the task is at the initialization or closing step
+        @param odor: (str) indicate the name of the odor selected for the training
+        @param flow: (float) indicate the default MFC flow in each quadrant
+        @return (int) indicate the index of the selected odor within the list of available odor
+        """
+        odor_idx = self.odor_list.index(odor) + 1
+        self.sigTaskUpdateOdorGui.emit(init, odor_idx, flow)
+        return odor_idx
 
     def enable_odor_circuit_actions(self):
         """
-        Safety when launching a task - to avoid conflict between task and actions handled by the GUI
+        Reset GUI to default state at the end of a task
         """
-        self.sigTaskInitialization.emit(False)
+        self.sigTaskStartStop.emit(False)
+
+    def launch_odor_preparation(self):
+        """
+        Launch odor preparation from logic
+        """
+        self.sigStartPrepOdor.emit()
+
+    def update_odor_preparation_timer(self, dt):
+        """
+        Update the SpinBox associated to odor preparation
+        @param dt: (int) elapsed time in s
+        """
+        self.sigUpdatePrepTimer.emit(dt)
+
+    def launch_odor_injection(self):
+        """
+        Launch odor preparation from logic
+        """
+        self.sigStartInjectOdor.emit()
+
+    def update_odor_injection_timer(self, dt):
+        """
+        Update the SpinBox associated to odor injection
+        @param dt: (int) elapsed time in s
+        """
+        self.sigUpdateInjectTimer.emit(dt)
