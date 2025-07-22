@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>477</width>
-    <height>606</height>
+    <width>662</width>
+    <height>699</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -26,10 +26,64 @@
      </widget>
     </item>
     <item>
-     <widget class="QWidget" name="formWidget" native="true">
+     <widget class="QWidget" name="Saving_path_pushButton" native="true">
       <layout class="QGridLayout" name="gridLayout">
-       <item row="0" column="0">
-        <widget class="QLabel" name="general_Label">
+       <item row="12" column="0">
+        <widget class="QLabel" name="toff_label">
+         <property name="layoutDirection">
+          <enum>Qt::LeftToRight</enum>
+         </property>
+         <property name="text">
+          <string>t_off (s)</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="training_duration_label">
+         <property name="text">
+          <string>training duration (s)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="odor_selection_Label">
+         <property name="text">
+          <string>selected odor</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="sample_name_Label">
+         <property name="text">
+          <string>Sample name</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QComboBox" name="odor_ComboBox"/>
+       </item>
+       <item row="10" column="0">
+        <widget class="QLabel" name="patterns_Label">
+         <property name="text">
+          <string>patterns</string>
+         </property>
+        </widget>
+       </item>
+       <item row="14" column="0">
+        <widget class="QLabel" name="saving_path_Label">
+         <property name="text">
+          <string>saving path</string>
+         </property>
+        </widget>
+       </item>
+       <item row="14" column="1">
+        <widget class="QLineEdit" name="saving_path_LineEdit"/>
+       </item>
+       <item row="13" column="0">
+        <widget class="QLabel" name="saving_settings_Label">
          <property name="font">
           <font>
            <family>DejaVu Sans</family>
@@ -38,26 +92,12 @@
           </font>
          </property>
          <property name="text">
-          <string>General</string>
+          <string>Saving settings</string>
          </property>
         </widget>
        </item>
-       <item row="11" column="1">
-        <widget class="QDoubleSpinBox" name="tON_doubleSpinBox"/>
-       </item>
-       <item row="5" column="0">
-        <widget class="QLabel" name="odor_settings_Label">
-         <property name="font">
-          <font>
-           <family>DejaVu Sans</family>
-           <weight>75</weight>
-           <bold>true</bold>
-          </font>
-         </property>
-         <property name="text">
-          <string>Odor settings</string>
-         </property>
-        </widget>
+       <item row="12" column="1">
+        <widget class="QDoubleSpinBox" name="tOFF_doubleSpinBox"/>
        </item>
        <item row="9" column="0">
         <widget class="QLabel" name="opto_settings_Label">
@@ -73,6 +113,54 @@
          </property>
         </widget>
        </item>
+       <item row="4" column="1">
+        <widget class="QSpinBox" name="training_duration_spinBox">
+         <property name="maximum">
+          <number>120</number>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="air_flow_label">
+         <property name="text">
+          <string>air flow per quadrant (sL/min)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="sample_name_LineEdit"/>
+       </item>
+       <item row="11" column="1">
+        <widget class="QDoubleSpinBox" name="tON_doubleSpinBox"/>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="general_Label">
+         <property name="font">
+          <font>
+           <family>DejaVu Sans</family>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>General</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="odor_settings_Label">
+         <property name="font">
+          <font>
+           <family>DejaVu Sans</family>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>Odor settings</string>
+         </property>
+        </widget>
+       </item>
        <item row="2" column="0">
         <widget class="QLabel" name="n_cycles_Label">
          <property name="text">
@@ -80,26 +168,15 @@
          </property>
         </widget>
        </item>
-       <item row="7" column="1">
-        <widget class="QDoubleSpinBox" name="flow_doubleSpinBox">
-         <property name="value">
-          <double>0.100000000000000</double>
+       <item row="8" column="1">
+        <widget class="QSpinBox" name="prep_SpinBox">
+         <property name="maximum">
+          <number>300</number>
          </property>
         </widget>
        </item>
-       <item row="1" column="0">
-        <widget class="QLabel" name="sample_name_Label">
-         <property name="text">
-          <string>Sample name</string>
-         </property>
-        </widget>
-       </item>
-       <item row="6" column="0">
-        <widget class="QLabel" name="odor_selection_Label">
-         <property name="text">
-          <string>selected odor</string>
-         </property>
-        </widget>
+       <item row="3" column="1">
+        <widget class="QSpinBox" name="rest_time_spinBox"/>
        </item>
        <item row="2" column="1">
         <widget class="QSpinBox" name="n_cycles_spinBox">
@@ -111,9 +188,6 @@
          </property>
         </widget>
        </item>
-       <item row="6" column="1">
-        <widget class="QComboBox" name="odor_ComboBox"/>
-       </item>
        <item row="8" column="0">
         <widget class="QLabel" name="odor_prep_duration_Label">
          <property name="text">
@@ -121,29 +195,20 @@
          </property>
         </widget>
        </item>
-       <item row="12" column="1">
-        <widget class="QDoubleSpinBox" name="tOFF_doubleSpinBox"/>
-       </item>
-       <item row="12" column="0">
-        <widget class="QLabel" name="toff_label">
-         <property name="layoutDirection">
-          <enum>Qt::LeftToRight</enum>
-         </property>
-         <property name="text">
-          <string>t_off (s)</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+       <item row="7" column="1">
+        <widget class="QDoubleSpinBox" name="flow_doubleSpinBox">
+         <property name="value">
+          <double>0.100000000000000</double>
          </property>
         </widget>
        </item>
-       <item row="3" column="1">
-        <widget class="QSpinBox" name="rest_time_spinBox"/>
+       <item row="10" column="1">
+        <widget class="QComboBox" name="opto_ComboBox"/>
        </item>
-       <item row="4" column="0">
-        <widget class="QLabel" name="training_duration_label">
+       <item row="11" column="0">
+        <widget class="QLabel" name="ton_label">
          <property name="text">
-          <string>training duration (s)</string>
+          <string>t_on (s)</string>
          </property>
         </widget>
        </item>
@@ -154,44 +219,10 @@
          </property>
         </widget>
        </item>
-       <item row="1" column="1">
-        <widget class="QLineEdit" name="sample_name_LineEdit"/>
-       </item>
-       <item row="10" column="1">
-        <widget class="QComboBox" name="opto_ComboBox"/>
-       </item>
-       <item row="10" column="0">
-        <widget class="QLabel" name="patterns_Label">
+       <item row="14" column="2">
+        <widget class="QPushButton" name="select_path_pushButton">
          <property name="text">
-          <string>patterns</string>
-         </property>
-        </widget>
-       </item>
-       <item row="4" column="1">
-        <widget class="QSpinBox" name="training_duration_spinBox">
-         <property name="maximum">
-          <number>120</number>
-         </property>
-        </widget>
-       </item>
-       <item row="8" column="1">
-        <widget class="QSpinBox" name="prep_SpinBox">
-         <property name="maximum">
-          <number>300</number>
-         </property>
-        </widget>
-       </item>
-       <item row="11" column="0">
-        <widget class="QLabel" name="ton_label">
-         <property name="text">
-          <string>t_on (s)</string>
-         </property>
-        </widget>
-       </item>
-       <item row="7" column="0">
-        <widget class="QLabel" name="air_flow_label">
-         <property name="text">
-          <string>air flow per quadrant (sL/min)</string>
+          <string>Select saving path</string>
          </property>
         </widget>
        </item>
@@ -205,7 +236,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>477</width>
+     <width>662</width>
      <height>20</height>
     </rect>
    </property>
