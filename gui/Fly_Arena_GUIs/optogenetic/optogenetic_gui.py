@@ -142,14 +142,12 @@ class OptogeneticGUI(GUIBase):
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.threadpool = QtCore.QThreadPool()
-        # self.p = False
         self._optogenetic_logic = None
         self.shutter_state: bool = False  # The state of the shutter is assumed Close / False when starting qudi
         self.map_off: object = None
         self.map_off_scaled: object = None
         self.map_pattern: object = None
         self.map_pattern_scaled: object = None
-        # self.patterns_path: list = []
         self.patterns_list: list = []
         self._patterns_folder_path: str = None
 
@@ -161,26 +159,6 @@ class OptogeneticGUI(GUIBase):
         Initialize all UI elements and establish signal connections.
         """
         self._optogenetic_logic = self.optogenetic_logic()
-        # self.patterns_path = self._optogenetic_logic.patterns_path
-        #
-        # # define the path to the folder where the patterns are saved
-        # self._patterns_folder_path = os.path.dirname(self.patterns_path[0])
-
-        # # define the combobox items
-        # self._ow.comboBox_select_pattern.clear()
-        # for file in self.patterns_path:
-        #     filename = os.path.basename(file)
-        #     if filename == "Black.png":
-        #         self.map_off = QPixmap(file)
-        #         self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
-        #                                                   Qt.KeepAspectRatio)
-        #         self._ow.retour_2.setPixmap(self.map_off_scaled)
-        #     else:
-        #         self._ow.comboBox_select_pattern.addItem(os.path.basename(file))
-        #         self.patterns_list.append(os.path.basename(file))
-        #
-        # # define the default pattern map
-        # self.update_pattern()
 
         # connect signals to methods
         self._ow.arena_OFF_toolButton.clicked.connect(self._optogenetic_logic.display_off)
@@ -193,8 +171,6 @@ class OptogeneticGUI(GUIBase):
         self._ow.doubleSpinBox_opto_stimulation.valueChanged.connect(self._optogenetic_logic.update_stimulation_length)
 
         # signals from logic
-        self._optogenetic_logic.sigInitBlackBkg.connect(self.init_black_background)
-        self._optogenetic_logic.sigInitComboBox.connect(self.init_comboBox)
         self._optogenetic_logic.sigDisplayBlackBkg.connect(self.pattern_off_display)
         self._optogenetic_logic.sigUpdatePattern.connect(self.update_pattern)
         self._optogenetic_logic.sigDisplayPattern.connect(self.pattern_display)
@@ -203,7 +179,8 @@ class OptogeneticGUI(GUIBase):
         self._optogenetic_logic.sigTaskUpdateOptoGui.connect(self.update_GUI)
 
         # initialize patterns list
-        self._optogenetic_logic.initialize_patterns_list()
+        self.init_comboBox()
+        self.init_black_background()
 
     def on_deactivate(self):
         """
@@ -214,25 +191,25 @@ class OptogeneticGUI(GUIBase):
 # ======================================================================================================================
 # Specific methods handling image display and optogenetic pulses
 # ======================================================================================================================
-    def init_black_background(self, filepath):
+    def init_black_background(self):
         """
         initialize the map that will be used as black background
-        @param filepath: (str) path to the black.png image
         """
-        self.map_off = QPixmap(filepath)
+        bkg_filepath = self._optogenetic_logic.bkg_pattern_file
+        self.map_off = QPixmap(bkg_filepath)
         self.map_off_scaled = self.map_off.scaled(self.screen_geometry.width(), self.screen_geometry.height(),
                                                   Qt.KeepAspectRatio)
         self._ow.retour_2.setPixmap(self.map_off_scaled)
 
-    def init_comboBox(self, pattern_list, patterns_root_path):
+    def init_comboBox(self):
         """
         initialize the list of available patterns
         @param patterns_root_path: (str) indicate the root path to the folder where the patterns are saved
         @param pattern_list: (list) name of the files associated to optogenetics patterns
         """
-        self.patterns_list = pattern_list
-        self._patterns_folder_path = patterns_root_path
-        self._ow.comboBox_select_pattern.addItems(pattern_list)
+        self.patterns_list = self._optogenetic_logic.patterns_list
+        self._patterns_folder_path = self._optogenetic_logic._patterns_folder_path
+        self._ow.comboBox_select_pattern.addItems(self.patterns_list)
 
     def pattern_off_display(self):
         """

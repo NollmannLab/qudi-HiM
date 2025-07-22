@@ -128,6 +128,10 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.opto_ComboBox.currentTextChanged.connect(self._exp_logic.update_pattern)
         self._mw.tON_doubleSpinBox.valueChanged.connect(self._exp_logic.update_ton)
         self._mw.tOFF_doubleSpinBox.valueChanged.connect(self._exp_logic.update_toff)
+        self._mw.saving_path_LineEdit.textChanged.connect(self._exp_logic.update_saving_path)
+
+        # define pushbutton action
+        self._mw.select_path_pushButton.clicked.connect(self.load_log_path_clicked)
 
         # signals to logic
         self.sigSaveConfig.connect(self._exp_logic.save_to_exp_config_file)
@@ -190,6 +194,7 @@ class ExpConfiguratorGUI(GUIBase):
             self.set_visibility_general_settings(True)
             self.set_visibility_odor_settings(True)
             self.set_visibility_opto_settings(True)
+            self.set_saving_settings(True)
 
         # add here additional experiment types
 
@@ -233,6 +238,15 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.tON_doubleSpinBox.setVisible(visible)
         self._mw.toff_label.setVisible(visible)
         self._mw.tOFF_doubleSpinBox.setVisible(visible)
+
+    def set_saving_settings(self, visible):
+        """ Show or hide the block with the setting for the saving path.
+        @param bool visible: show widgets = True, hide widgets = False
+        """
+        self._mw.saving_settings_Label.setVisible(visible)
+        self._mw.saving_path_Label.setVisible(visible)
+        self._mw.saving_path_LineEdit.setVisible(visible)
+        self._mw.select_path_pushButton.setVisible(visible)
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of the toolbuttons
@@ -281,6 +295,16 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.opto_ComboBox.setCurrentIndex(0)
         self._exp_logic.init_default_config_dict()
 
+    def load_log_path_clicked(self):
+        """ Callback of saving_path pushbutton. Opens a dialog to select the complete path to the folder where the log
+        will be saved.
+        """
+        this_dir = QtWidgets.QFileDialog.getExistingDirectory(self._mw,
+                                                          'Open directory where reference images are saved',
+                                                          r'E:\DATA')  # to be changed using a correct path stem
+        if this_dir:
+            self._mw.saving_path_LineEdit.setText(this_dir)
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Callbacks of signals sent from the logic
 # ----------------------------------------------------------------------------------------------------------------------
@@ -298,6 +322,7 @@ class ExpConfiguratorGUI(GUIBase):
         self._mw.opto_ComboBox.setCurrentText(self._exp_logic.config_dict.get('patterns', ''))
         self._mw.tON_doubleSpinBox.setValue(self._exp_logic.config_dict.get('t_on', 0.0))
         self._mw.tOFF_doubleSpinBox.setValue(self._exp_logic.config_dict.get('t_off', 0.0))
+        self._mw.saving_path_LineEdit.setText(self._exp_logic.config_dict.get('saving_path', 0.0))
 
     def display_loaded_config(self):
         """ Callback of the signal sigConfigLoaded sent from the logic. Updates the displayed configuration form

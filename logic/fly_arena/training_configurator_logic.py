@@ -123,6 +123,7 @@ class ExpConfigLogic(GenericLogic):
         self.config_dict['patterns'] = ""
         self.config_dict['t_on'] = 0.2
         self.config_dict['t_off'] = 0.2
+        self.config_dict['saving_path'] = r"E:\DATA"
 
         # add here further dictionary entries that need initialization
         self.sigConfigDictUpdated.emit()
@@ -152,7 +153,7 @@ class ExpConfigLogic(GenericLogic):
                 if not filename:
                     filename = 'long_term_training_FlyArena.yml'
                 keys_to_extract = ['sample_name', 'training_cycles', 'resting_time', 'training_duration', 'odor',
-                                   'air_flow', 'prep_time', 'patterns', 't_on', 't_off']
+                                   'air_flow', 'prep_time', 'patterns', 't_on', 't_off', 'saving_path']
                 config_dict = {key: self.config_dict[key] for key in keys_to_extract}
 
             # add here all additional experiments and select the relevant keys
@@ -274,4 +275,12 @@ class ExpConfigLogic(GenericLogic):
         @param: (int) time: indicate the duration in s between two consecutive opto stimulations
         """
         self.config_dict['t_off'] = time
+        self.sigConfigDictUpdated.emit()
+
+    @QtCore.Slot(str)
+    def update_saving_path(self, path):
+        """ Updates the dictionary entry 'saving_path' indicating where to save the logs
+        @param: (str) path: indicate the path to the folder where to save the logs
+        """
+        self.config_dict['saving_path'] = path
         self.sigConfigDictUpdated.emit()

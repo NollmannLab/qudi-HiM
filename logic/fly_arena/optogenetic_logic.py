@@ -67,7 +67,6 @@ class OptogeneticLogic(GenericLogic):
     _bkg_pattern = ConfigOption('background_pattern', missing='error')
 
     # signals
-    sigInitBlackBkg = QtCore.Signal(str)
     sigInitComboBox = QtCore.Signal(list, str)
     sigDisplayBlackBkg = QtCore.Signal()
     sigUpdatePattern = QtCore.Signal(str)
@@ -84,6 +83,7 @@ class OptogeneticLogic(GenericLogic):
         self.emitting: bool = False
         self.patterns_path: list = []
         self.patterns_list: list = []
+        self.bkg_pattern_file: str = ""
         self.selected_pattern: str = ""
         self.tON: float = 0.0
         self.tOFF: float = 0.0
@@ -92,6 +92,7 @@ class OptogeneticLogic(GenericLogic):
 
     def on_activate(self):
         self._shutter_ard = self.arduino_uno()
+        self.initialize_patterns_list()
 
     def on_deactivate(self):
         """
@@ -151,11 +152,9 @@ class OptogeneticLogic(GenericLogic):
         for file in patterns:
             filename = path.basename(file)
             if filename == self._bkg_pattern:
-                self.sigInitBlackBkg.emit(file)
+                self.bkg_pattern_file = file
             else:
                 self.patterns_list.append(filename)
-
-        self.sigInitComboBox.emit(self.patterns_list, self._patterns_folder_path)
 
     def display_off(self):
         """

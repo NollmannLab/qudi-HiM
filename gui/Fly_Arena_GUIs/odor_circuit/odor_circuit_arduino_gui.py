@@ -89,20 +89,6 @@ class OdorCircuitGUI(GUIBase):
     # _odors = ConfigOption('odors', None)
     _config_valves = ConfigOption('config_valve', None)
     _config_path = ConfigOption('config_path', None)
-
-    # _path_MFC1 = ConfigOption('path_MFC1', None)
-    # _path_MFC2 = ConfigOption('path_MFC2', None)
-    # _path_MFCPurge = ConfigOption('path_MFCPurge', None)
-    # valve_odor_1_in = 0
-    # valve_odor_2_in = 0
-    # valve_odor_3_in = 0
-    # valve_odor_4_in = 0
-    # valve_odor_1_out = 0
-    # valve_odor_2_out = 0
-    # valve_odor_3_out = 0
-    # valve_odor_4_out = 0
-    # mixing_valve = 0
-    # final_valve = 0
     MFC_status = False
 
     sigStartFlowMeasure = QtCore.Signal()
@@ -112,16 +98,9 @@ class OdorCircuitGUI(GUIBase):
     # define the default language option as English (to make sure all float have a point as a separator)
     QtCore.QLocale.setDefault(QtCore.QLocale("English"))
 
-    # # Declaration of custom signals
-    # sigMFC_ON = Signal()
-    # sigMFC_OFF = Signal()
-    # sigLaunchClicked = Signal()
-
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
         self.date_str = None
-        # self.Caltime = 0
-        # self.G = 0
         self.prep_timer: object = None
         self.start_prep_time: int = 0
         self.inject_timer: object = None
@@ -141,48 +120,11 @@ class OdorCircuitGUI(GUIBase):
         self.selected_odor: int = 0
         self.valve_status: dict = {}
         self.pixmap_fluidics_scheme: object = None
-
-        # self._flowrate1_timetrace = None
-        # self._flowrate2_timetrace = None
-        # self._flowrate3_timetrace = None
-        # self._flowrate4_timetrace = None
-        # self.mesure1 = None
-        # self.mesure2 = None
-        # self.mesure3 = None
-        # self.mesure4 = None
-        # self.flowrate1_data = None
-        # self.flowrate2_data = None
-        # self.flowrate3_data = None
-        # self.flowrate4_data = None
         self._odor_logic = None
         self._mw = None
         self._MFCW = None
-
-        # self.valves_status = {
-        #     'valve_odor_1_in': '0',
-        #     'valve_odor_2_in': '0',
-        #     'valve_odor_3_in': '0',
-        #     'valve_odor_4_in': '0',
-        #     'final_valve': '0',
-        #     'mixing_valve': '0',
-        #     'valve_odor_1_out': '0',
-        #     'valve_odor_2_out': '0',
-        #     'valve_odor_3_out': '0',
-        #     'valve_odor_4_out': '0'
-        # }
-        # self.valves_in_out = {
-        #     'odor_1': ['valve_odor_1_in', 'valve_odor_1_out'],
-        #     'odor_2': ['valve_odor_2_in', 'valve_odor_2_out'],
-        #     'odor_3': ['valve_odor_3_in', 'valve_odor_3_out'],
-        #     'odor_4': ['valve_odor_4_in', 'valve_odor_4_out']
-        # }
         self._mw = MainWindow(close_function=self.close_function)  # Assuming MainWindow handles main UI
         self._mfcw = MFCcheckWindow()
-
-        # self.pixmap1 = QPixmap(self._Fluidics_on_path)
-        # self.pixmap2 = QPixmap(self._Fluidics_off_path)
-        # self.pixmap1 = self.pixmap1.scaled(1101, 651, Qt.KeepAspectRatio)
-        # self.pixmap2 = self.pixmap2.scaled(1101, 651, Qt.KeepAspectRatio)
 
     def on_activate(self):
         """ Initialize all UI elements and establish signal connections.
@@ -219,14 +161,6 @@ class OdorCircuitGUI(GUIBase):
         self._mw.activateWindow()
         self._mw.raise_()
 
-    # def show_admin_Dock(self):
-    #     """Show the dock widget"""
-    #     self._mw.admin_dockWidget.show()
-    #
-    # def hide_admin_Dock(self):
-    #     """Hide the dock widget"""
-    #     self._mw.admin_dockWidget.hide()
-
     def show_MFC_calibration_window(self):
         """ Show the plot window
         """
@@ -241,11 +175,7 @@ class OdorCircuitGUI(GUIBase):
     def init_toolbar(self):
         """ Initialize toolbar actions
         """
-        # self._mw.actionMFC_ON_OFF.setText('MFC : OFF')
-        # self._mw.actionMFC_ON_OFF.triggered.connect(self.mfc_on_off)
         self._mw.start_flow_measurement_Action.triggered.connect(self.measure_flow_clicked)
-        # self.sigMFC_ON.connect(self.mfc_on)
-        # self.sigMFC_OFF.connect(self._odor_logic.stop_air_flow)
 
         # Connect signals to logic
         self.sigStartFlowMeasure.connect(self._odor_logic.start_flow_measurement)
@@ -303,10 +233,12 @@ class OdorCircuitGUI(GUIBase):
         self._odor_logic.sigUpdateValveState.connect(self.display_circuit_config)
         self._odor_logic.sigTaskStartStop.connect(self.disable_enable_GUI)
         self._odor_logic.sigTaskUpdateOdorGui.connect(self.update_GUI)
-        self._odor_logic.sigStartPrepOdor.connect(self.prepare_odor_clicked)
+        self._odor_logic.sigStartPrepOdor.connect(self.prepare_odor_from_task)
         self._odor_logic.sigUpdatePrepTimer.connect(self.update_prep_timer_from_logic)
-        self._odor_logic.sigStartInjectOdor.connect(self.inject_odor_clicked)
+        self._odor_logic.sigStartInjectOdor.connect(self.inject_odor_from_task)
         self._odor_logic.sigUpdateInjectTimer.connect(self.update_injection_timer_from_logic)
+        self._odor_logic.sigStopInjectOdor.connect(self.stop_odor_from_task)
+        self._odor_logic.sigUpdateFlowRateDisplay.connect(self.update_flowrate_from_task)
 
         # Connect signals from checkBox to methods
         self._mw.odor1_CheckBox.toggled.connect(lambda checked: self.selected_odor_changed(1, checked))
@@ -786,10 +718,15 @@ class OdorCircuitGUI(GUIBase):
         the actions.
         @param disable: (bool) True will disable the GUI, False will enable it after task clean up.
         """
+
         if disable:
             self.disable_flowcontrol_buttons()
         else:
             self.enable_flowcontrol_buttons()
+
+        for i in range(1, self.odor_number + 1):
+            checkbox = getattr(self._mw, f'odor{i}_CheckBox', None)
+            checkbox.setDisabled(disable)
 
         self.disable_enable_valves_checkbox(disable)
         self._mw.comboBox_quadrants_config.setDisabled(disable)
@@ -832,4 +769,83 @@ class OdorCircuitGUI(GUIBase):
         @param elapsed: (int) indicate elapsed time in s
         """
         self._mw.inject_timer_display.setText(f"{elapsed} sec")
+
+    def prepare_odor_from_task(self):
+        """ Launch the odor preparation process. Note that when clicked the procedure is
+        launched and can only be stopped either by using the "Stop odor" or the "Inject odor" pushButtons.
+        """
+        # check if one odor was selected
+        if self.selected_odor == 0:
+            self.log.error("You need to select at least one odor")
+            self._mw.Prepare_odor_pushButton.setChecked(False)
+            return
+
+        # prepare the selected odor
+        if not self.preparing_odor:
+            self._mw.Prepare_odor_pushButton.setChecked(True)
+            self._mw.Prepare_odor_pushButton.setText('Preparing odor ...')
+            self._mw.Prepare_odor_pushButton.setDisabled(True)
+            self._odor_logic.prepare_odor(self.selected_odor)
+            self.preparing_odor = True
+
+    def inject_odor_from_task(self):
+        """ Handle event to launch injection into the arena. Note that when clicked the procedure is
+        launched and can only be stopped by using either the "Stop odor" or "Prepare odor" pushButtons
+        """
+        # check if an odor is already in preparation
+        if not self.preparing_odor:
+            self.log.error("No odor is in preparation")
+            self._mw.Inject_odor_pushButton.setChecked(False)
+            return
+
+        # reset the timer display
+        self._mw.prep_timer_display.setText("")
+
+        # inject the selected odor in the arena
+        if not self.injecting_odor:
+            # release the prepare odor pushButton
+            self._mw.Prepare_odor_pushButton.setChecked(False)
+            self._mw.Prepare_odor_pushButton.setText('Prepare odor')
+
+            # launch injection
+            self._mw.Inject_odor_pushButton.setChecked(True)
+            self._mw.Inject_odor_pushButton.setText('Injecting odor ...')
+            self._mw.Inject_odor_pushButton.setDisabled(True)
+            self._odor_logic.inject_odor()
+            self.injecting_odor = True
+            self.preparing_odor = False
+
+    def stop_odor_from_task(self):
+        """ Stop any preparation or injection of odor
+        """
+        # release the prepare odor pushButton
+        self._mw.Prepare_odor_pushButton.setChecked(False)
+        self._mw.Prepare_odor_pushButton.setText('Prepare odor')
+        self.preparing_odor = False
+
+        # release the inject odor pushButton
+        self._mw.Inject_odor_pushButton.setChecked(False)
+        self._mw.Inject_odor_pushButton.setText('Inject odor')
+        self.injecting_odor = False
+
+        # reset the timer display
+        self._mw.prep_timer_display.setText("")
+        self._mw.inject_timer_display.setText("")
+
+        # make sure all buttons are disabled
+        self._mw.Inject_odor_pushButton.setDisabled(True)
+        self._mw.Prepare_odor_pushButton.setDisabled(True)
+
+        # send to logic
+        self._odor_logic.stop_odor(self.selected_odor)
+
+    @QtCore.Slot(list)
+    def update_flowrate_from_task(self, flow_rates):
+        """
+        Callback of a signal emitted from logic informing the GUI about the new flowrate values.
+        @param (list) flow_rates: current flow-rates retrieved from hardware MFCs
+        """
+        for i, flow in enumerate(flow_rates):
+            getattr(self._mw, f'MFC{i + 1}').setText(f'{np.around(flow, decimals=3)} sL/min')
+
 

@@ -95,31 +95,13 @@ class OdorCircuitArduinoLogic(GenericLogic):
     sigUpdatePrepTimer = QtCore.Signal(int)
     sigStartInjectOdor = QtCore.Signal()
     sigUpdateInjectTimer = QtCore.Signal(int)
+    sigStopInjectOdor = QtCore.Signal()
+    sigUpdateFlowRateDisplay = QtCore.Signal(list)
 
     # attributes
     measuring_flowrate = False
     time_since_start = 0
     calibrating_flowrate = False
-
-    # _valve_odor_1_in = ConfigOption('valve_odor_1_in', 3)
-    # _valve_odor_2_in = ConfigOption('valve_odor_2_in', 12)
-    # _valve_odor_3_in = ConfigOption('valve_odor_3_in', 11)
-    # _valve_odor_4_in = ConfigOption('valve_odor_4_in', 10)
-    # _valve_odor_1_out = ConfigOption('valve_odor_1_in', 7)
-    # _valve_odor_2_out = ConfigOption('valve_odor_2_in', 6)
-    # _valve_odor_3_out = ConfigOption('valve_odor_3_in', 5)
-    # _valve_odor_4_out = ConfigOption('valve_odor_4_in', 4)
-    # _mixing_valve = ConfigOption('mixing_valve', 9)
-    # _final_valve = ConfigOption('final_valve', 8)
-    #
-    # _MFC_1 = ConfigOption('MFC_1', 0)
-    # _MFC_2 = ConfigOption('MFC_2', 1)
-    # _MFC_3_purge = ConfigOption('MFC_purge', 2)
-    # _MFC_4 = ConfigOption('MFC_4', 3)
-    #
-    # _MFC_purge_flow = ConfigOption('MFC_purge_flow', 0.5)
-    # _MFC_1_flow = ConfigOption('MFC_1_flow', 0.25)
-    # _MFC_2_flow = ConfigOption('MFC_2_flow', 0.25)
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -455,3 +437,16 @@ class OdorCircuitArduinoLogic(GenericLogic):
         @param dt: (int) elapsed time in s
         """
         self.sigUpdateInjectTimer.emit(dt)
+
+    def stop_odor_injection(self):
+        """
+        Stop odor preparation or injection from logic
+        """
+        self.sigStopInjectOdor.emit()
+
+    def measure_MFC_flowrate(self):
+        """
+        Measure flow-rate from MFC
+        """
+        flow_rates = self.read_average_flow()
+        self.sigUpdateFlowRateDisplay.emit(flow_rates)
