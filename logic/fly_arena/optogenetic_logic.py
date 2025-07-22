@@ -74,6 +74,7 @@ class OptogeneticLogic(GenericLogic):
     sigDisplayPattern = QtCore.Signal()
     sigStimulation = QtCore.Signal(bool)
     sigTaskInitialization = QtCore.Signal(bool)
+    sigTaskUpdateOptoGui = QtCore.Signal(int, float, float, int)
 
     def __init__(self, config, **kwargs):
         super().__init__(config=config, **kwargs)
@@ -87,6 +88,7 @@ class OptogeneticLogic(GenericLogic):
         self.tON: float = 0.0
         self.tOFF: float = 0.0
         self.stimulation_duration: int = 0.0
+        self.stimulation_launched: bool = False
 
     def on_activate(self):
         self._shutter_ard = self.arduino_uno()
@@ -178,6 +180,7 @@ class OptogeneticLogic(GenericLogic):
         self.sigDisplayBlackBkg.emit()
         self.open_shutter()
         self.stimulation(0, 0)
+        self.stimulation_launched = True
 
     def stimulation(self, n_step_ON, n_step_OFF):
         dt = self.tON * n_step_ON + self.tOFF * n_step_OFF
@@ -202,6 +205,7 @@ class OptogeneticLogic(GenericLogic):
         """
         self.close_shutter()
         self.sigDisplayBlackBkg.emit()
+        self.stimulation_launched = False
 
     # ----------------------------------------------------------------------------------------------------------------------
     # Methods handling the shutter
@@ -241,3 +245,18 @@ class OptogeneticLogic(GenericLogic):
         Safety when launching a task - to avoid conflict between task and actions handled by the GUI
         """
         self.sigTaskInitialization.emit(False)
+
+    def update_opto_gui(self, stimulation_duration, t_on, t_off, pattern):
+        """
+        Update GUI displays
+        @param stimulation_duration: (int) indicate the duration of a stimulation sequence (in s)
+        @param t_on: (float) indicate the duration of a stimulation flash (in s)
+        @param t_off: (float) indicate the duration separating two consecutive stimulation flashes (in s)
+        @param pattern: (str) indicate the name of the selected stimulation pattern
+        """
+        pattern_idx = self.patterns_list.index(pattern)
+        self.tON = t_on
+        self.tOFF = t_off
+        self.stimulation_duration = stimulation_duration
+        self.sigTaskUpdateOptoGui.emit(stimulation_duration, t_on, t_off, pattern_idx)
+

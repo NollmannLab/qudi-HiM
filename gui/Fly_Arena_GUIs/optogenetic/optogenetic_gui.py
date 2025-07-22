@@ -200,6 +200,7 @@ class OptogeneticGUI(GUIBase):
         self._optogenetic_logic.sigDisplayPattern.connect(self.pattern_display)
         self._optogenetic_logic.sigStimulation.connect(self.stimulation)
         self._optogenetic_logic.sigTaskInitialization.connect(self.disable_GUI)
+        self._optogenetic_logic.sigTaskUpdateOptoGui.connect(self.update_GUI)
 
         # initialize patterns list
         self._optogenetic_logic.initialize_patterns_list()
@@ -294,6 +295,19 @@ class OptogeneticGUI(GUIBase):
         self._ow.doubleSpinBox_opto_pulse_ON.setDisabled(disable)
         self._ow.doubleSpinBox_opto_pulse_OFF.setDisabled(disable)
         self._ow.doubleSpinBox_opto_stimulation.setDisabled(disable)
+
+    def update_GUI(self, duration, t_on, t_off, pattern_idx):
+        """
+        Update GUI based on task parameters
+        @param duration: (int) duration of the stimulation sequence
+        @param t_on: (float) duration of a single stimulation pulse
+        @param t_off: (float) pause interval between two consecutive stimulations
+        @param pattern_idx: (int) index of the selected pattern
+        """
+        self._ow.comboBox_select_pattern.setCurrentIndex(pattern_idx)
+        self._ow.doubleSpinBox_opto_pulse_ON.setValue(t_on)
+        self._ow.doubleSpinBox_opto_pulse_OFF.setValue(t_off)
+        self._ow.doubleSpinBox_opto_stimulation.setValue(duration)
 
 
     # def pattern_off_display(self):
