@@ -26,7 +26,7 @@
      </widget>
     </item>
     <item>
-     <widget class="QWidget" name="Saving_path_pushButton" native="true">
+     <widget class="QWidget" name="formWidget" native="true">
       <layout class="QGridLayout" name="gridLayout">
        <item row="12" column="0">
         <widget class="QLabel" name="toff_label">
