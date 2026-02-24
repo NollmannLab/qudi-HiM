@@ -10,7 +10,6 @@ NB: most of the packages are installed locally on the RAMM computer. However a b
 | **Resources**        | Instruction manual: CD ORCA-Flash4.0 V3<br                                                                                                       |
 
 
-
 | **Model and SN**     | Thorlabs Camera DCC1545M (SN# 4002843525)                                                                                                                                                   |
 | -------------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Drivers location** | Thorlabs website                                                                                                                                                                            |
@@ -21,9 +20,9 @@ NB: most of the packages are installed locally on the RAMM computer. However a b
 
 | **Model and SN**     | Teledyn Kinetix (SN# A22H723042)                                                                                                                                                                         |
 | -------------------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Drivers location** | Teledyne website (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                                                                                    |
-| **Software**         | The PVCAM software for test should be used and can be downloaded from the website ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix)                                    |
-| **Python**           | Same for the python software (ready to install from here : PALM_dataserv\Commun\Resources_RAMM_HiM_setup\Kinetix). Note that PVCAM_SDK and Virtual C++ studio 14.0 are required for installation.        |
+| **Drivers location** | Teledyne USB keys (see the latest version in Confocal room)                                                                                                                                              |
+| **Software**         | The PVCAM software for test should be used and can be installed from the USB key                                                                                                                         |
+| **Python**           | Important pyvCAM requires minimum python 3.9 - a new qudi environment was created for qudi-HiM and saved in the documentation for developer.                                                             |
 | **Resources**        | For PVCAM python see here: https://github.com/Photometrics/PyVCAM <br/> The manual for PVCAM SDK is directly accessible on the computer : C:\ProgramData\Microsoft\Windows\Start Menu\Programs\PVCam SDK |
 
 
@@ -31,12 +30,12 @@ NB: most of the packages are installed locally on the RAMM computer. However a b
 
 ## Piezo:
 
-| **Model and SN**     | Mad City Labs NanoDrive (SN# 2133)                                                                                                                                                                              |
-| -------------------- |-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **Drivers location** | C:\Program Files\Mad City Labs\NanoDrive\Madlib.dll<br />Contacts : ferdi@madcitylabs.eu                                                                                                                        |
-| **Software**         | No custom software provided                                                                                                                                                                                     |
+| **Model and SN**     | Mad City Labs NanoDrive (SN# 2133)                                                                                                                                                                            |
+| -------------------- |---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Drivers location** | PALM_dataserv\Commun\Resources_RAMM_HiM_setup\MCL for the latest version (2026) <br /> Contacts : ferdi@madcitylabs.eu                                                                                        |
+| **Software**         | No custom software provided                                                                                                                                                                                   |
 | **Python**           | ctypes<br />Specify the path to the dll in local configuration file for Qudi:<br />C:\Program Files\Mad City Labs\NanoDrive\Madlib.dll<br /><br />it is needed to define the return type for some dll functions |
-| **Resources**        | USB key with the software and manual is stored in the Airyscan room                                                                                                                                             |
+| **Resources**        | PALM_dataserv\Commun\Resources_RAMM_HiM_setup\MCL                                                                                                                                                             |
 
 
 

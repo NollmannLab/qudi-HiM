@@ -1,0 +1,84 @@
+annotated-types==0.7.0
+astropy @ file:///D:/bld/astropy_1711553114901/work
+astropy-iers-data @ file:///home/conda/feedstock_root/build_artifacts/astropy-iers-data_1736747889221/work
+asttokens==3.0.0
+Bottleneck @ file:///C:/b/abs_816hr2khp1/croot/bottleneck_1731058648110/work
+certifi==2024.12.14
+charset-normalizer==3.4.1
+click==8.1.8
+colorama @ file:///C:/b/abs_a9ozq0l032/croot/colorama_1672387194846/work
+comm==0.2.2
+debugpy==1.8.11
+decorator==5.1.1
+deprecation==2.1.0
+exceptiongroup==1.2.2
+executing==2.1.0
+fluigent_sdk @ file:///C:/Users/CBS/Desktop/Program/Fluidgent/Fluidgent%20SDK%20for%20python/fgt-SDK/Python/fluigent_sdk-19.0.0.zip#sha256=79e41f00b8b3caf7c5d1ae96fbf361d2a02ca3dd958dc62f56f9ae12ed762ff6
+future==1.0.0
+fysom==2.1.6
+gitdb==4.0.12
+GitPython==3.1.44
+h5py @ file:///C:/b/abs_92v137xfqx/croot/h5py_1730215948692/work
+hightime==0.2.2
+idna==3.10
+imagecodecs @ file:///C:/b/abs_b1cml4tdjh/croot/imagecodecs_1734436743427/work
+importlib_metadata @ file:///home/conda/feedstock_root/build_artifacts/importlib-metadata_1733223117029/work
+ipykernel==6.29.5
+ipython==8.18.1
+jedi==0.19.2
+jupyter_client==8.6.3
+jupyter_core==5.7.2
+matplotlib-inline==0.1.7
+nest-asyncio==1.6.0
+nifpga==22.0.0
+numexpr @ file:///D:/bld/numexpr_1732736285105/work
+numpy @ file:///D:/bld/numpy_1707225561314/work/dist/numpy-1.26.4-cp39-cp39-win_amd64.whl#sha256=af5f40857bb7ceb2d3be562fa763863d2f954c104873e89b8ee370f75e047ecf
+ome-types==0.5.3
+packaging @ file:///C:/b/abs_3by6s2fa66/croot/packaging_1734472138782/work
+pandas @ file:///C:/b/abs_e18w9ay4we/croot/pandas_1732735115740/work/dist/pandas-2.2.3-cp39-cp39-win_amd64.whl#sha256=f3b41dc9b2687250cbbb5587843986d13008da63bfb026b34d05d4d2f3eab666
+parso==0.8.4
+PIPython==2.10.2.1
+platformdirs==4.3.6
+plumbum==1.9.0
+prompt_toolkit==3.0.48
+psutil==6.1.1
+pure_eval==0.2.3
+pydantic==2.10.5
+pydantic-compat==0.1.2
+pydantic_core==2.27.2
+PyDAQmx==1.4.6
+pyerfa @ file:///D:/bld/pyerfa_1731377674000/work
+Pygments==2.19.1
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.2
+PyQt5_sip==12.16.1
+pyqtgraph==0.13.7
+pyserial @ file:///C:/b/abs_38q410cihh/croot/pyserial_1736540571753/work
+python-dateutil @ file:///C:/b/abs_3au_koqnbs/croot/python-dateutil_1716495777160/work
+python-decouple==3.8
+pytz @ file:///C:/b/abs_6ap4tsz1ox/croot/pytz_1713974360290/work
+pyusb==1.3.1
+pyvcam==2.1.6
+pywin32==308
+PyYAML @ file:///D:/bld/pyyaml_1725456322258/work
+pyzmq==26.2.0
+qtconsole==5.6.1
+QtPy @ file:///C:/b/abs_derqu__3p8/croot/qtpy_1700144907661/work
+requests==2.32.3
+rpyc==6.0.1
+ruamel.yaml==0.16.0
+simple-pid==2.0.1
+six @ file:///tmp/build/80754af9/six_1644875935023/work
+smmap==5.0.2
+stack-data==0.6.3
+tifffile @ file:///home/conda/feedstock_root/build_artifacts/tifffile_1718963615451/work
+tornado==6.4.2
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1735661334605/work
+traitlets==5.14.3
+typing_extensions==4.12.2
+tzdata @ file:///croot/python-tzdata_1690578112552/work
+tzlocal==5.2
+urllib3==2.3.0
+wcwidth==0.2.13
+xsdata==24.3.1
+zipp @ file:///home/conda/feedstock_root/build_artifacts/zipp_1732827521216/work
