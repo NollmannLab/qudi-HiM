@@ -46,6 +46,7 @@ def decorator_print_function(function):
     def new_function(*args, **kwargs):
         print(f'*** DEBUGGING *** Executing in hardware {function.__name__} from kinetix.py')
         return function(*args, **kwargs)
+
     return new_function
 
 
@@ -67,6 +68,7 @@ class KinetixCam(Base, CameraInterface):
     camera_id = ConfigOption('camera_id', 0)
     _max_frames_number_video = ConfigOption('max_N_images_movie', missing='error')
     _default_trigger_mode = ConfigOption('default_trigger_mode', 'INTERNAL')
+    _dafault_exposure_out_mode = ConfigOption('default_exposure_out_mode', 'ALL_ROWS')
     _has_temp = ConfigOption('temperature_control', 'False')
     _has_shutter = ConfigOption('mechanical_shutter', 'False')
     _has_gain = ConfigOption('gain_control', 'False')
@@ -81,6 +83,7 @@ class KinetixCam(Base, CameraInterface):
     _full_height = 0  # maximum height of the sensor
     _exposure = _default_exposure
     _trigger_mode = _default_trigger_mode
+    _exposure_out_mode = _dafault_exposure_out_mode
     _acquisition_mode = _default_acquisition_mode
     _gain = 0
     n_frames = 1
@@ -112,6 +115,8 @@ class KinetixCam(Base, CameraInterface):
                 self.set_exposure(self._exposure)
                 self._set_acquisition_mode(str(self._acquisition_mode))  # Set the camera in 'Dynamic Range' mode
                 self._set_trigger_source(str(self._trigger_mode))  # Set the camera in 'Internal Trigger' mode
+                self._set_exposure_out_mode(
+                    str(self._exposure_out_mode))  # Set the exposure out mode to the default value
 
                 # initialize the default acquisition parameters by launching a brief live acquisition - this step is
                 # required to have access to the "check_frame_status" method without throwing an error
@@ -128,13 +133,13 @@ class KinetixCam(Base, CameraInterface):
         self.camera.close()
         pvc.uninit_pvcam()
 
-# ======================================================================================================================
-# Camera Interface functions
-# ======================================================================================================================
+    # ======================================================================================================================
+    # Camera Interface functions
+    # ======================================================================================================================
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Getter and setter methods
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Getter and setter methods
+    # ----------------------------------------------------------------------------------------------------------------------
 
     def get_name(self):
         """
@@ -256,9 +261,9 @@ class KinetixCam(Base, CameraInterface):
         max_frames_dict = {'video': self._max_frames_number_video}
         return max_frames_dict
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Methods to query the camera properties
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Methods to query the camera properties
+    # ----------------------------------------------------------------------------------------------------------------------
 
     def support_live_acquisition(self):
         """ Return whether the camera handle live acquisition.
@@ -295,11 +300,11 @@ class KinetixCam(Base, CameraInterface):
         """
         return self._frame_transfer
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Methods to handle camera acquisitions
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Methods to handle camera acquisitions
+    # ----------------------------------------------------------------------------------------------------------------------
 
-# Methods for displaying images on the GUI -----------------------------------------------------------------------------
+    # Methods for displaying images on the GUI -----------------------------------------------------------------------------
     @decorator_print_function
     def start_single_acquisition(self):
         """
@@ -335,7 +340,7 @@ class KinetixCam(Base, CameraInterface):
             self.log.error(f"The following error was encountered in stop_acquisition : {e}")
             return False
 
-# Methods for saving image data ----------------------------------------------------------------------------------------
+    # Methods for saving image data ----------------------------------------------------------------------------------------
     @decorator_print_function
     def start_movie_acquisition(self, n_frames):
         """
@@ -381,7 +386,7 @@ class KinetixCam(Base, CameraInterface):
         """
         pass
 
-# Methods for acquiring image data using synchronization between lightsource and camera---------------------------------
+    # Methods for acquiring image data using synchronization between lightsource and camera---------------------------------
     def prepare_camera_for_multichannel_imaging(self, frames, exposure, gain, save_path, file_format):
         """ Set the camera state for an experiment using synchronization between lightsources and the camera. Using
         typically an external trigger.
@@ -410,9 +415,9 @@ class KinetixCam(Base, CameraInterface):
         self.n_frames = 1  # reset to default
         self._set_acquisition_mode('Dynamic Range')
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Methods for image data retrieval
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Methods for image data retrieval
+    # ----------------------------------------------------------------------------------------------------------------------
 
     def get_most_recent_image(self, copy=True):
         """
@@ -459,13 +464,13 @@ class KinetixCam(Base, CameraInterface):
 
         return im_seq
 
-# ======================================================================================================================
-# Non-Interface functions
-# ======================================================================================================================
+    # ======================================================================================================================
+    # Non-Interface functions
+    # ======================================================================================================================
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Non-interface functions to handle acquisitions
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Non-interface functions to handle acquisitions
+    # ----------------------------------------------------------------------------------------------------------------------
     def get_acquisition_mode(self):
         """
         Indicate the exposure mode currently used by the camera ('Sensitivity', 'Speed', 'Dynamic Range',
@@ -532,9 +537,39 @@ class KinetixCam(Base, CameraInterface):
         except Exception as e:
             self.log.error(f"Error in _abort_acquisition : {e}")
 
-# ----------------------------------------------------------------------------------------------------------------------
-# Trigger
-# ----------------------------------------------------------------------------------------------------------------------
+    # ----------------------------------------------------------------------------------------------------------------------
+    # Trigger
+    # ----------------------------------------------------------------------------------------------------------------------
+    def _set_exposure_out_mode(self, source):
+        """
+        Set the exposure out mode. For the kinetix several modes are accessible (FIRST_ROW, ALL_ROWS, ROLLING_SHUTTER, ANY_ROW).
+        By default, FIRST_ROW (0) is set on the camera which means that the EXPOSURE_OUT_TRIGGER will be sent when the FIRST ROW will start.
+        However, it means that the exposure of the other rows might still be on the previous image. Another mode is ALL_ROWS (1) that make
+        sure that the EXPOSURE_OUT_TRIGGER won't be sent before then end of the previous image acquisition.
+        @param string source: string corresponding to certain Exposure out mode 'FIRST_ROW', 'ALL_ROWS', 'ROLLING_SHUTTER'
+        @return int check_val: ok: 0, not ok: -1
+        """
+        # set the exposure out mode for the camera
+        if source == 'FIRST_ROW':
+            exposure_out_mode = 0
+        elif source == 'ALL_ROWS':
+            exposure_out_mode = 1
+        elif source == 'ROLLING_SHUTTER':
+            exposure_out_mode = 2
+        else:
+            self.log.warning('Unknown trigger source')
+            return -1
+
+        self.camera.exp_out_mode = exposure_out_mode
+
+        # wait 100ms and check the mode was properly changed
+        sleep(0.1)
+        check_exposure_out_mode = self._get_exposure_out_mode()
+        if check_exposure_out_mode == exposure_out_mode:
+            return 0
+        else:
+            return -1
+
     def _set_trigger_source(self, source):
         """
         Set the trigger source. For the kinetix the available trigger modes can be accessed using the "exp_modes"
@@ -570,3 +605,11 @@ class KinetixCam(Base, CameraInterface):
         """
         trigger_source = self.camera.exp_mode
         return trigger_source
+
+    def _get_exposure_out_mode(self):
+        """
+        Return the exposure out mode currently used for the camera
+        @return: exposure_out_mode (str): indicates the type of exposure mode
+        """
+        exposure_out_mode = self.camera.exp_out_mode
+        return exposure_out_mode
